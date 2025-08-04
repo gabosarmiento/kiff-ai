@@ -1,0 +1,125 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+*/venv/
+*/env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*/logs/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated apps (these can be large)
+backend/generated_apps/
+generated_apps/
+
+# Cache directories
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+dist/
+*/dist/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Vercel
+.vercel
+
+# Docker
+.dockerignore
+
+# MacOS
+.DS_Store
+
+# Redis dump
+dump.rdb
+
+# LLM and AI cache files
+.agno/
+*.lance/
+embedding_cache/
+knowledge_cache/
+*.knowledge_cache*
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# API keys and secrets (extra safety)
+*api_key*
+*secret*
+*password*
+config/secrets/

@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply bg-slate-950 text-slate-200 min-h-screen;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background-image: 
+      radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+      linear-gradient(180deg, rgb(2, 6, 23) 0%, rgb(15, 23, 42) 100%);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Orbitron', monospace;
+    @apply font-semibold tracking-wide;
+  }
+}
+
+@layer components {
+  /* Hologram Effects */
+  .hologram-glow {
+    box-shadow: 
+      0 0 10px var(--hologram-glow),
+      0 0 20px var(--hologram-glow),
+      0 0 40px var(--hologram-glow);
+  }
+
+  .hologram-border {
+    @apply border border-cyan-400/30;
+    box-shadow: 
+      inset 0 0 10px rgba(0, 212, 255, 0.1),
+      0 0 10px rgba(0, 212, 255, 0.2);
+  }
+
+  .hologram-panel {
+    @apply bg-slate-900/40 backdrop-blur-sm border border-cyan-400/20 rounded-lg;
+    box-shadow: 
+      inset 0 1px 0 rgba(0, 212, 255, 0.1),
+      0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .hologram-text {
+    @apply text-cyan-100;
+    text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+  }
+
+  .hologram-accent {
+    @apply text-cyan-400;
+    text-shadow: 0 0 10px rgba(0, 212, 255, 0.8);
+  }
+
+  /* Mobile-First Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 disabled:pointer-events-none disabled:opacity-50 touch-manipulation;
+    font-family: 'Orbitron', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-hologram {
+    @apply bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-100 border border-cyan-400/40 hover:border-cyan-400/60 hover:shadow-lg;
+    box-shadow: 
+      inset 0 1px 0 rgba(0, 212, 255, 0.2),
+      0 4px 15px rgba(0, 0, 0, 0.2);
+  }
+
+  .btn-hologram:hover {
+    @apply bg-gradient-to-r from-cyan-500/30 to-blue-500/30;
+    box-shadow: 
+      inset 0 1px 0 rgba(0, 212, 255, 0.3),
+      0 6px 25px rgba(0, 212, 255, 0.2);
+  }
+
+  .btn-primary {
+    @apply btn-hologram;
+  }
+
+  .btn-ghost {
+    @apply text-cyan-300 hover:bg-cyan-500/10 hover:text-cyan-100;
+  }
+
+  .btn-sm {
+    @apply h-9 px-4 text-xs;
+  }
+
+  .btn-lg {
+    @apply h-12 px-8 text-base;
+  }
+
+  /* Mobile-First Form Elements */
+  .input-hologram {
+    @apply w-full px-4 py-3 bg-slate-900/50 border border-cyan-400/30 rounded-lg text-cyan-100 placeholder-cyan-400/60 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-300;
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .textarea-hologram {
+    @apply input-hologram min-h-[120px] resize-none;
+  }
+
+  /* Mobile-First Cards */
+  .card-hologram {
+    @apply hologram-panel p-6 transition-all duration-300 hover:border-cyan-400/40;
+  }
+
+  /* Responsive Text */
+  .text-hologram {
+    @apply hologram-text;
+  }
+
+  .text-hologram-accent {
+    @apply hologram-accent;
+  }
+
+  .text-gradient-hologram {
+    @apply bg-gradient-to-r from-cyan-400 via-blue-400 to-cyan-300 bg-clip-text text-transparent;
+  }
+
+  /* Mobile Navigation */
+  .nav-hologram {
+    @apply hologram-panel backdrop-blur-md;
+  }
+
+  /* Animations */
+  .pulse-hologram {
+    animation: pulse-hologram 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-hologram {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.8);
+    }
+  }
+
+  /* Mobile-First Utilities */
+  .container-mobile {
+    @apply w-full max-w-sm mx-auto px-4 sm:max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl;
+  }
+
+  .grid-mobile {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+}
+
+/* React Flow Styles */
+.react-flow__node {
+  @apply font-sans;
+}
+
+.react-flow__edge {
+  @apply stroke-gray-400;
+}
+
+.react-flow__edge.selected {
+  @apply stroke-primary-500;
+}
+
+.react-flow__controls {
+  @apply bg-white border border-gray-200 rounded-lg shadow-sm;
+}
+
+.react-flow__controls button {
+  @apply border-none bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50;
+}
+
+/* Monaco Editor Styles */
+.monaco-editor {
+  @apply rounded-lg;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  @apply w-2 h-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
