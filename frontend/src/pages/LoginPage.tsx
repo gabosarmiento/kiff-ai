@@ -25,11 +25,11 @@ export const LoginPage: React.FC = () => {
   const { login, register, isLoading, isAuthenticated } = useAuth()
   const navigate = useNavigate()
 
-  // Redirect to home if user becomes authenticated
+  // Redirect to v0 generator if user becomes authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('User is now authenticated, redirecting to home...')
-      navigate('/', { replace: true })
+      console.log('User is now authenticated, redirecting to v0 generator...')
+      navigate('/generate-v0', { replace: true })
     }
   }, [isAuthenticated, navigate])
 

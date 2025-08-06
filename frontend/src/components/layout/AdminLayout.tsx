@@ -14,7 +14,9 @@ import {
   FileText,
   Brain,
   DollarSign,
-  AlertTriangle
+  AlertTriangle,
+  Flag,
+  Zap
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -60,6 +62,18 @@ const adminNavItems = [
     href: '/admin/audit',
     icon: FileText,
     description: 'Security and compliance'
+  },
+  {
+    name: 'Feature Flags',
+    href: '/admin/feature-flags',
+    icon: Flag,
+    description: 'Control UI features and rollouts'
+  },
+  {
+    name: 'Token Consumption',
+    href: '/admin/token-consumption',
+    icon: Zap,
+    description: 'Monitor AI token usage'
   },
   {
     name: 'Settings',

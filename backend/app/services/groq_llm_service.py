@@ -16,6 +16,8 @@ from agno.tools.python import PythonTools
 from agno.storage.sqlite import SqliteStorage
 
 from app.core.config import settings
+from app.core.langtrace_config import trace_agno_agent, log_agent_interaction, is_langtrace_enabled
+from app.core.demo_token_tracking import demo_track_agent, get_demo_tracker
 # Legacy trading_agent_factory import removed - functionality replaced with AGNO-native implementation
 
 logger = logging.getLogger(__name__)
@@ -64,12 +66,21 @@ class GroqLLMService:
             show_tool_calls=True
         )
     
+    @demo_track_agent("GroqLLMService", "generate_application")
     async def generate_application(self, prompt: str, app_type: str = "web_app", 
-                                 complexity: str = "intermediate") -> dict:
+                                 complexity: str = "intermediate", 
+                                 tenant_id: str = "demo_tenant", 
+                                 user_id: str = "demo_user") -> dict:
         """
         Generate a complete application using AGNO-native patterns with real Groq API calls
         """
         try:
+            # Log agent interaction start
+            log_agent_interaction(
+                agent_name="GroqLLMService.code_generator_agent",
+                input_data={"prompt": prompt, "app_type": app_type, "complexity": complexity}
+            )
+            
             # Build comprehensive prompt for application generation
             generation_prompt = f"""
 Generate a complete Python application using AGNO framework patterns for the following request:
@@ -107,7 +118,7 @@ Generate the complete, runnable Python code:
             # Extract agent metadata from generated code
             agent_config = self._extract_agent_metadata(generated_code)
             
-            return {
+            result = {
                 "success": True,
                 "agent": agent_config,
                 "generated_code": generated_code,
@@ -117,8 +128,25 @@ Generate the complete, runnable Python code:
                 "fallback_used": False
             }
             
+            # Log successful agent interaction
+            log_agent_interaction(
+                agent_name="GroqLLMService.code_generator_agent",
+                input_data={"prompt": prompt, "app_type": app_type, "complexity": complexity},
+                output_data=result
+            )
+            
+            return result
+            
         except Exception as e:
             self.logger.error(f"Error generating trading agent with AGNO: {e}")
+            
+            # Log error interaction
+            log_agent_interaction(
+                agent_name="GroqLLMService.code_generator_agent",
+                input_data={"prompt": prompt, "app_type": app_type, "complexity": complexity},
+                error=e
+            )
+            
             # Return error instead of fallback to ensure we fix the real integration
             return {
                 "success": False,

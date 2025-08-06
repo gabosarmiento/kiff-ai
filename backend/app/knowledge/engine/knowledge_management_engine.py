@@ -33,6 +33,8 @@ from agno.document.chunking.recursive import RecursiveChunking
 
 # Import local embedder cache to avoid OpenAI dependency
 from app.knowledge.embedder_cache import get_embedder
+# Import LangTrace observability
+from app.core.langtrace_config import trace_agno_agent, log_agent_interaction, is_langtrace_enabled
 
 logger = logging.getLogger(__name__)
 

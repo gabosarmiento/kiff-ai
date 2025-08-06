@@ -1,0 +1,25 @@
+services:
+  backend:
+    # Override for development - rebuild on changes
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    volumes:
+      # Mount source code for development
+      - ./backend:/app
+      - ./backend/generated_apps:/app/generated_apps
+      - ./backend/knowledge_db:/app/knowledge_db
+      - ./backend/lancedb_data:/app/lancedb_data
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tradeforge
+      - REDIS_URL=redis://redis:6379
+      - DEBUG=true
+      - PYTHONPATH=/app
+    # Use reload for development
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Ensure dependencies are available
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

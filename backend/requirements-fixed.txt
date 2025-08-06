@@ -1,0 +1,69 @@
+# Fixed requirements with proper NumPy/PyTorch compatibility
+# Install NumPy first
+numpy==1.26.4
+
+# Install PyTorch with CPU support (compatible with NumPy 1.26.4)
+torch==2.2.2 --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.17.2 --index-url https://download.pytorch.org/whl/cpu
+torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu
+
+# Core FastAPI and web framework dependencies
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.9.2
+pydantic-settings==2.10.1
+
+# Database dependencies
+asyncpg==0.30.0
+sqlalchemy==2.0.36
+alembic==1.16.4
+
+# Redis and caching
+aioredis==2.0.1
+
+# HTTP client and async support
+aiohttp==3.12.15
+aiofiles==24.1.0
+httpx==0.28.1
+
+# Authentication and security
+bcrypt==4.3.0
+cryptography==45.0.5
+python-jose==3.3.0
+passlib==1.7.4
+
+# AI and ML dependencies (install after NumPy/PyTorch)
+sentence-transformers==3.3.1
+transformers==4.48.0
+openai==1.58.1
+anthropic==0.41.0
+
+# Vector database
+lancedb==0.15.0
+
+# Data processing
+pandas==2.2.3
+beautifulsoup4==4.13.4
+lxml==5.3.0
+
+# Financial data
+yfinance==0.2.65
+ccxt==4.4.97
+
+# Web scraping and crawling
+crawl4ai==0.7.2
+playwright==1.49.1
+selenium==4.28.1
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.17
+Pillow==11.1.1
+psutil==6.1.0
+requests==2.32.3
+dateparser==1.2.2
+humanize==4.12.3
+
+# Development and testing
+pytest==8.3.4
+pytest-asyncio==0.25.0

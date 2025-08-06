@@ -25,7 +25,7 @@ const DesktopColumns: React.FC<DesktopColumnsProps> = ({
     <div className={`hidden md:flex h-full ${className}`}>
       {/* Left Panel - Templates */}
       {showLeftPanel && leftPanel && (
-        <div className={`${leftPanelWidth} flex-shrink-0 border-r border-slate-700/50`}>
+        <div className={`${leftPanelWidth} flex-shrink-0 border-r border-gray-200 dark:border-slate-700/50`}>
           <div className="h-full overflow-y-auto">
             {leftPanel}
           </div>
@@ -41,7 +41,7 @@ const DesktopColumns: React.FC<DesktopColumnsProps> = ({
 
       {/* Right Panel - Knowledge */}
       {showRightPanel && rightPanel && (
-        <div className={`${rightPanelWidth} flex-shrink-0 border-l border-slate-700/50`}>
+        <div className={`${rightPanelWidth} flex-shrink-0 border-l border-gray-200 dark:border-slate-700/50`}>
           <div className="h-full overflow-y-auto">
             {rightPanel}
           </div>

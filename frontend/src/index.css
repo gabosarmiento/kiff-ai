@@ -8,21 +8,147 @@
   }
   
   body {
-    @apply bg-slate-950 text-slate-200 min-h-screen;
+    @apply min-h-screen;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Light Theme (Default) */
+  body {
+    @apply bg-white text-gray-900;
+    background: white !important;
+    background-image: none !important;
+  }
+  
+  html body {
+    @apply bg-white text-gray-900;
+    background: white !important;
+    background-image: none !important;
+  }
+
+  /* Dark Theme */
+  html.dark body {
+    @apply bg-slate-950 text-slate-200;
+    background: rgb(2, 6, 23) !important;
     background-image: 
       radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
       radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
-      linear-gradient(180deg, rgb(2, 6, 23) 0%, rgb(15, 23, 42) 100%);
+      linear-gradient(180deg, rgb(2, 6, 23) 0%, rgb(15, 23, 42) 100%) !important;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Orbitron', monospace;
     @apply font-semibold tracking-wide;
   }
+
+  /* Light Theme Component Overrides */
+  .light-theme .bg-slate-800 {
+    @apply bg-white border-gray-200;
+  }
+
+  /* Light theme background overrides */
+  .light-theme .bg-slate-900 {
+    @apply bg-white;
+  }
+
+  .light-theme .bg-slate-800 {
+    @apply bg-white;
+  }
+
+  .light-theme .text-slate-100 {
+    @apply text-gray-900;
+  }
+
+  .light-theme .text-slate-200 {
+    @apply text-gray-800;
+  }
+
+  .light-theme .text-slate-300 {
+    @apply text-gray-700;
+  }
+
+  .light-theme .text-slate-400 {
+    @apply text-gray-600;
+  }
+
+  .light-theme .text-slate-500 {
+    @apply text-gray-500;
+  }
+
+  .light-theme .border-slate-700 {
+    @apply border-gray-200;
+  }
+
+  .light-theme .border-slate-600 {
+    @apply border-gray-300;
+  }
+
+  .light-theme .hover\:text-slate-100:hover {
+    @apply text-gray-900;
+  }
+
+  .light-theme .hover\:text-slate-200:hover {
+    @apply text-gray-800;
+  }
+
+  .light-theme .hover\:bg-slate-700\/50:hover {
+    @apply bg-gray-100;
+  }
+
+  /* Custom sidebar background that works with theme system */
+  .sidebar-bg {
+    @apply bg-white;
+  }
+
+  .dark .sidebar-bg {
+    @apply bg-slate-900;
+  }
+
+  /* Custom header background that works with theme system */
+  .header-bg {
+    @apply bg-white;
+  }
+
+  .dark .header-bg {
+    @apply bg-slate-800/95;
+  }
+
+  /* Custom navigation active item that works with theme system */
+  .nav-active {
+    @apply bg-blue-50;
+  }
+
+  .dark .nav-active {
+    @apply bg-slate-800/50;
+  }
+
+  /* Force brand text to be visible in dark mode */
+  .dark .sidebar-brand {
+    color: white !important;
+  }
 }
 
 @layer components {
+  /* Custom Animations */
+  .animate-pulse-twice {
+    animation: pulse-twice 3s ease-in-out;
+  }
+
+  @keyframes pulse-twice {
+    0%, 100% {
+      opacity: 1;
+    }
+    25% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+    75% {
+      opacity: 0.5;
+    }
+  }
+
   /* Hologram Effects */
   .hologram-glow {
     box-shadow: 
@@ -182,13 +308,34 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  @apply bg-transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   @apply bg-gray-300 rounded-full;
+  background-color: rgba(156, 163, 175, 0.5);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-400;
+  background-color: rgba(156, 163, 175, 0.8);
+}
+
+/* Dark theme scrollbars */
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.5);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(71, 85, 105, 0.8);
+}
+
+/* Hide scrollbars for Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+html.dark * {
+  scrollbar-color: rgba(71, 85, 105, 0.5) transparent;
 }

@@ -4,12 +4,30 @@ from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 import logging
 import json
+import os
 from typing import Dict, List
 
+# Initialize LangTrace for observability
+try:
+    from langtrace_python_sdk import langtrace
+    # Initialize LangTrace if API key is provided
+    if os.getenv("LANGTRACE_API_KEY"):
+        langtrace.init()
+        logger = logging.getLogger(__name__)
+        logger.info("LangTrace observability initialized successfully")
+    else:
+        logger = logging.getLogger(__name__)
+        logger.warning("LANGTRACE_API_KEY not found. LangTrace observability disabled.")
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("langtrace-python-sdk not installed. LangTrace observability disabled.")
+
 from app.api.routes import (
-    auth, accounts, logs, health, tenant_management, support, audit, kiff, api_gallery, knowledge
+    auth, accounts, logs, health, tenant_management, support, audit, kiff, api_gallery, knowledge, conversational_chat, agno_chat, agno_generation, advanced_agno_generation, feature_flags, idea_generator, token_tracking, billing_consumption, modular_rag, conversation_documents
 )
 from app.api.routes import analytics
+from app.api.routes import demo_usage
+from app.api.routes import billing_observability, api_indexing_cache, admin_pricing, performance_optimizer, subscription_management, stripe_subscription
 from app.api import knowledge_management
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -110,6 +128,24 @@ app.include_router(kiff.router, prefix="/api/kiff", tags=["kiff"])
 # API Gallery routes - Curated API documentation collection
 app.include_router(api_gallery.router, tags=["api-gallery"])
 
+# API Indexing Cache routes - Cost-sharing cached indexing system
+app.include_router(api_indexing_cache.router, tags=["api-indexing-cache"])
+
+# Billing Observability routes - Token consumption and billing metrics
+app.include_router(billing_observability.router, tags=["billing-observability"])
+
+# Admin Pricing routes - Centralized pricing configuration management
+app.include_router(admin_pricing.router, tags=["admin-pricing"])
+
+# Performance Optimizer routes - Resource allocation and processing optimization
+app.include_router(performance_optimizer.router, tags=["performance-optimization"])
+
+# Subscription Management routes - Premium tier subscriptions and billing
+app.include_router(subscription_management.router, tags=["subscription-management"])
+
+# Stripe Subscription routes - Stripe-based subscription management
+app.include_router(stripe_subscription.router, tags=["stripe-subscription"])
+
 # Knowledge Management routes - Knowledge bases and domain management
 app.include_router(knowledge.router, tags=["knowledge"])
 
@@ -125,6 +161,24 @@ app.include_router(tenant_management.router, prefix="/api/tenant-management", ta
 # Knowledge Management API routes
 app.include_router(knowledge_management.router, tags=["knowledge-management"])
 
+# Conversational Chat routes - Knowledge-driven development assistance
+app.include_router(conversational_chat.router, tags=["conversational-chat"])
+
+# AGNO Chat routes - Agent-based streaming chat with project generation
+app.include_router(agno_chat.router, tags=["agno-chat"])
+
+# AGNO Generation routes - Generate V0 application generation
+app.include_router(agno_generation.router, tags=["agno-generation"])
+
+# Advanced AGNO Generation routes - Generate V0.1 with comprehensive AGNO knowledge
+app.include_router(advanced_agno_generation.router, tags=["advanced-agno-generation"])
+
+# Modular RAG routes - Swappable Agentic RAG system management
+app.include_router(modular_rag.router, prefix="/api/rag", tags=["modular-rag"])
+
+# Idea Generator routes - AI-powered app idea generation
+app.include_router(idea_generator.router, prefix="/api/ideas", tags=["idea-generator"])
+
 # Admin UI API routes (admin only)
 # billing.router removed - billing functionality disabled for live trading demo
 app.include_router(support.router, prefix="/api/admin/support", tags=["admin-support"])
@@ -134,6 +188,13 @@ app.include_router(audit.router, prefix="/api/admin/audit", tags=["admin-audit"]
 from app.api.routes import admin  # Re-enabled with proper admin infrastructure
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(analytics.router, prefix="/api/admin/analytics", tags=["admin-analytics"])
+app.include_router(feature_flags.router, tags=["admin-feature-flags"])
+
+# Token Tracking routes - Real-time token consumption monitoring
+app.include_router(token_tracking.router, tags=["token-tracking"])
+
+# Billing Consumption routes - Billing-cycle-based token consumption
+app.include_router(billing_consumption.router, tags=["billing-consumption"])
 
 @app.get("/")
 async def root():

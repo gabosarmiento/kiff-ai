@@ -160,7 +160,7 @@ class FeatureFlag(Base):
     target_user_segments = Column(JSON)  # User criteria for targeting
     start_date = Column(DateTime(timezone=True))
     end_date = Column(DateTime(timezone=True))
-    created_by = Column(Integer, ForeignKey("admin_users.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

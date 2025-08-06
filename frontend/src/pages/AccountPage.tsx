@@ -3,6 +3,7 @@ import { User, Edit2, Mail, Trash2, Save, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiRequest } from '@/utils/apiConfig'
+import { TokenUsageHistory } from '@/components/billing/TokenUsageHistory'
 
 interface EditableFieldProps {
   label: string
@@ -251,6 +252,14 @@ export function AccountPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Token Usage History Section */}
+        <div className="px-8 py-6 border-t border-slate-700/50">
+          <TokenUsageHistory 
+            tenantId={user.tenant_id || "4485db48-71b7-47b0-8128-c6dca5be352d"} 
+            userId={user.id.toString()} 
+          />
         </div>
 
         {/* Delete Account Section */}

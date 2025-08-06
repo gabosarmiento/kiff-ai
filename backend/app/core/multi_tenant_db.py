@@ -546,10 +546,20 @@ class TenantMiddleware:
                 if tenant_info:
                     return tenant_info["tenant_id"]
         
-        # Method 2: X-Tenant-ID header
+        # Method 2: X-Tenant-ID header (can be UUID or slug)
         tenant_id = request.headers.get("x-tenant-id")
         if tenant_id:
-            return tenant_id
+            # Check if it's a valid UUID format
+            try:
+                uuid.UUID(tenant_id)
+                # It's a valid UUID, return as-is
+                return tenant_id
+            except ValueError:
+                # It's not a UUID, treat as slug and resolve to UUID
+                tenant_info = mt_db_manager.get_tenant_by_slug(tenant_id)
+                if tenant_info:
+                    return tenant_info["tenant_id"]
+                # If slug not found, return None (will be handled by middleware)
         
         # Method 3: Path prefix (e.g., /tenant/acme/api/...)
         path = request.url.path

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { DashboardMetrics } from '@/store/useAdminStore';
+import { FeatureFlagsPanel } from '@/components/admin/FeatureFlagsPanel';
 
 interface AgenticInsight {
   id: number;
@@ -555,6 +556,9 @@ const AdminDashboardPage: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Feature Flags */}
+            <FeatureFlagsPanel />
           </div>
         </div>
       </div>

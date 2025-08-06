@@ -1,7 +1,10 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { AdminLayout } from '@/components/layout/AdminLayout'
-import { HomePage } from '@/pages/HomePage'
+import { ProtectedRoute } from '@/components/routing/ProtectedRoute'
+import { UnifiedGenerationPage } from '@/pages/UnifiedGenerationPage'
+import { GenerateV0Page } from '@/pages/GenerateV0Page'
+import { GenerateV01Page } from '@/pages/GenerateV01Page'
 import { LandingPage } from '@/pages/LandingPage'
 import { ApplicationsPage } from '@/pages/ApplicationsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -14,8 +17,11 @@ import AdminSupportPage from '@/pages/AdminSupportPage'
 import AdminAuditLogPage from '@/pages/AdminAuditLogPage'
 import AdminDashboardPage from '@/pages/AdminDashboardPage'
 import AdminUserManagementPage from '@/pages/AdminUserManagementPage'
+import AdminFeatureFlagsPage from '@/pages/AdminFeatureFlagsPage'
+import { AdminTokenConsumptionPage } from '@/pages/AdminTokenConsumptionPage'
 import MonitoringDashboard from '@/pages/admin/MonitoringDashboard'
 import { useAuth } from '@/contexts/AuthContext'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 
 function App() {
   const { isAuthenticated, isLoading, user } = useAuth()
@@ -27,23 +33,27 @@ function App() {
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Loading...</p>
+      <ThemeProvider>
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-slate-400">Loading...</p>
+          </div>
         </div>
-      </div>
+      </ThemeProvider>
     )
   }
 
   // Show public routes if not authenticated
   if (!isAuthenticated) {
     return (
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ThemeProvider>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ThemeProvider>
     )
   }
 
@@ -54,7 +64,7 @@ function App() {
   // Debug logging removed - admin detection working correctly
   
   // If admin user is on a regular route, redirect to admin dashboard
-  const regularRoutes = ['/', '/gallery', '/knowledge', '/applications']
+  const regularRoutes = ['/', '/generate-v0', '/gallery', '/knowledge', '/applications']
   if (isAdmin && regularRoutes.includes(location.pathname)) {
     console.log('Redirecting admin user to admin dashboard from:', location.pathname)
     return <Navigate to="/admin/dashboard" replace />
@@ -62,12 +72,28 @@ function App() {
   
   // Show main app if authenticated
   return (
-    <Routes>
+    <ThemeProvider>
+      <Routes>
       {/* Regular user routes with standard layout - only for non-admin users */}
       {!isAdmin && (
         <>
-          <Route path="/" element={<Layout><HomePage /></Layout>} />
-          <Route path="/gallery" element={<Layout><APIGalleryPage /></Layout>} />
+          <Route path="/generate-v0" element={<Layout><GenerateV0Page /></Layout>} />
+          <Route path="/generate-v01" element={
+            <ProtectedRoute featureFlag="generate_v01_enabled">
+              <Layout><GenerateV01Page /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/unified-generation" element={
+            <ProtectedRoute featureFlag="unified_generation_enabled">
+              <Layout><UnifiedGenerationPage /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/" element={<Navigate to="/generate-v0" replace />} />
+          <Route path="/gallery" element={
+            <ProtectedRoute featureFlag="api_gallery_enabled">
+              <Layout><APIGalleryPage /></Layout>
+            </ProtectedRoute>
+          } />
           <Route path="/knowledge" element={<Layout><KnowledgePage /></Layout>} />
           <Route path="/applications" element={<Layout><ApplicationsPage /></Layout>} />
           <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
@@ -85,11 +111,14 @@ function App() {
       <Route path="/admin/billing" element={<AdminLayout><AdminBillingPage /></AdminLayout>} />
       <Route path="/admin/support" element={<AdminLayout><AdminSupportPage /></AdminLayout>} />
       <Route path="/admin/audit" element={<AdminLayout><AdminAuditLogPage /></AdminLayout>} />
+      <Route path="/admin/feature-flags" element={<AdminLayout><AdminFeatureFlagsPage /></AdminLayout>} />
+      <Route path="/admin/token-consumption" element={<AdminLayout><AdminTokenConsumptionPage /></AdminLayout>} />
       <Route path="/admin/settings" element={<AdminLayout><SettingsPage /></AdminLayout>} />
       
       {/* Fallback route for authenticated users */}
-      <Route path="*" element={<Navigate to={isAdmin ? "/admin/dashboard" : "/"} replace />} />
-    </Routes>
+      <Route path="*" element={<Navigate to={isAdmin ? "/admin/dashboard" : "/generate-v0"} replace />} />
+      </Routes>
+    </ThemeProvider>
   )
 }
 

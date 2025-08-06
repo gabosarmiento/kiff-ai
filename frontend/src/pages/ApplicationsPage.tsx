@@ -47,6 +47,9 @@ export function ApplicationsPage() {
   const [fileCache, setFileCache] = useState<AppFileCache>({})
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [loadingFileCounts, setLoadingFileCounts] = useState<Set<string>>(new Set())
+  const [dockerStatus, setDockerStatus] = useState<{[key: string]: any}>({})
+  const [isTestingDocker, setIsTestingDocker] = useState<Set<string>>(new Set())
+  const [isDownloading, setIsDownloading] = useState<Set<string>>(new Set())
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -527,6 +530,118 @@ export function ApplicationsPage() {
     })
   }, [])
 
+  const downloadApp = async (appName: string) => {
+    try {
+      setIsDownloading(prev => new Set(prev).add(appName))
+      
+      const response = await fetch(`/api/kiff/generated-apps/${appName}/download`, {
+        method: 'GET',
+        headers: {
+          ...(tenantId && { 'X-Tenant-ID': tenantId })
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to download application')
+      }
+
+      // Create blob and download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = url
+      a.download = `${appName}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success('Application downloaded successfully')
+    } catch (error) {
+      console.error('Error downloading app:', error)
+      toast.error('Failed to download application')
+    } finally {
+      setIsDownloading(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(appName)
+        return newSet
+      })
+    }
+  }
+
+  const testAppWithDocker = async (appName: string) => {
+    try {
+      setIsTestingDocker(prev => new Set(prev).add(appName))
+      
+      const response = await fetch(`/api/kiff/generated-apps/${appName}/test-docker`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(tenantId && { 'X-Tenant-ID': tenantId })
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to test application with Docker')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setDockerStatus(prev => ({
+          ...prev,
+          [appName]: {
+            status: 'running',
+            container_name: result.container_name,
+            access_url: result.access_url,
+            port_info: result.port_info
+          }
+        }))
+        
+        toast.success(`Application is running! ${result.access_url ? `Access at: ${result.access_url}` : ''}`)
+      } else {
+        toast.error(`Docker test failed: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('Error testing app with Docker:', error)
+      toast.error('Failed to test application with Docker')
+    } finally {
+      setIsTestingDocker(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(appName)
+        return newSet
+      })
+    }
+  }
+
+  const stopDockerContainer = async (appName: string) => {
+    try {
+      const response = await fetch(`/api/kiff/generated-apps/${appName}/docker-stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(tenantId && { 'X-Tenant-ID': tenantId })
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to stop Docker container')
+      }
+
+      setDockerStatus(prev => {
+        const newStatus = { ...prev }
+        delete newStatus[appName]
+        return newStatus
+      })
+
+      toast.success('Docker container stopped successfully')
+    } catch (error) {
+      console.error('Error stopping Docker container:', error)
+      toast.error('Failed to stop Docker container')
+    }
+  }
+
   const renderFileTree = useCallback((nodes: FileNode[], depth = 0) => {
     return nodes.map((node) => {
       const isExpanded = expandedFolders.has(node.path)
@@ -924,14 +1039,45 @@ export function ApplicationsPage() {
                 <Code className="w-4 h-4" />
                 {selectedFile ? selectedFile.name : 'Code Editor'}
               </h2>
-              {selectedFile && (
+              {selectedFile && selectedApp && (
                 <div className="flex items-center gap-2">
-                  <button className="text-slate-400 hover:text-cyan-400 p-1">
-                    <Download className="w-4 h-4" />
+                  <button 
+                    onClick={() => downloadApp(selectedApp.name)}
+                    disabled={isDownloading.has(selectedApp.name)}
+                    className="text-slate-400 hover:text-cyan-400 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Download application as ZIP"
+                  >
+                    {isDownloading.has(selectedApp.name) ? (
+                      <div className="w-4 h-4 border border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
                   </button>
-                  <button className="text-slate-400 hover:text-green-400 p-1">
-                    <Play className="w-4 h-4" />
-                  </button>
+                  
+                  {dockerStatus[selectedApp.name]?.status === 'running' ? (
+                    <button 
+                      onClick={() => stopDockerContainer(selectedApp.name)}
+                      className="text-red-400 hover:text-red-300 p-1"
+                      title={`Stop Docker container (${dockerStatus[selectedApp.name]?.access_url || 'running'})`}
+                    >
+                      <div className="w-4 h-4 border-2 border-red-400 rounded-sm flex items-center justify-center">
+                        <div className="w-2 h-2 bg-red-400 rounded-sm" />
+                      </div>
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => testAppWithDocker(selectedApp.name)}
+                      disabled={isTestingDocker.has(selectedApp.name)}
+                      className="text-slate-400 hover:text-green-400 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Test application with Docker Desktop"
+                    >
+                      {isTestingDocker.has(selectedApp.name) ? (
+                        <div className="w-4 h-4 border border-green-500/30 border-t-green-500 rounded-full animate-spin" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

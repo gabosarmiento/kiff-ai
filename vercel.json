@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "backend/api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "pipInstallArgs": "-r backend/requirements-vercel.txt"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend/dist/$1"
+    }
+  ],
+  "env": {
+    "PYTHONPATH": "backend"
+  },
+  "functions": {
+    "backend/api/index.py": {
+      "maxDuration": 30
+    }
+  },
+  "excludeFiles": [
+    "backend/generated_apps/**",
+    "backend/*.log",
+    "backend/*.sqlite",
+    "backend/*.db",
+    "backend/venv/**",
+    "backend/__pycache__/**",
+    "backend/*.pyc",
+    "backend/.pytest_cache/**",
+    "backend/tmp/**",
+    "frontend/node_modules/**",
+    ".git/**"
+  ]
+}

@@ -5,6 +5,10 @@
 
 // Get the API base URL from environment variable or fallback to localhost
 export const getApiBaseUrl = (): string => {
+  // In production on Vercel, API routes are served from the same domain
+  if (import.meta.env.PROD) {
+    return ''  // Use relative URLs in production
+  }
   return (import.meta.env as any).VITE_API_BASE_URL || 'http://localhost:8000'
 }
 

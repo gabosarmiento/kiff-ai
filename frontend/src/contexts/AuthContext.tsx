@@ -11,6 +11,7 @@ interface User {
   role: string
   is_active: boolean
   created_at: string
+  tenant_id?: string
 }
 
 interface AuthContextType {
@@ -131,7 +132,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               window.location.href = '/admin/dashboard'
             } else {
               toast.success(`Welcome back!`)
-              // Regular users go to home page (handled by App.tsx routing)
+              // Let LoginPage handle the navigation to avoid conflicts
             }
             
             return true

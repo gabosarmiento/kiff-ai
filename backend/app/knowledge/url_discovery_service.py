@@ -52,78 +52,67 @@ class URLDiscoveryService:
         logger.info(f"🔍 Starting comprehensive URL discovery for {api.display_name}")
         
         try:
-            # Strategy 1: Use configured URLs if available (like AGNO comprehensive files)
-            if api.documentation_urls:
-                logger.info(f"📝 Using configured URLs for {api.display_name}")
+            # Strategy 1: Use comprehensive files only (like AGNO with full.txt)
+            if api.documentation_urls and any('full.txt' in url or 'complete' in url for url in api.documentation_urls):
+                logger.info(f"📝 Using comprehensive file for {api.display_name}")
+                estimated_chunks = await self._estimate_comprehensive_file_chunks(api.documentation_urls)
                 
-                # For comprehensive files, estimate sections that will be chunked
-                if any('full.txt' in url or 'complete' in url for url in api.documentation_urls):
-                    estimated_chunks = await self._estimate_comprehensive_file_chunks(api.documentation_urls)
+                return URLDiscoveryResult(
+                    api_name=api.name,
+                    display_name=api.display_name,
+                    total_urls=len(api.documentation_urls),
+                    documentation_urls=estimated_chunks,
+                    url_list=api.documentation_urls,
+                    discovery_method="comprehensive_file_analysis",
+                    timestamp=datetime.now().isoformat()
+                )
+            
+            # Strategy 2: Use Julia BFF Sitemap Extractor for comprehensive URL discovery (PROVEN APPROACH)
+            else:
+                logger.info(f"🗺️ Using Julia BFF sitemap extractor for {api.display_name}")
+                
+                # Import Julia BFF sitemap extractor
+                from app.knowledge.julia_bff_sitemap_extractor import get_julia_bff_sitemap_extractor
+                
+                sitemap_extractor = get_julia_bff_sitemap_extractor()
+                
+                # Define documentation prefixes for filtering
+                doc_prefixes = self._get_documentation_prefixes(api)
+                
+                # Extract comprehensive URLs using proven Julia BFF approach
+                extraction_result = sitemap_extractor.extract_comprehensive_urls(
+                    api_name=api.name,
+                    base_url=api.base_url,
+                    doc_prefixes=doc_prefixes
+                )
+                
+                if extraction_result.success and extraction_result.filtered_urls:
+                    logger.info(f"✅ Julia BFF extraction successful for {api.display_name}")
+                    logger.info(f"📊 Found {len(extraction_result.filtered_urls)} documentation URLs")
+                    logger.info(f"🗺️ Sitemap: {extraction_result.sitemap_url}")
                     
                     return URLDiscoveryResult(
                         api_name=api.name,
                         display_name=api.display_name,
-                        total_urls=len(api.documentation_urls),
-                        documentation_urls=estimated_chunks,
-                        url_list=api.documentation_urls,
-                        discovery_method="comprehensive_file_analysis",
+                        total_urls=extraction_result.total_urls,
+                        documentation_urls=len(extraction_result.filtered_urls),
+                        url_list=extraction_result.filtered_urls,
+                        discovery_method="julia_bff_sitemap_extraction",
                         timestamp=datetime.now().isoformat()
                     )
                 else:
+                    logger.warning(f"⚠️ Julia BFF extraction failed for {api.display_name}: {extraction_result.error}")
+                    logger.info(f"🔄 Falling back to configured URLs")
+                    
                     return URLDiscoveryResult(
                         api_name=api.name,
                         display_name=api.display_name,
                         total_urls=len(api.documentation_urls),
                         documentation_urls=len(api.documentation_urls),
                         url_list=api.documentation_urls,
-                        discovery_method="configured_urls",
+                        discovery_method="fallback_configured_urls",
                         timestamp=datetime.now().isoformat()
                     )
-            
-            # Strategy 2: Use AGNO WebsiteReader for comprehensive crawling
-            else:
-                logger.info(f"🕷️ Using WebsiteReader for comprehensive crawl of {api.display_name}")
-                
-                # Determine starting URL for crawling
-                start_urls = self._get_crawl_starting_urls(api)
-                
-                all_discovered_urls = []
-                successful_crawls = 0
-                
-                for start_url in start_urls:
-                    try:
-                        logger.info(f"   🔍 Crawling from: {start_url}")
-                        results = self.website_reader.crawl(start_url)
-                        
-                        if results:
-                            urls = list(results.keys())
-                            all_discovered_urls.extend(urls)
-                            successful_crawls += 1
-                            logger.info(f"   ✅ Found {len(urls)} URLs from {start_url}")
-                        else:
-                            logger.warning(f"   ⚠️ No URLs found from {start_url}")
-                            
-                    except Exception as e:
-                        logger.warning(f"   ❌ Failed to crawl {start_url}: {e}")
-                
-                # Remove duplicates and filter for documentation URLs
-                unique_urls = list(set(all_discovered_urls))
-                doc_urls = self._filter_documentation_urls(unique_urls)
-                
-                logger.info(f"📊 Discovery summary for {api.display_name}:")
-                logger.info(f"   • Successful crawls: {successful_crawls}/{len(start_urls)}")
-                logger.info(f"   • Total unique URLs: {len(unique_urls)}")
-                logger.info(f"   • Documentation URLs: {len(doc_urls)}")
-                
-                return URLDiscoveryResult(
-                    api_name=api.name,
-                    display_name=api.display_name,
-                    total_urls=len(unique_urls),
-                    documentation_urls=len(doc_urls),
-                    url_list=doc_urls,
-                    discovery_method="website_reader_crawl",
-                    timestamp=datetime.now().isoformat()
-                )
                 
         except Exception as e:
             logger.error(f"❌ Error discovering URLs for {api.display_name}: {e}")
@@ -174,6 +163,41 @@ class URLDiscoveryService:
         self._print_discovery_summary(results)
         
         return results
+    
+    def _get_documentation_prefixes(self, api: APIDocumentation) -> List[str]:
+        """Get documentation URL prefixes for filtering sitemap URLs"""
+        base_url = api.base_url.rstrip('/')
+        
+        # API-specific documentation prefixes
+        if 'leonardo.ai' in base_url:
+            return [
+                'https://docs.leonardo.ai/docs',
+                'https://docs.leonardo.ai/reference'
+            ]
+        elif 'stability.ai' in base_url:
+            return [
+                'https://platform.stability.ai/docs'
+            ]
+        elif 'elevenlabs.io' in base_url:
+            return [
+                'https://elevenlabs.io/docs'
+            ]
+        elif 'openai.com' in base_url:
+            return [
+                'https://platform.openai.com/docs'
+            ]
+        elif 'stripe.com' in base_url:
+            return [
+                'https://stripe.com/docs'
+            ]
+        else:
+            # Generic documentation prefixes
+            return [
+                f"{base_url}/docs",
+                f"{base_url}/documentation",
+                f"{base_url}/api",
+                f"{base_url}/reference"
+            ]
     
     def _get_crawl_starting_urls(self, api: APIDocumentation) -> List[str]:
         """Get potential starting URLs for crawling"""

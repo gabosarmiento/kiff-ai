@@ -1,0 +1,120 @@
+{
+  "pricing_rules": [
+    {
+      "rule_id": "default_fractional",
+      "name": "Default Fractional Pricing",
+      "description": "Standard 5% fractional cost with $0.20 minimum",
+      "fractional_ratio": "0.05",
+      "minimum_charge": "0.20",
+      "maximum_charge": "10.00",
+      "applies_to_apis": [],
+      "applies_to_tiers": [
+        "free",
+        "demo",
+        "starter",
+        "pro",
+        "enterprise"
+      ],
+      "active": true,
+      "created_at": "2025-08-05T06:07:32.043438+00:00",
+      "created_by": "system_init"
+    }
+  ],
+  "tier_configurations": [
+    {
+      "tier": "free",
+      "display_name": "Free Tier",
+      "description": "Limited free access to try out APIs",
+      "monthly_credit": "0.00",
+      "free_api_access_count": 3,
+      "fractional_ratio_multiplier": "0.00",
+      "maximum_monthly_spend": null,
+      "features": [
+        "3 free API access",
+        "Basic support"
+      ],
+      "priority_support": false
+    },
+    {
+      "tier": "demo",
+      "display_name": "Demo Account",
+      "description": "Demo account with credits for testing",
+      "monthly_credit": "50.00",
+      "free_api_access_count": 5,
+      "fractional_ratio_multiplier": "1.00",
+      "maximum_monthly_spend": "100.00",
+      "features": [
+        "$50 monthly credit",
+        "All APIs",
+        "Email support"
+      ],
+      "priority_support": false
+    },
+    {
+      "tier": "starter",
+      "display_name": "Starter",
+      "description": "Perfect for individual developers",
+      "monthly_credit": "25.00",
+      "free_api_access_count": 5,
+      "fractional_ratio_multiplier": "1.00",
+      "maximum_monthly_spend": "100.00",
+      "features": [
+        "$25 monthly credit",
+        "All APIs",
+        "Email support"
+      ],
+      "priority_support": false
+    },
+    {
+      "tier": "pro",
+      "display_name": "Professional",
+      "description": "For growing teams and businesses",
+      "monthly_credit": "100.00",
+      "free_api_access_count": 10,
+      "fractional_ratio_multiplier": "0.80",
+      "maximum_monthly_spend": "500.00",
+      "features": [
+        "$100 monthly credit",
+        "20% discount",
+        "Priority support",
+        "Advanced analytics"
+      ],
+      "priority_support": true
+    },
+    {
+      "tier": "enterprise",
+      "display_name": "Enterprise",
+      "description": "Custom solutions for large organizations",
+      "monthly_credit": "500.00",
+      "free_api_access_count": 50,
+      "fractional_ratio_multiplier": "0.60",
+      "maximum_monthly_spend": null,
+      "features": [
+        "$500 monthly credit",
+        "40% discount",
+        "Dedicated support",
+        "Custom integrations"
+      ],
+      "priority_support": true
+    }
+  ],
+  "api_pricing": [],
+  "system_config": {
+    "default_access_duration_days": 30,
+    "cache_expiry_days": 90,
+    "minimum_indexing_cost": 1.0,
+    "maximum_indexing_cost": 100.0,
+    "commission_rate": 0.15,
+    "currency": "USD",
+    "tax_rate": 0.0,
+    "payment_methods": [
+      "demo",
+      "stripe",
+      "credit_balance"
+    ],
+    "refund_policy_days": 7,
+    "billing_cycle": "monthly"
+  },
+  "last_updated": "2025-08-05T06:07:32.043837+00:00",
+  "version": "1.0"
+}

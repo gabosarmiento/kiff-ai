@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Save, Key, Shield, Bell, Palette, Settings as SettingsIcon, Cpu } from 'lucide-react'
+import { Save, Key, Shield, Bell, Palette, Settings as SettingsIcon, Cpu, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useFeatureFlag } from '@/hooks/useFeatureFlags'
 
 export function SettingsPage() {
+  const userSettingsEnabled = useFeatureFlag('user_settings_enabled', false)
   const [activeTab, setActiveTab] = useState('api-keys')
   const [settings, setSettings] = useState({
     apiKeys: {
@@ -57,6 +59,20 @@ export function SettingsPage() {
         [key]: value
       }
     }))
+  }
+
+  if (!userSettingsEnabled) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-slate-800/50 rounded-xl flex items-center justify-center border border-slate-700/50 mx-auto mb-4">
+            <Lock className="w-8 h-8 text-slate-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-200 mb-2">Settings Coming Soon</h2>
+          <p className="text-slate-400">User settings will be available in a future update.</p>
+        </div>
+      </div>
+    )
   }
 
   return (

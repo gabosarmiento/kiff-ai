@@ -25,3 +25,11 @@ async def get_db():
             yield session
         finally:
             await session.close()
+
+async def get_async_db():
+    """Generator to get database session for non-dependency use"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

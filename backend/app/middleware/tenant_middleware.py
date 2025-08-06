@@ -26,7 +26,9 @@ class MultiTenantMiddleware(BaseHTTPMiddleware):
             "/api/admin", "/api/tenant-management", "/api/resolve-tenant",
             "/api/auth",  # Allow admin login without tenant context
             "/api/kiff",  # Bypass multi-tenancy for kiff MVP
-            "/api/gallery"  # Bypass multi-tenancy for API Gallery testing
+            "/api/gallery",  # Bypass multi-tenancy for API Gallery testing
+            "/api/stripe-subscription",  # Bypass multi-tenancy for Stripe payments
+            "/api/agno-chat"  # Bypass multi-tenancy for AGNO agent chat
         }
     
     async def dispatch(self, request: Request, call_next):

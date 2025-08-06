@@ -6,11 +6,17 @@ No hardcoded scaffolding - let the agent do everything.
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 import asyncio
 import logging
 import json
+import zipfile
+import io
+import subprocess
+import tempfile
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -407,30 +413,266 @@ async def delete_generated_app(app_name: str):
     """Delete a generated application and its files"""
     
     apps_dir = get_generated_apps_directory()
-    app_dir = apps_dir / app_name
+    app_path = apps_dir / app_name
     
-    if not app_dir.exists():
+    if not app_path.exists():
         raise HTTPException(
             status_code=404,
             detail="Application not found"
         )
     
     try:
-        # Delete the entire application directory
+        # Remove the entire application directory
         import shutil
-        shutil.rmtree(app_dir)
+        shutil.rmtree(app_path)
+        
+        logger.info(f"Deleted generated app: {app_name}")
         
         return {
             "success": True,
             "message": f"Application '{app_name}' deleted successfully"
         }
         
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Application not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
     except Exception as e:
-        logger.error(f"Failed to delete application {app_name}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete application: {str(e)}"
+        logger.error(f"Error deleting app {app_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete application")
+
+@router.get("/generated-apps/{app_name}/download")
+async def download_generated_app(app_name: str):
+    """Download a generated application as a ZIP file"""
+    try:
+        apps_dir = get_generated_apps_directory()
+        app_path = apps_dir / app_name
+        
+        if not app_path.exists():
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        # Create ZIP file in memory
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add all files in the app directory to the ZIP
+            for file_path in app_path.rglob('*'):
+                if file_path.is_file():
+                    # Get relative path for the ZIP entry
+                    arc_name = file_path.relative_to(app_path)
+                    zip_file.write(file_path, arc_name)
+        
+        zip_buffer.seek(0)
+        
+        logger.info(f"Generated ZIP download for app: {app_name}")
+        
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.read()),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={app_name}.zip"}
         )
+        
+    except Exception as e:
+        logger.error(f"Error downloading app {app_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to download application")
+
+@router.post("/generated-apps/{app_name}/test-docker")
+async def test_app_with_docker(app_name: str, background_tasks: BackgroundTasks):
+    """Test a generated application using Docker Desktop"""
+    try:
+        apps_dir = get_generated_apps_directory()
+        app_path = apps_dir / app_name
+        
+        if not app_path.exists():
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        # Check if Docker is available
+        try:
+            subprocess.run(["docker", "--version"], check=True, capture_output=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise HTTPException(
+                status_code=400, 
+                detail="Docker is not available. Please ensure Docker Desktop is installed and running."
+            )
+        
+        # Create a temporary directory for Docker build
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Copy app files to temp directory
+            shutil.copytree(app_path, temp_path / app_name)
+            
+            # Create Dockerfile if it doesn't exist
+            dockerfile_path = temp_path / app_name / "Dockerfile"
+            if not dockerfile_path.exists():
+                dockerfile_content = f"""FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY . .
+
+# Expose port (default to 8000)
+EXPOSE 8000
+
+# Run the application
+CMD ["python", "app.py"]
+"""
+                dockerfile_path.write_text(dockerfile_content)
+            
+            # Build Docker image
+            image_name = f"kiff-app-{app_name.lower()}"
+            build_result = subprocess.run(
+                ["docker", "build", "-t", image_name, "."],
+                cwd=temp_path / app_name,
+                capture_output=True,
+                text=True
+            )
+            
+            if build_result.returncode != 0:
+                logger.error(f"Docker build failed for {app_name}: {build_result.stderr}")
+                return {
+                    "success": False,
+                    "message": "Docker build failed",
+                    "error": build_result.stderr,
+                    "build_logs": build_result.stdout
+                }
+            
+            # Run the container (detached mode)
+            container_name = f"kiff-test-{app_name.lower()}"
+            
+            # Stop and remove existing container if it exists
+            subprocess.run(["docker", "stop", container_name], capture_output=True)
+            subprocess.run(["docker", "rm", container_name], capture_output=True)
+            
+            # Run new container
+            run_result = subprocess.run(
+                [
+                    "docker", "run", "-d", 
+                    "--name", container_name,
+                    "-p", "0:8000",  # Let Docker assign a random port
+                    image_name
+                ],
+                capture_output=True,
+                text=True
+            )
+            
+            if run_result.returncode != 0:
+                logger.error(f"Docker run failed for {app_name}: {run_result.stderr}")
+                return {
+                    "success": False,
+                    "message": "Failed to start Docker container",
+                    "error": run_result.stderr
+                }
+            
+            # Get the assigned port
+            port_result = subprocess.run(
+                ["docker", "port", container_name, "8000"],
+                capture_output=True,
+                text=True
+            )
+            
+            port_info = port_result.stdout.strip() if port_result.returncode == 0 else "Port not available"
+            
+            logger.info(f"Started Docker container for app: {app_name}")
+            
+            return {
+                "success": True,
+                "message": "Application is running in Docker",
+                "container_name": container_name,
+                "image_name": image_name,
+                "port_info": port_info,
+                "access_url": f"http://localhost:{port_info.split(':')[-1]}" if ":" in port_info else None,
+                "build_logs": build_result.stdout
+            }
+            
+    except Exception as e:
+        logger.error(f"Error testing app {app_name} with Docker: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to test application: {str(e)}")
+
+@router.get("/generated-apps/{app_name}/docker-status")
+async def get_docker_status(app_name: str):
+    """Get the status of a Docker container for a generated app"""
+    try:
+        container_name = f"kiff-test-{app_name.lower()}"
+        
+        # Check container status
+        status_result = subprocess.run(
+            ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Status}}"]
+        , capture_output=True, text=True)
+        
+        if status_result.returncode != 0 or not status_result.stdout.strip():
+            return {
+                "exists": False,
+                "status": "not_found",
+                "message": "Container not found"
+            }
+        
+        status = status_result.stdout.strip()
+        is_running = "Up" in status
+        
+        # Get port info if running
+        port_info = None
+        access_url = None
+        if is_running:
+            port_result = subprocess.run(
+                ["docker", "port", container_name, "8000"],
+                capture_output=True,
+                text=True
+            )
+            if port_result.returncode == 0 and port_result.stdout.strip():
+                port_info = port_result.stdout.strip()
+                if ":" in port_info:
+                    access_url = f"http://localhost:{port_info.split(':')[-1]}"
+        
+        return {
+            "exists": True,
+            "status": "running" if is_running else "stopped",
+            "container_name": container_name,
+            "port_info": port_info,
+            "access_url": access_url,
+            "raw_status": status
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting Docker status for {app_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get Docker status")
+
+@router.post("/generated-apps/{app_name}/docker-stop")
+async def stop_docker_container(app_name: str):
+    """Stop and remove the Docker container for a generated app"""
+    try:
+        container_name = f"kiff-test-{app_name.lower()}"
+        
+        # Stop the container
+        stop_result = subprocess.run(
+            ["docker", "stop", container_name],
+            capture_output=True,
+            text=True
+        )
+        
+        # Remove the container
+        rm_result = subprocess.run(
+            ["docker", "rm", container_name],
+            capture_output=True,
+            text=True
+        )
+        
+        logger.info(f"Stopped and removed Docker container for app: {app_name}")
+        
+        return {
+            "success": True,
+            "message": "Docker container stopped and removed",
+            "container_name": container_name
+        }
+        
+    except Exception as e:
+        logger.error(f"Error stopping Docker container for {app_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to stop Docker container")
 
 # WebSocket endpoint for real-time project creation monitoring
 @router.websocket("/ws/create-project")
