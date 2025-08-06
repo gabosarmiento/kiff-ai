@@ -13,12 +13,12 @@ import {
   Zap,
   Brain
 } from 'lucide-react'
-import { useStore } from '../../store/useStore.ts'
-import { SubscriptionModal } from '../subscription/SubscriptionModal.tsx'
-import { SidebarBalance } from '../billing/SidebarBalance.tsx'
-import { TokenConsumptionBalance } from '../billing/TokenConsumptionBalance.tsx'
-import { useFeatureFlag } from '../../hooks/useFeatureFlags.ts'
-import { useAuth } from '../../contexts/AuthContext.tsx'
+import { useStore } from '../../store/useStore'
+import { SubscriptionModal } from '../subscription/SubscriptionModal'
+import { SidebarBalance } from '../billing/SidebarBalance'
+import { TokenConsumptionBalance } from '../billing/TokenConsumptionBalance'
+import { useFeatureFlag } from '../../hooks/useFeatureFlags'
+import { useAuth } from '../../contexts/AuthContext'
 
 export function Sidebar() {
   const location = useLocation()

@@ -24,6 +24,7 @@ from app.config.llm_providers import llm_agentic
 from app.knowledge.embedder_cache import get_embedder
 from app.core.token_tracker import get_token_tracker, TokenTracker
 from app.services.conversation_document_service import conversation_document_service
+from app.knowledge.railway_config import railway_config
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +78,21 @@ class AGNOApplicationGenerator:
             # Create URL knowledge base with proper AGNO initialization
             logger.info(f"🔧 Creating UrlKnowledge with {len(agno_urls)} URLs...")
             
-            # Create vector database first with proper configuration
+            # Create vector database with Railway-compatible path
             logger.info("🗄️ Initializing LanceDB vector database...")
+            
+            # Use Railway persistent storage if available
+            if railway_config.is_railway_environment():
+                lancedb_uri = railway_config.get_lancedb_path()
+                table_path = f"{lancedb_uri}/agno_combined_knowledge"
+                logger.info(f"🚂 Using Railway LanceDB path: {table_path}")
+            else:
+                table_path = "tmp/agno_combined_kb"
+                logger.info(f"💻 Using local LanceDB path: {table_path}")
+            
             vector_db = LanceDb(
                 table_name="agno_combined_knowledge",
-                uri="tmp/agno_combined_kb",
+                uri=table_path,
                 search_type=SearchType.hybrid,
                 embedder=get_embedder()
             )

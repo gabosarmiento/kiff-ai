@@ -50,10 +50,7 @@ export function HomePage() {
   return (
     <div className="h-full">
       {!showDynamicUI ? (
-        <AppBuilderInterface
-          onGenerate={handleGenerate}
-          isProcessing={isProcessing}
-        />
+        <AppBuilderInterface />
       ) : (
         <div className="h-full p-6 bg-slate-950">
           <div className="max-w-6xl mx-auto">

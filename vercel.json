@@ -1,32 +1,33 @@
 {
   "version": 2,
+  "name": "kiff-ai-frontend",
   "builds": [
     {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "dist"
-      }
-    },
-    {
-      "src": "backend/api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "pipInstallArgs": "-r backend/requirements-vercel.txt"
+        "distDir": "frontend/dist"
       }
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/api/index.py"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "frontend/dist/$1"
+      "dest": "/frontend/dist/index.html"
     }
   ],
-  "env": {
-    "PYTHONPATH": "backend"
-  }
+  "buildCommand": "cd frontend && npm run build",
+  "devCommand": "cd frontend && npm run dev", 
+  "installCommand": "cd frontend && npm install",
+  "outputDirectory": "frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/((?!api/.*).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
