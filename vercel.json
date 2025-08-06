@@ -1,17 +1,6 @@
 {
-  "version": 2,
-  "name": "kiff-ai-frontend",
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/dist"
-      }
-    }
-  ],
   "buildCommand": "cd frontend && npm run build",
-  "devCommand": "cd frontend && npm run dev", 
+  "devCommand": "cd frontend && npm run dev",
   "installCommand": "cd frontend && npm install",
   "outputDirectory": "frontend/dist",
   "framework": "vite",
