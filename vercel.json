@@ -10,15 +10,6 @@
       }
     }
   ],
-  "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/frontend/dist/index.html"
-    }
-  ],
   "buildCommand": "cd frontend && npm run build",
   "devCommand": "cd frontend && npm run dev", 
   "installCommand": "cd frontend && npm install",
