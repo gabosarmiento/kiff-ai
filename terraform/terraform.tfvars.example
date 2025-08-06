@@ -1,0 +1,16 @@
+# Terraform Variables Configuration for Kiff AI
+# Copy this file to terraform.tfvars and fill in your actual values
+
+# AWS Configuration
+aws_region = "eu-west-3"  # Paris region - perfect for your location!
+environment = "production"
+
+# Database Configuration
+db_username = "kiff_admin"
+
+# Multi-tenant Configuration
+default_tenant_id = "4485db48-71b7-47b0-8128-c6dca5be352d"
+
+# API Keys (REQUIRED - Add your actual keys)
+openai_api_key = "your-openai-api-key-here"
+langtrace_api_key = "your-langtrace-api-key-here"  # Optional
