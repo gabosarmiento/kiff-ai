@@ -28,18 +28,5 @@
   ],
   "env": {
     "PYTHONPATH": "backend"
-  },
-  "excludeFiles": [
-    "backend/generated_apps/**",
-    "backend/*.log",
-    "backend/*.sqlite",
-    "backend/*.db",
-    "backend/venv/**",
-    "backend/__pycache__/**",
-    "backend/*.pyc",
-    "backend/.pytest_cache/**",
-    "backend/tmp/**",
-    "frontend/node_modules/**",
-    ".git/**"
-  ]
+  }
 }
