@@ -771,19 +771,7 @@ export function GenerateV0Page() {
             </div>
           </div>
           
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowKnowledgePanel(!showKnowledgePanel)}
-              className={`p-1.5 border rounded-lg transition-colors ${
-                showKnowledgePanel 
-                  ? 'bg-emerald-500/10 border-emerald-400/30 text-emerald-400' 
-                  : 'bg-slate-500/10 hover:bg-slate-500/20 border-slate-400/30 text-slate-400'
-              }`}
-              title="Toggle Knowledge Sources"
-            >
-              <Database className="w-4 h-4" />
-            </button>
-          </div>
+
         </div>
 
         {/* Messages */}
@@ -839,7 +827,6 @@ export function GenerateV0Page() {
           {currentIdea && (
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/30 rounded-lg p-3 mb-2">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">💡</span>
                 <span className="text-xs font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wide">
                   AI-powered suggestions
                 </span>
@@ -964,8 +951,8 @@ export function GenerateV0Page() {
 
 
       {/* Right Panel - Files & Preview */}
-      <div className={`${currentApp ? 'w-1/2' : showKnowledgePanel ? 'w-1/3' : 'flex-1'} flex flex-col relative`}>
-        {currentApp ? (
+      {currentApp && (
+        <div className="w-1/2 flex flex-col relative">
           <>
             {/* App Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-700/50">
@@ -1073,22 +1060,8 @@ export function GenerateV0Page() {
               )}
             </div>
           </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center p-8 max-w-md">
-              <div className="w-16 h-16 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl flex items-center justify-center border border-purple-400/30 mx-auto mb-4">
-                <Zap className="w-8 h-8 text-purple-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-200 mb-2">Generate V0 Ready</h3>
-              <p className="text-gray-600 dark:text-slate-400 mb-6">
-                Start building with real indexed API knowledge. Your apps will use actual documentation data.
-              </p>
-              
-
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Knowledge Panel - Canvas Attached (like PARAMETERS) */}
       {showKnowledgePanel && (
@@ -1096,9 +1069,6 @@ export function GenerateV0Page() {
           {/* Knowledge Header with Toggle */}
           <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-slate-700/50 bg-gray-50 dark:bg-slate-800/30">
             <div className="flex items-center space-x-2">
-              <div className="w-5 h-5 bg-gradient-to-r from-emerald-500/20 to-green-500/20 rounded-md flex items-center justify-center border border-emerald-400/30">
-                <Database className="w-3 h-3 text-emerald-400" />
-              </div>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-slate-200 uppercase tracking-wide">Knowledge Sources</h3>
             </div>
             <button
