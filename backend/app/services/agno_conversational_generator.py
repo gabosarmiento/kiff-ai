@@ -29,12 +29,12 @@ class AGNOConversationalGenerator:
             # Initial greeting
             yield {
                 "type": "conversation", 
-                "content": {"message": f"👋 Hi! I'm going to help you with: **{user_request}**"}
+                "content": {"message": f"Starting work on your request: **{user_request}**"}
             }
             
             yield {
                 "type": "conversation", 
-                "content": {"message": "Let me start working on this step by step, and I'll explain everything I'm doing."}
+                "content": {"message": "I'll work through this step by step and explain my progress as I go."}
             }
             
             # Create AGNO agent with proper streaming
@@ -75,7 +75,7 @@ Explain what you're doing as you work through this task."""
                         current_phase = "thinking"
                         yield {
                             "type": "conversation",
-                            "content": {"message": "🚀 Starting to work on your request..."}
+                            "content": {"message": "Initializing agent and beginning work..."}
                         }
                     
                     elif event_type == "ToolCallStarted":
@@ -86,27 +86,27 @@ Explain what you're doing as you work through this task."""
                         if tool_name == "think":
                             yield {
                                 "type": "conversation",
-                                "content": {"message": "🤔 Let me think through this carefully..."}
+                                "content": {"message": "Analyzing requirements and planning approach..."}
                             }
                         elif tool_name == "save_file":
                             yield {
                                 "type": "conversation", 
-                                "content": {"message": "✍️ Writing a file for the project..."}
+                                "content": {"message": "Creating project file..."}
                             }
                         elif tool_name == "read_file":
                             yield {
                                 "type": "conversation",
-                                "content": {"message": "👀 Reading an existing file..."}
+                                "content": {"message": "Reading existing file..."}
                             }
                         elif tool_name == "list_files":
                             yield {
                                 "type": "conversation",
-                                "content": {"message": "📁 Checking what files we have..."}
+                                "content": {"message": "Checking current project structure..."}
                             }
                         else:
                             yield {
                                 "type": "conversation",
-                                "content": {"message": f"🔧 Using {tool_name}..."}
+                                "content": {"message": f"Using {tool_name} tool..."}
                             }
                     
                     elif event_type == "ToolCallCompleted":
@@ -121,24 +121,24 @@ Explain what you're doing as you work through this task."""
                             
                             yield {
                                 "type": "conversation",
-                                "content": {"message": f"💾 Created **{file_name}**"}
+                                "content": {"message": f"Created **{file_name}**"}
                             }
                         elif tool_name == "think":
                             yield {
                                 "type": "conversation",
-                                "content": {"message": "✨ Got a clear plan - let me implement it!"}
+                                "content": {"message": "Planning complete - proceeding with implementation"}
                             }
                         else:
                             yield {
                                 "type": "conversation",
-                                "content": {"message": f"✅ Finished with {tool_name}"}
+                                "content": {"message": f"Completed {tool_name}"}
                             }
                     
                     elif event_type == "ReasoningStarted":
                         current_phase = "reasoning"
                         yield {
                             "type": "conversation",
-                            "content": {"message": "💭 Analyzing the best approach..."}
+                            "content": {"message": "Analyzing requirements and determining optimal approach..."}
                         }
                     
                     elif event_type == "ReasoningStep":
@@ -150,14 +150,14 @@ Explain what you're doing as you work through this task."""
                                 preview = reasoning[:100] + "..." if len(reasoning) > 100 else reasoning
                                 yield {
                                     "type": "conversation",
-                                    "content": {"message": f"💡 {preview}"}
+                                    "content": {"message": f"Insight: {preview}"}
                                 }
                     
                     elif event_type == "ReasoningCompleted":
                         current_phase = "implementing"
                         yield {
                             "type": "conversation",
-                            "content": {"message": "✨ I've got a clear plan now. Let me start implementing..."}
+                            "content": {"message": "Analysis complete. Beginning implementation..."}
                         }
                     
                     elif event_type == "RunResponseContent":
@@ -170,7 +170,7 @@ Explain what you're doing as you work through this task."""
                             if len(chunk) > 30 and any(char in chunk for char in ['.', '!', '?', ':']):
                                 yield {
                                     "type": "conversation",
-                                    "content": {"message": f"📝 {chunk.strip()}"}
+                                    "content": {"message": f"Progress: {chunk.strip()}"}
                                 }
                     
                     elif event_type == "RunCompleted":
@@ -182,24 +182,24 @@ Explain what you're doing as you work through this task."""
                             more_files = f" and {len(files_created) - 3} more" if len(files_created) > 3 else ""
                             yield {
                                 "type": "conversation",
-                                "content": {"message": f"🎉 **Task completed!** Created: {file_list}{more_files}"}
+                                "content": {"message": f"**Task completed.** Created: {file_list}{more_files}"}
                             }
                         else:
                             yield {
                                 "type": "conversation", 
-                                "content": {"message": "🎉 **Task completed successfully!**"}
+                                "content": {"message": "**Task completed successfully.**"}
                             }
                         
                         yield {
                             "type": "conversation",
-                            "content": {"message": "🚀 Everything is ready to use!"}
+                            "content": {"message": "Application is ready for use."}
                         }
                         
                         # Final completion event
                         yield {
                             "type": "completed",
                             "content": {
-                                "message": "✅ Task completed successfully!",
+                                "message": "Task completed successfully.",
                                 "files_created": files_created,
                                 "output_dir": output_dir,
                                 "response": current_content
@@ -219,14 +219,14 @@ Explain what you're doing as you work through this task."""
                         }
         
         except Exception as e:
-            logger.error(f"❌ Conversational generation failed: {e}")
+            logger.error(f"Conversational generation failed: {e}")
             yield {
                 "type": "conversation", 
-                "content": {"message": f"😔 Sorry, I encountered an error: {str(e)}"}
+                "content": {"message": f"Error encountered: {str(e)}"}
             }
             yield {
                 "type": "error",
-                "content": {"message": f"❌ Generation failed: {str(e)}", "error": str(e)}
+                "content": {"message": f"Generation failed: {str(e)}", "error": str(e)}
             }
 
 # Global instance

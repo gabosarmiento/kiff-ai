@@ -55,7 +55,7 @@ export function GenerateV0Page() {
     {
       id: '1',
       role: 'assistant',
-      content: "🚀 **Welcome to Generate V0!** I'm your AI developer powered by AGNO with **real indexed API knowledge**. I can create applications using actual documentation from your selected APIs. What would you like to build today?",
+      content: "**Write. Check. Launch.** \n\nReady to create apps with knowledge-rich agents? I leverage real API documentation and examples to build production-ready applications. From concept to deployment - let's kiff something incredible together.\n\n*What would you like to build?*",
       timestamp: new Date()
     }
   ])
@@ -346,8 +346,8 @@ export function GenerateV0Page() {
       setKnowledgeItems(agnoKnowledgeSources)
       setSelectedKnowledge(agnoKnowledgeSources[0])
       
-      console.log(`🔥 Generate V0 loaded ${agnoKnowledgeSources.length} REAL AGNO knowledge sources`)
-      toast.success(`🚀 Connected to ${agnoKnowledgeSources.length} AGNO official knowledge sources!`)
+      console.log(`🔥 Kiff Studio loaded ${agnoKnowledgeSources.length} knowledge-rich agent sources`)
+      toast.success(`Connected to ${agnoKnowledgeSources.length} knowledge sources for smarter kiffs!`)
       
     } catch (error) {
       console.error('Failed to load AGNO knowledge sources:', error)
@@ -468,13 +468,13 @@ export function GenerateV0Page() {
       }
 
     } catch (error) {
-      console.error('Error in Generate V0:', error)
-      toast.error('Generate V0 processing failed')
+      console.error('Error in Kiff Studio:', error)
+      toast.error('Kiff Studio processing failed')
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 2).toString(),
         role: 'assistant',
-        content: 'Sorry, Generate V0 encountered an error. Please ensure APIs are indexed in the API Gallery first.',
+        content: 'Sorry, Kiff Studio encountered an error. Please check your knowledge sources or try again with a different approach.',
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -857,7 +857,8 @@ export function GenerateV0Page() {
               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <Zap className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">AI Developer</h1>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-200">Kiff Studio</h1>
+              <span className="text-xs text-gray-500 dark:text-slate-400 ml-2">Write. Check. Launch.</span>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -938,134 +939,165 @@ export function GenerateV0Page() {
             </div>
           )}
           
-          {/* Discrete Idea Generator - Fixed position above input */}
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={generateAppIdea}
-                disabled={isGeneratingIdea}
-                className="text-xs bg-gray-100 dark:bg-slate-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-gray-600 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 px-2 py-1 rounded-md border border-gray-200 dark:border-slate-600 hover:border-purple-300 dark:hover:border-purple-600 flex items-center space-x-1"
-              >
-                {isGeneratingIdea ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Generating...</span>
-                  </>
-                ) : (
-                  <>
-                    {currentIdea ? (
-                      <Shuffle className="w-3 h-3" />
-                    ) : (
-                      <RotateCcw className="w-3 h-3" />
-                    )}
-                    <span>Get App Idea</span>
-                  </>
-                )}
-              </button>
-              
-              {/* Use Idea button - appears next to Get App Idea when idea is available */}
-              {currentIdea && (
+          {/* Enhanced Control Panel */}
+          <div className="mb-4 p-3 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-900/10 dark:to-purple-900/10 border border-blue-200/30 dark:border-blue-700/30 rounded-lg">
+            {/* Top Row: Idea Generator */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
                 <button
-                  onClick={useGeneratedIdea}
-                  className="text-xs bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded-md border border-purple-400 transition-all duration-200 flex items-center space-x-1"
+                  onClick={generateAppIdea}
+                  disabled={isGeneratingIdea}
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:from-gray-400 disabled:to-gray-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 px-3 py-2 rounded-lg text-xs font-medium flex items-center space-x-2 shadow-sm"
                 >
-                  <span>Use Idea</span>
+                  {isGeneratingIdea ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      {currentIdea ? (
+                        <Shuffle className="w-3 h-3" />
+                      ) : (
+                        <RotateCcw className="w-3 h-3" />
+                      )}
+                      <span>Get Inspiration</span>
+                    </>
+                  )}
                 </button>
-              )}
-              
-              <span className="text-xs text-gray-400 dark:text-slate-500">•</span>
-              <span className="text-xs text-gray-400 dark:text-slate-500">AI-powered suggestions</span>
-            </div>
-          </div>
-          
-          {/* Model Selector */}
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-gray-600 dark:text-slate-400">
-                AI Model
-              </label>
-              <div className="text-xs text-gray-400 dark:text-slate-500">
-                {availableModels.find(m => m.id === selectedModel)?.provider}
+                
+                {/* Use Idea button */}
+                {currentIdea && (
+                  <button
+                    onClick={useGeneratedIdea}
+                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 flex items-center space-x-2 shadow-sm"
+                  >
+                    <span>Use This Idea</span>
+                  </button>
+                )}
+                
+                <span className="text-xs text-gray-400 dark:text-slate-500">AI-powered suggestions</span>
               </div>
             </div>
-            <div className="relative">
-              <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full p-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-600/50 rounded-lg text-gray-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-transparent appearance-none cursor-pointer"
-                disabled={isLoading}
-              >
-                {availableModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} - {model.description}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500 pointer-events-none" />
+            
+            {/* Bottom Row: Model Selection */}
+            <div className="flex items-center space-x-4">
+              <div className="flex-1">
+                <label className="text-xs font-medium text-gray-600 dark:text-slate-400 block mb-1">
+                  Knowledge Agent
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full p-2 text-sm bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg text-gray-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-transparent appearance-none cursor-pointer shadow-sm"
+                    disabled={isLoading}
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} - {model.description}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500 pointer-events-none" />
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <div className="text-xs text-gray-500 dark:text-slate-400 mb-1">Provider</div>
+                <div className="text-xs font-medium text-purple-600 dark:text-purple-400">
+                  {availableModels.find(m => m.id === selectedModel)?.provider}
+                </div>
+              </div>
             </div>
+            
             {selectedModel !== 'kimi-k2' && (
-              <div className="mt-1 text-xs text-orange-500 dark:text-orange-400">
+              <div className="mt-2 text-xs text-orange-500 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-2 rounded border border-orange-200 dark:border-orange-800/50">
                 ⚡ Using hosted model: {availableModels.find(m => m.id === selectedModel)?.name}
               </div>
             )}
           </div>
           
-          <div className="flex space-x-3">
-            <div className="flex-1 relative">
-              <textarea
-                ref={(textarea: HTMLTextAreaElement | null) => {
-                  // Use Object.assign to avoid read-only error
-                  Object.assign(inputRef, { current: textarea })
-                  if (textarea) {
-                    textarea.style.height = 'auto'
-                    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'
-                  }
-                }}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  const target = e.target as HTMLTextAreaElement
-                  target.style.height = 'auto'
-                  const newHeight = Math.min(target.scrollHeight, 240)
-                  target.style.height = newHeight + 'px'
-                  
-                  if (target.scrollHeight > 240) {
-                    target.style.overflowY = 'auto'
-                  } else {
-                    target.style.overflowY = 'hidden'
-                  }
-                }}
-                onKeyPress={handleKeyPress}
-                placeholder={isLoading ? "Generate V0 is thinking... Please wait" : "Describe your app using the real indexed APIs..."}
-                className={`w-full p-3 pr-12 rounded-lg resize-none transition-all duration-200 ${
-                  isLoading 
-                    ? 'bg-gray-100 dark:bg-slate-700/30 border border-gray-200 dark:border-slate-600/30 text-gray-400 dark:text-slate-500 placeholder-gray-400 dark:placeholder-slate-500 cursor-not-allowed'
-                    : 'bg-gray-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-600/50 text-gray-900 dark:text-slate-200 placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-transparent'
-                }`}
-                rows={1}
-                style={{ minHeight: '48px', height: 'auto' }}
-                disabled={isLoading}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim() || isLoading}
-                title={isLoading ? "Generate V0 is processing..." : "Send message"}
-                className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-all duration-200 ${
-                  isLoading
-                    ? 'bg-slate-700/30 border border-slate-600/30 cursor-not-allowed'
-                    : !input.trim()
-                    ? 'bg-slate-700/30 border border-slate-600/30 cursor-not-allowed'
-                    : 'bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 hover:border-purple-400/50'
-                }`}
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                ) : (
-                  <Send className={`w-4 h-4 ${
-                    !input.trim() || isLoading ? 'text-slate-400' : 'text-purple-400'
-                  }`} />
-                )}
-              </button>
+          {/* Enhanced Input Area */}
+          <div className="bg-white dark:bg-slate-900 border-2 border-gray-200 dark:border-slate-700 rounded-xl shadow-lg transition-all duration-200 focus-within:border-purple-400 focus-within:shadow-purple-100/50 dark:focus-within:shadow-purple-900/20">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span className="text-xs font-medium text-gray-600 dark:text-slate-400">Ready to Build</span>
+                </div>
+                <div className="text-xs text-gray-400 dark:text-slate-500">
+                  Knowledge-rich agents • Production ready
+                </div>
+              </div>
+              
+              <div className="relative">
+                <textarea
+                  ref={(textarea: HTMLTextAreaElement | null) => {
+                    Object.assign(inputRef, { current: textarea })
+                    if (textarea) {
+                      textarea.style.height = 'auto'
+                      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'
+                    }
+                  }}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value)
+                    const target = e.target as HTMLTextAreaElement
+                    target.style.height = 'auto'
+                    const newHeight = Math.min(target.scrollHeight, 240)
+                    target.style.height = newHeight + 'px'
+                    
+                    if (target.scrollHeight > 240) {
+                      target.style.overflowY = 'auto'
+                    } else {
+                      target.style.overflowY = 'hidden'
+                    }
+                  }}
+                  onKeyPress={handleKeyPress}
+                  placeholder={isLoading ? "Kiff Studio is building your app... Please wait" : "Describe your vision and let's kiff it into reality..."}
+                  className={`w-full p-4 pr-16 rounded-lg resize-none text-base transition-all duration-200 border-0 focus:outline-none ${
+                    isLoading 
+                      ? 'bg-gray-50 dark:bg-slate-800/30 text-gray-400 dark:text-slate-500 placeholder-gray-400 dark:placeholder-slate-500 cursor-not-allowed'
+                      : 'bg-gray-50 dark:bg-slate-800/50 text-gray-900 dark:text-slate-200 placeholder-gray-500 dark:placeholder-slate-400'
+                  }`}
+                  rows={1}
+                  style={{ minHeight: '56px', height: 'auto' }}
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim() || isLoading}
+                  title={isLoading ? "Kiff Studio is processing..." : "Let's kiff it!"}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-3 rounded-lg transition-all duration-200 ${
+                    isLoading
+                      ? 'bg-gray-200 dark:bg-slate-700 cursor-not-allowed'
+                      : !input.trim()
+                      ? 'bg-gray-200 dark:bg-slate-700 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 shadow-lg hover:shadow-purple-200 dark:hover:shadow-purple-900/50'
+                  }`}
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  ) : (
+                    <Send className={`w-4 h-4 ${
+                      !input.trim() || isLoading ? 'text-gray-400' : 'text-white'
+                    }`} />
+                  )}
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between mt-3 text-xs text-gray-500 dark:text-slate-400">
+                <div className="flex items-center space-x-2">
+                  <span>💡</span>
+                  <span>Try: "Build a task manager with real-time collaboration"</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span>Press</span>
+                  <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-slate-700 rounded text-xs">Enter</kbd>
+                  <span>to kiff</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -23,7 +23,7 @@ from agno.vectordb.lancedb import LanceDb, SearchType
 from app.config.llm_providers import llm_agentic
 from app.knowledge.embedder_cache import get_embedder
 from app.core.token_tracker import get_token_tracker, TokenTracker
-from app.services.conversation_document_service import ConversationDocumentService
+from app.services.conversation_document_service import conversation_document_service
 from app.models.conversation_models import Conversation, ConversationMessage, MessageRole, ConversationStatus
 from app.core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -397,8 +397,8 @@ Generate a complete application with Docker configuration for easy deployment.""
         
         try:
             # Initial greeting
-            yield {"type": "conversation", "content": {"message": f"👋 Hi! I'm starting to work on your request: **{user_request}**"}}
-            yield {"type": "conversation", "content": {"message": "Let me set everything up first and then I'll walk you through each step as I build your application."}}
+            yield {"type": "conversation", "content": {"message": f"Starting work on your request: **{user_request}**"}}
+            yield {"type": "conversation", "content": {"message": "Setting up environment and preparing to build your application."}}
             
             # Check if knowledge sources have changed and force reload if needed
             sources_changed = (
@@ -412,20 +412,20 @@ Generate a complete application with Docker configuration for easy deployment.""
                 conversation_state["current_phase"] = "loading_knowledge"
                 
                 if sources_changed:
-                    yield {"type": "conversation", "content": {"message": "🔄 I notice you've changed the knowledge sources, so I need to reload my knowledge base with the new information."}}
+                    yield {"type": "conversation", "content": {"message": "Knowledge sources changed - reloading knowledge base with new information."}}
                     logger.info("🔄 Knowledge sources changed, reloading knowledge base...")
                     self.knowledge_base = None  # Force reload
                 else:
-                    yield {"type": "conversation", "content": {"message": "📚 Let me load up my knowledge base with all the documentation and examples I'll need."}}
+                    yield {"type": "conversation", "content": {"message": "Loading knowledge base with documentation and examples."}}
                 
                 # Check for session documents
                 if session_id:
-                    yield {"type": "conversation", "content": {"message": f"📄 I'm also checking if you've uploaded any documents for this session that I should reference..."}}
+                    yield {"type": "conversation", "content": {"message": "Checking for session-specific documents to reference..."}}
                 
                 await self._initialize_knowledge(knowledge_sources, session_id, tenant_id, user_id)
                 
                 knowledge_count = len(knowledge_sources) if knowledge_sources else "default"
-                yield {"type": "conversation", "content": {"message": f"✅ Perfect! My knowledge base is loaded with {knowledge_count} sources. I'm ready to start building."}}
+                yield {"type": "conversation", "content": {"message": f"Knowledge base loaded with {knowledge_count} sources. Ready to begin."}}
             
             # Generate output directory
             conversation_state["current_phase"] = "setup"
@@ -436,14 +436,14 @@ Generate a complete application with Docker configuration for easy deployment.""
             import os
             os.makedirs(output_dir, exist_ok=True)
             
-            yield {"type": "conversation", "content": {"message": f"📁 I've created a workspace directory for your project: `{output_dir.split('/')[-1]}`"}}
+            yield {"type": "conversation", "content": {"message": f"Created workspace directory: `{output_dir.split('/')[-1]}`"}}
             
             # Set up token tracking
             token_tracker = None
             if session_id:
                 token_tracker = get_token_tracker(tenant_id, user_id, session_id)
                 logger.info(f"🔢 Token tracking enabled for session {session_id}")
-                yield {"type": "conversation", "content": {"message": "🔢 Token tracking is enabled, so I'll keep track of usage for you."}}
+                yield {"type": "conversation", "content": {"message": "Token tracking enabled for usage monitoring."}}
             
             # Get the selected model
             from app.config.llm_providers import get_tradeforge_models
@@ -451,7 +451,7 @@ Generate a complete application with Docker configuration for easy deployment.""
             selected_llm = available_models.get(model, llm_agentic)
             
             logger.info(f"🤖 Using model: {model} for AGNO agent streaming generation")
-            yield {"type": "conversation", "content": {"message": f"🤖 I'll be using the **{model}** model for this generation. Let me initialize my AI agent..."}}
+            yield {"type": "conversation", "content": {"message": f"Using **{model}** model for generation. Initializing AI agent..."}}
             
             # Create AGNO agent with streaming capabilities
             agent = Agent(
@@ -460,7 +460,6 @@ Generate a complete application with Docker configuration for easy deployment.""
                 search_knowledge=True,
                 tools=[FileTools(), self._create_todo_tracker(), ThinkingTools(add_instructions=True)],
                 show_tool_calls=True,
-                show_full_reasoning=True,
                 stream_intermediate_steps=True,
                 instructions=[
                     "You are a production-grade AI engineer that uses knowledge and tools to build the requested prompt.",
@@ -477,7 +476,7 @@ Generate a complete application with Docker configuration for easy deployment.""
             )
             
             conversation_state["current_phase"] = "planning"
-            yield {"type": "conversation", "content": {"message": "🤖 My AI agent is ready! Now I'm going to start analyzing your request and planning the application architecture."}}
+            yield {"type": "conversation", "content": {"message": "AI agent ready. Beginning analysis and architecture planning."}}
             
             # Create conversation for this kiff generation
             conversation_id = await self._create_conversation(
@@ -495,7 +494,7 @@ Generate a complete application with Docker configuration for easy deployment.""
                     role=MessageRole.USER,
                     content=user_request
                 )
-                yield {"type": "conversation", "content": {"message": "💬 Created conversation history for this kiff generation."}}
+                yield {"type": "conversation", "content": {"message": "Created conversation history for this generation."}}
             
             # Enhanced prompt
             prompt = f"""Create a complete, deployable application for: {user_request}
@@ -516,6 +515,9 @@ Generate a complete application with Docker configuration for easy deployment.""
             response_content = ""
             current_tool = None
             reasoning_count = 0
+            running_token_count = 0
+            operations_count = 0
+            last_token_update = 0
             
             for event in agent.run(prompt, stream=True, stream_intermediate_steps=True):
                 if hasattr(event, 'event'):
@@ -528,18 +530,42 @@ Generate a complete application with Docker configuration for easy deployment.""
                         
                         # Conversational tool messages
                         if tool_name == "search_knowledge":
-                            yield {"type": "conversation", "content": {"message": "🔍 I'm searching through my knowledge base for relevant examples and patterns..."}}
+                            yield {"type": "conversation", "content": {"message": "Searching knowledge base for relevant examples and patterns..."}}
                         elif tool_name == "write_file":
-                            yield {"type": "conversation", "content": {"message": "✍️ I'm writing a new file for the project..."}}
+                            yield {"type": "conversation", "content": {"message": "Creating new project file..."}}
                         elif tool_name == "read_file":
-                            yield {"type": "conversation", "content": {"message": "👀 Let me read an existing file to understand the current structure..."}}
+                            yield {"type": "conversation", "content": {"message": "Reading existing file to understand current structure..."}}
                         elif "todo" in tool_name.lower():
-                            yield {"type": "conversation", "content": {"message": "📋 Updating my project plan and progress tracking..."}}
+                            yield {"type": "conversation", "content": {"message": "Updating project plan and progress tracking..."}}
                         else:
-                            yield {"type": "conversation", "content": {"message": f"🔧 Using {tool_name} to help with the development..."}}
+                            yield {"type": "conversation", "content": {"message": f"Using {tool_name} for development..."}}
                         
                     elif event_type == "ToolCallCompleted":
                         tool_name = getattr(event.tool, 'tool_name', 'Unknown Tool')
+                        
+                        # Track token usage using AGNO's native SessionMetrics
+                        tool_tokens = 0
+                        if token_tracker:
+                            # Method 1: Check agent's session_metrics (primary source)
+                            if hasattr(agent, 'session_metrics') and agent.session_metrics:
+                                session_metrics = agent.session_metrics
+                                # SessionMetrics has: total_tokens, input_tokens, output_tokens, etc.
+                                current_total = session_metrics.total_tokens
+                                if current_total > running_token_count:
+                                    tool_tokens = current_total - running_token_count
+                                    running_token_count = current_total
+                            
+                            # Method 2: Check run_response.metrics if session_metrics unavailable
+                            elif hasattr(agent, 'run_response') and agent.run_response:
+                                if hasattr(agent.run_response, 'metrics') and agent.run_response.metrics:
+                                    metrics = agent.run_response.metrics
+                                    current_total = metrics.total_tokens if hasattr(metrics, 'total_tokens') else (
+                                        metrics.input_tokens + metrics.output_tokens
+                                    )
+                                    if current_total > running_token_count:
+                                        tool_tokens = current_total - running_token_count
+                                        running_token_count = current_total
+                        
                         if hasattr(event, 'result') and event.result:
                             result_str = str(event.result)
                             
@@ -549,8 +575,9 @@ Generate a complete application with Docker configuration for easy deployment.""
                                 file_name = file_path.split('/')[-1] if '/' in file_path else file_path
                                 conversation_state["files_created"].append(file_name)
                                 
-                                # Send conversational message
-                                yield {"type": "conversation", "content": {"message": f"💾 Created **{file_name}** - this handles {self._explain_file_purpose(file_name)}"}}
+                                # Send conversational message with token info
+                                token_info = f" ({tool_tokens} tokens)" if tool_tokens > 0 else ""
+                                yield {"type": "conversation", "content": {"message": f"Created **{file_name}** - handles {self._explain_file_purpose(file_name)}{token_info}"}}
                                 
                                 # Send file_created event with file data for frontend
                                 try:
@@ -573,16 +600,41 @@ Generate a complete application with Docker configuration for easy deployment.""
                             
                             # Knowledge search feedback  
                             elif tool_name == "search_knowledge":
-                                yield {"type": "conversation", "content": {"message": "✅ Found some great examples and documentation that will help guide the implementation."}}
+                                token_info = f" ({tool_tokens} tokens)" if tool_tokens > 0 else ""
+                                yield {"type": "conversation", "content": {"message": f"Found relevant examples and documentation to guide implementation.{token_info}"}}
                             
                             # Todo tracking feedback
                             elif "todo" in tool_name.lower():
                                 if "started" in result_str.lower():
-                                    yield {"type": "conversation", "content": {"message": "📋 I've outlined my plan and I'm tracking progress as I go."}}
+                                    yield {"type": "conversation", "content": {"message": "Plan outlined and progress tracking initiated."}}
                                 elif "completed" in result_str.lower():
-                                    yield {"type": "conversation", "content": {"message": "✅ Marked another task as complete in my progress tracker."}}
+                                    yield {"type": "conversation", "content": {"message": "Task marked complete in progress tracker."}}
                             else:
-                                yield {"type": "conversation", "content": {"message": f"✅ Finished using {tool_name} successfully."}}
+                                token_info = f" ({tool_tokens} tokens)" if tool_tokens > 0 else ""
+                                yield {"type": "conversation", "content": {"message": f"Completed {tool_name} successfully.{token_info}"}}
+                        
+                        # Show running total periodically (every 3 operations or if significant change)
+                        operations_count += 1
+                        if token_tracker and running_token_count > 0:
+                            token_increase = running_token_count - last_token_update
+                            
+                            # Show update if we've had 3 operations OR significant token usage (>100 tokens since last update)
+                            if operations_count % 3 == 0 or token_increase > 100:
+                                yield {"type": "conversation", "content": {"message": f"Running total: {running_token_count:,} tokens consumed"}}
+                                last_token_update = running_token_count
+                        
+                        # Debug: Log what AGNO metrics are available (remove in production)
+                        if operations_count == 1:  # Only log once to avoid spam
+                            try:
+                                logger.info(f"🔍 AGNO Agent Debug - Available attributes:")
+                                logger.info(f"   hasattr(agent, 'run_response'): {hasattr(agent, 'run_response')}")
+                                logger.info(f"   hasattr(agent, 'session_metrics'): {hasattr(agent, 'session_metrics')}")
+                                if hasattr(agent, 'run_response') and agent.run_response:
+                                    logger.info(f"   agent.run_response attributes: {dir(agent.run_response)}")
+                                    if hasattr(agent.run_response, 'metrics'):
+                                        logger.info(f"   agent.run_response.metrics: {agent.run_response.metrics}")
+                            except Exception as e:
+                                logger.info(f"   Debug failed: {e}")
                         
                     elif event_type == "ReasoningStarted":
                         conversation_state["current_phase"] = "thinking"
@@ -590,9 +642,9 @@ Generate a complete application with Docker configuration for easy deployment.""
                         conversation_state["reasoning_steps"] = reasoning_count
                         
                         if reasoning_count == 1:
-                            yield {"type": "conversation", "content": {"message": "🤔 Let me think through the architecture and approach for this application..."}}
+                            yield {"type": "conversation", "content": {"message": "Analyzing architecture and approach for this application..."}}
                         elif reasoning_count <= 3:
-                            yield {"type": "conversation", "content": {"message": "💭 Analyzing the requirements and planning the next steps..."}}
+                            yield {"type": "conversation", "content": {"message": "Analyzing requirements and planning next steps..."}}
                         
                     elif event_type == "ReasoningStep":
                         if hasattr(event, 'content') and event.content:
@@ -600,10 +652,26 @@ Generate a complete application with Docker configuration for easy deployment.""
                             # Only show particularly interesting reasoning steps to avoid spam
                             if any(keyword in reasoning_text.lower() for keyword in ['create', 'implement', 'structure', 'design', 'approach']):
                                 shortened = reasoning_text[:150] + "..." if len(reasoning_text) > 150 else reasoning_text
-                                yield {"type": "conversation", "content": {"message": f"💡 {shortened}"}}
+                                yield {"type": "conversation", "content": {"message": f"Insight: {shortened}"}}
                         
                     elif event_type == "ReasoningCompleted":
-                        yield {"type": "conversation", "content": {"message": "✨ I've got a clear plan now. Let me start implementing..."}}
+                        # Get reasoning token usage using AGNO's SessionMetrics
+                        reasoning_tokens = 0
+                        if token_tracker:
+                            # Check agent's session_metrics for updated token usage
+                            if hasattr(agent, 'session_metrics') and agent.session_metrics:
+                                session_metrics = agent.session_metrics
+                                current_total = session_metrics.total_tokens
+                                if current_total > running_token_count:
+                                    reasoning_tokens = current_total - running_token_count
+                                    running_token_count = current_total
+                                    
+                                    # Also capture reasoning-specific tokens if available
+                                    if hasattr(session_metrics, 'reasoning_tokens') and session_metrics.reasoning_tokens > 0:
+                                        yield {"type": "conversation", "content": {"message": f"Used {session_metrics.reasoning_tokens} reasoning tokens for analysis"}}
+                        
+                        token_info = f" ({reasoning_tokens} tokens)" if reasoning_tokens > 0 else ""
+                        yield {"type": "conversation", "content": {"message": f"Analysis complete. Beginning implementation...{token_info}"}}
                         conversation_state["current_phase"] = "implementation"
                         
                     elif event_type == "RunResponseContent":
@@ -614,13 +682,13 @@ Generate a complete application with Docker configuration for easy deployment.""
                             # Only show substantial content chunks to avoid noise
                             if len(content_chunk) > 50:
                                 preview = content_chunk[:100] + "..." if len(content_chunk) > 100 else content_chunk
-                                yield {"type": "conversation", "content": {"message": f"📝 {preview}"}}
+                                yield {"type": "conversation", "content": {"message": f"Progress: {preview}"}}
                             
                     elif event_type == "MemoryUpdateStarted":
-                        yield {"type": "conversation", "content": {"message": "💾 Saving my progress to memory so I can reference it later..."}}
+                        yield {"type": "conversation", "content": {"message": "Saving progress to memory for future reference..."}}
                         
                     elif event_type == "MemoryUpdateCompleted":
-                        yield {"type": "conversation", "content": {"message": "✅ Progress saved! I can now build on what I've learned."}}
+                        yield {"type": "conversation", "content": {"message": "Progress saved. Can now build on learned information."}}
                 
                 # Fallback for other event types
                 elif hasattr(event, 'content'):
@@ -633,16 +701,16 @@ Generate a complete application with Docker configuration for easy deployment.""
             conversation_state["current_phase"] = "completed"
             elapsed_time = datetime.now() - conversation_state["start_time"]
             
-            yield {"type": "conversation", "content": {"message": f"🎉 **Application completed!** I've created {len(conversation_state['files_created'])} files in {elapsed_time.seconds} seconds."}}
+            yield {"type": "conversation", "content": {"message": f"**Application completed.** Created {len(conversation_state['files_created'])} files in {elapsed_time.seconds} seconds."}}
             
             if conversation_state["files_created"]:
                 files_list = ", ".join(conversation_state['files_created'][:5])  # Show first 5 files
                 more_count = len(conversation_state['files_created']) - 5
                 if more_count > 0:
                     files_list += f" and {more_count} more"
-                yield {"type": "conversation", "content": {"message": f"📦 **Files created**: {files_list}"}}
+                yield {"type": "conversation", "content": {"message": f"**Files created**: {files_list}"}}
             
-            yield {"type": "conversation", "content": {"message": "🚀 Your application is ready to deploy! Check the README for setup instructions."}}
+            yield {"type": "conversation", "content": {"message": "Application ready for deployment. Check README for setup instructions."}}
             
             # Save assistant's final response to conversation
             if conversation_id:
@@ -669,13 +737,34 @@ Generate a complete application with Docker configuration for easy deployment.""
                     app_info=app_info
                 )
                 
-                yield {"type": "conversation", "content": {"message": "💬 Saved this kiff generation to your conversation history."}}
+                yield {"type": "conversation", "content": {"message": "Saved generation to conversation history."}}
             
-            # Track token usage
+            # Track token usage - get final accurate count from agent with detailed breakdown
             if token_tracker:
                 token_tracker.track_agno_run(agent)
                 usage = token_tracker.get_current_usage()
-                yield {"type": "conversation", "content": {"message": f"📊 **Resource usage**: {usage.format_display()} tokens consumed for this generation."}}
+                
+                # Get detailed breakdown from AGNO session_metrics if available
+                detailed_breakdown = ""
+                if hasattr(agent, 'session_metrics') and agent.session_metrics:
+                    session_metrics = agent.session_metrics
+                    breakdown_parts = []
+                    
+                    if hasattr(session_metrics, 'input_tokens') and session_metrics.input_tokens > 0:
+                        breakdown_parts.append(f"Input: {session_metrics.input_tokens:,}")
+                    if hasattr(session_metrics, 'output_tokens') and session_metrics.output_tokens > 0:
+                        breakdown_parts.append(f"Output: {session_metrics.output_tokens:,}")
+                    if hasattr(session_metrics, 'reasoning_tokens') and session_metrics.reasoning_tokens > 0:
+                        breakdown_parts.append(f"Reasoning: {session_metrics.reasoning_tokens:,}")
+                    if hasattr(session_metrics, 'cached_tokens') and session_metrics.cached_tokens > 0:
+                        breakdown_parts.append(f"Cached: {session_metrics.cached_tokens:,}")
+                    
+                    if breakdown_parts:
+                        detailed_breakdown = f" ({', '.join(breakdown_parts)})"
+                
+                # Show final usage with breakdown
+                final_message = f"**Final resource usage**: {usage.format_display()} tokens consumed{detailed_breakdown}"
+                yield {"type": "conversation", "content": {"message": final_message}}
                 
                 # Persist to database
                 actual_model_id = getattr(llm_agentic, 'id', 'unknown')
@@ -713,10 +802,10 @@ Generate a complete application with Docker configuration for easy deployment.""
                             model_name=actual_model_id,
                             provider='groq'
                         )
-                        yield {"type": "conversation", "content": {"message": "💰 Usage has been recorded to your billing account."}}
+                        yield {"type": "conversation", "content": {"message": "Usage recorded to billing account."}}
                 except Exception as e:
                     logger.error(f"❌ Failed to add tokens to billing cycle: {e}")
-                    yield {"type": "conversation", "content": {"message": "⚠️ Note: There was an issue recording billing information, but your application was created successfully."}}
+                    yield {"type": "conversation", "content": {"message": "Note: Issue recording billing information, but application created successfully."}}
             
             # Final completion message with all details
             yield {"type": "completed", "content": {
@@ -724,7 +813,7 @@ Generate a complete application with Docker configuration for easy deployment.""
                 "tenant_id": tenant_id,
                 "output_dir": output_dir,
                 "status": "completed",
-                "message": "✅ Your application has been generated successfully and is ready to use!",
+                "message": "Application generated successfully and ready to use.",
                 "response": response_content,
                 "stats": {
                     "files_created": len(conversation_state["files_created"]),
@@ -736,9 +825,9 @@ Generate a complete application with Docker configuration for easy deployment.""
             
         except Exception as e:
             logger.error(f"❌ Streaming generation failed: {e}")
-            yield {"type": "conversation", "content": {"message": f"😔 I'm sorry, but I encountered an error while working on your application: {str(e)}"}}
-            yield {"type": "conversation", "content": {"message": "🔄 You might want to try again, or if this keeps happening, please let the team know about this issue."}}
-            yield {"type": "error", "content": {"message": f"❌ Generation failed: {str(e)}", "error": str(e)}}
+            yield {"type": "conversation", "content": {"message": f"Error encountered while working on application: {str(e)}"}}
+            yield {"type": "conversation", "content": {"message": "You may try again, or contact support if this issue persists."}}
+            yield {"type": "error", "content": {"message": f"Generation failed: {str(e)}", "error": str(e)}}
     
     def _explain_file_purpose(self, filename: str) -> str:
         """Provide a human-readable explanation of what a file does based on its name/extension"""
