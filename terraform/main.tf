@@ -356,6 +356,9 @@ resource "aws_apprunner_service" "kiff_ai_backend" {
       }
       image_repository_type = "ECR"
     }
+    authentication_configuration {
+      access_role_arn = aws_iam_role.app_runner_role.arn
+    }
     auto_deployments_enabled = true
   }
 

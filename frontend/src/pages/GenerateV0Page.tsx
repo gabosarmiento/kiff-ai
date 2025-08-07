@@ -74,6 +74,31 @@ export function GenerateV0Page() {
   const [currentIdea, setCurrentIdea] = useState<{idea: string, description: string, suggested_apis: string[]} | null>(null)
   const [isGeneratingIdea, setIsGeneratingIdea] = useState(false)
   
+  // Model selection state
+  const [selectedModel, setSelectedModel] = useState<string>('kimi-k2')
+  const [availableModels] = useState([
+    {
+      id: 'kimi-k2',
+      name: 'Kimi K2',
+      description: 'Default fast model for general development',
+      provider: 'Kimi'
+    },
+    {
+      id: 'gpt-oss-120b',
+      name: 'GPT OSS 120B',
+      description: 'Large model for complex applications',
+      provider: 'OpenAI',
+      url: 'https://huggingface.co/openai/gpt-oss-120b'
+    },
+    {
+      id: 'gpt-oss-20b',
+      name: 'GPT OSS 20B',
+      description: 'Smaller model for faster responses',
+      provider: 'OpenAI',
+      url: 'https://huggingface.co/openai/gpt-oss-20b'
+    }
+  ])
+  
   // UI state
   const [layout, setLayout] = useState<'2-column' | '3-column'>('3-column')
   const [activeRightPanel, setActiveRightPanel] = useState<'preview' | 'files' | 'knowledge'>('knowledge')
@@ -360,7 +385,8 @@ export function GenerateV0Page() {
         body: JSON.stringify({
           user_request: currentInput,
           stream: true,
-          knowledge_sources: enabledKnowledgeSources.length > 0 ? enabledKnowledgeSources : undefined
+          knowledge_sources: enabledKnowledgeSources.length > 0 ? enabledKnowledgeSources : undefined,
+          model: selectedModel
         })
       })
 
@@ -885,6 +911,38 @@ export function GenerateV0Page() {
               <span className="text-xs text-gray-400 dark:text-slate-500">•</span>
               <span className="text-xs text-gray-400 dark:text-slate-500">AI-powered suggestions</span>
             </div>
+          </div>
+          
+          {/* Model Selector */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-600 dark:text-slate-400">
+                AI Model
+              </label>
+              <div className="text-xs text-gray-400 dark:text-slate-500">
+                {availableModels.find(m => m.id === selectedModel)?.provider}
+              </div>
+            </div>
+            <div className="relative">
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="w-full p-2 text-sm bg-gray-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-600/50 rounded-lg text-gray-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-transparent appearance-none cursor-pointer"
+                disabled={isLoading}
+              >
+                {availableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} - {model.description}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500 pointer-events-none" />
+            </div>
+            {selectedModel !== 'kimi-k2' && (
+              <div className="mt-1 text-xs text-orange-500 dark:text-orange-400">
+                ⚡ Using hosted model: {availableModels.find(m => m.id === selectedModel)?.name}
+              </div>
+            )}
           </div>
           
           <div className="flex space-x-3">

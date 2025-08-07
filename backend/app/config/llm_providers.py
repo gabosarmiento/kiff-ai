@@ -79,13 +79,28 @@ def initialize_tradeforge_providers():
         api_key=groq_api_key,
         temperature=0.5
     )
+    
+    # OpenAI GPT-OSS models for advanced reasoning and code generation
+    llm_gpt_oss_120b = Groq(
+        id="openai/gpt-oss-120b",
+        api_key=groq_api_key,
+        temperature=0.3,
+        max_tokens=16384
+    )
+    
+    llm_gpt_oss_20b = Groq(
+        id="openai/gpt-oss-20b",
+        api_key=groq_api_key,
+        temperature=0.3,
+        max_tokens=16384
+    )
 
     print("✅ TradeForge AI LLM providers initialized with AGNO best practices")
-    return llm_highest, llm_reasoning, llm_analysis, llm_planning, llm_agentic, llm_quick, llm_balanced
+    return llm_highest, llm_reasoning, llm_analysis, llm_planning, llm_agentic, llm_quick, llm_balanced, llm_gpt_oss_120b, llm_gpt_oss_20b
 
 
 # Initialize providers
-llm_highest, llm_reasoning, llm_analysis, llm_planning, llm_agentic, llm_quick, llm_balanced = initialize_tradeforge_providers()
+llm_highest, llm_reasoning, llm_analysis, llm_planning, llm_agentic, llm_quick, llm_balanced, llm_gpt_oss_120b, llm_gpt_oss_20b = initialize_tradeforge_providers()
 
 
 def get_tradeforge_models():
@@ -97,7 +112,10 @@ def get_tradeforge_models():
         "planning": llm_planning,
         "agentic": llm_agentic,
         "quick": llm_quick,
-        "balanced": llm_balanced
+        "balanced": llm_balanced,
+        "kimi-k2": llm_agentic,  # Alias for backward compatibility
+        "gpt-oss-120b": llm_gpt_oss_120b,
+        "gpt-oss-20b": llm_gpt_oss_20b
     }
 
 
@@ -208,5 +226,7 @@ __all__ = [
     "llm_planning",
     "llm_agentic",
     "llm_quick",
-    "llm_balanced"
+    "llm_balanced",
+    "llm_gpt_oss_120b",
+    "llm_gpt_oss_20b"
 ]

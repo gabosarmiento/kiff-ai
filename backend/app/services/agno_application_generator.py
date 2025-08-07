@@ -148,7 +148,7 @@ class AGNOApplicationGenerator:
             logger.error(f"❌ Knowledge base loading failed: {e}")
             self.knowledge_base = None
     
-    async def generate_application(self, tenant_id: str, user_request: str, knowledge_sources: list[str] = None, session_id: str = None, user_id: str = "1") -> Dict[str, Any]:
+    async def generate_application(self, tenant_id: str, user_request: str, knowledge_sources: list[str] = None, session_id: str = None, user_id: str = "1", model: str = "kimi-k2") -> Dict[str, Any]:
         """Generate application using AGNO agent"""
         
         try:
@@ -181,9 +181,16 @@ class AGNOApplicationGenerator:
                 token_tracker = get_token_tracker(tenant_id, user_id, session_id)
                 logger.info(f"🔢 Token tracking enabled for session {session_id}")
             
+            # Get the selected model from the model parameter
+            from app.config.llm_providers import get_tradeforge_models
+            available_models = get_tradeforge_models()
+            selected_llm = available_models.get(model, llm_agentic)  # Fallback to default if model not found
+            
+            logger.info(f"🤖 Using model: {model} for AGNO agent generation")
+            
             # Create AGNO agent with streaming capabilities for better UX
             agent = Agent(
-                model=llm_agentic,
+                model=selected_llm,
                 knowledge=self.knowledge_base,
                 search_knowledge=True,
                 tools=[FileTools(), self._create_todo_tracker(), ThinkingTools(add_instructions=True)],
@@ -269,7 +276,7 @@ Generate a complete application with Docker configuration for easy deployment.""
             logger.error(f"❌ Generation failed: {e}")
             return {"status": "error", "error": str(e)}
     
-    async def generate_application_streaming(self, tenant_id: str, user_request: str, knowledge_sources: list[str] = None, session_id: str = None, user_id: str = "1"):
+    async def generate_application_streaming(self, tenant_id: str, user_request: str, knowledge_sources: list[str] = None, session_id: str = None, user_id: str = "1", model: str = "kimi-k2"):
         """Generate application using AGNO agent with streaming progress updates"""
         
         try:
@@ -311,9 +318,17 @@ Generate a complete application with Docker configuration for easy deployment.""
                 logger.info(f"🔢 Token tracking enabled for session {session_id}")
                 yield {"type": "status", "content": {"message": "🔢 Token tracking enabled"}}
             
+            # Get the selected model from the model parameter
+            from app.config.llm_providers import get_tradeforge_models
+            available_models = get_tradeforge_models()
+            selected_llm = available_models.get(model, llm_agentic)  # Fallback to default if model not found
+            
+            logger.info(f"🤖 Using model: {model} for AGNO agent streaming generation")
+            yield {"type": "status", "content": {"message": f"🤖 Using {model} model for generation"}}
+            
             # Create AGNO agent with streaming capabilities
             agent = Agent(
-                model=llm_agentic,
+                model=selected_llm,
                 knowledge=self.knowledge_base,
                 search_knowledge=True,
                 tools=[FileTools(), self._create_todo_tracker(), ThinkingTools(add_instructions=True)],

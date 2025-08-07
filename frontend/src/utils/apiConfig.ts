@@ -5,11 +5,8 @@
 
 // Get the API base URL from environment variable or fallback to localhost
 export const getApiBaseUrl = (): string => {
-  // In production on Vercel, API routes are served from the same domain
-  if (import.meta.env.PROD) {
-    return ''  // Use relative URLs in production
-  }
-  return (import.meta.env as any).VITE_API_BASE_URL || 'http://localhost:8000'
+  // Use environment variable for API base URL or fallback to AWS App Runner
+  return (import.meta.env as any).VITE_API_BASE_URL || 'https://z5cmpsm2zw.eu-west-3.awsapprunner.com'
 }
 
 // Helper function to build full API URLs

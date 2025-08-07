@@ -26,6 +26,7 @@ class GenerationRequest(BaseModel):
     user_request: str
     stream: bool = True
     knowledge_sources: Optional[list[str]] = None
+    model: Optional[str] = "kimi-k2"
 
 class SessionResponse(BaseModel):
     """Response model for session creation"""
@@ -72,7 +73,8 @@ async def generate_application(
                 user_request=request.user_request,
                 knowledge_sources=request.knowledge_sources,
                 session_id=f"agno_session_{tenant_id}_{user_id}",
-                user_id=user_id
+                user_id=user_id,
+                model=request.model
             )
             return result
             
@@ -204,7 +206,8 @@ async def generate_application_with_streaming(
                 user_request=request.user_request,
                 knowledge_sources=request.knowledge_sources,
                 session_id=f"agno_stream_{tenant_id}_{user_id}",
-                user_id=user_id
+                user_id=user_id,
+                model=request.model
             ):
                 # Send Server-Sent Events format
                 yield f"data: {json.dumps(event)}\n\n"
