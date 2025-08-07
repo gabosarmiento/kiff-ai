@@ -1,0 +1,135 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Install core Python dependencies
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn[standard] \
+    sqlalchemy \
+    asyncpg \
+    psycopg2-binary \
+    python-jose[cryptography] \
+    passlib[bcrypt] \
+    python-multipart \
+    pydantic \
+    python-dotenv
+
+# Create a simplified FastAPI app with auth endpoints
+COPY <<'EOF' /app/main.py
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+import os
+import asyncpg
+import hashlib
+import json
+from typing import Optional
+
+app = FastAPI(title="Kiff AI Backend", version="1.0.0")
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+security = HTTPBearer()
+
+# Models
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: dict
+
+# Database connection
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+async def get_db_connection():
+    if DATABASE_URL:
+        return await asyncpg.connect(DATABASE_URL)
+    return None
+
+# Demo user data
+DEMO_USERS = {
+    "demo@kiff.ai": {
+        "id": "4485db48-71b7-47b0-8128-c6dca5be352d",
+        "email": "demo@kiff.ai", 
+        "password_hash": hashlib.sha256("demo12345".encode()).hexdigest(),
+        "name": "Demo User",
+        "tenant_id": "4485db48-71b7-47b0-8128-c6dca5be352d"
+    }
+}
+
+@app.get("/")
+def root():
+    return {"message": "Kiff AI Backend API", "status": "running"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "database": "connected" if DATABASE_URL else "not configured"}
+
+@app.get("/api/routes/health")
+def health_route():
+    return {"status": "healthy"}
+
+@app.post("/api/routes/auth/login", response_model=LoginResponse)
+async def login(login_data: LoginRequest):
+    """Demo login endpoint"""
+    
+    # Check demo credentials
+    if login_data.email in DEMO_USERS:
+        user = DEMO_USERS[login_data.email]
+        password_hash = hashlib.sha256(login_data.password.encode()).hexdigest()
+        
+        if user["password_hash"] == password_hash:
+            return LoginResponse(
+                access_token="demo_token_12345",
+                user={
+                    "id": user["id"],
+                    "email": user["email"],
+                    "name": user["name"],
+                    "tenant_id": user["tenant_id"]
+                }
+            )
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials"
+    )
+
+@app.get("/api/routes/auth/me")
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user info"""
+    if credentials.credentials == "demo_token_12345":
+        return {
+            "id": "4485db48-71b7-47b0-8128-c6dca5be352d",
+            "email": "demo@kiff.ai",
+            "name": "Demo User",
+            "tenant_id": "4485db48-71b7-47b0-8128-c6dca5be352d"
+        }
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid token"
+    )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+EOF
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

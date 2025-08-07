@@ -11,7 +11,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Zap,
-  Brain
+  Brain,
+  MessageSquare
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { SubscriptionModal } from '../subscription/SubscriptionModal'
@@ -31,6 +32,7 @@ export function Sidebar() {
   const generateV01Enabled = useFeatureFlag('generate_v01_enabled', false)
   const unifiedGenerationEnabled = useFeatureFlag('unified_generation_enabled', false)
   const userSettingsEnabled = useFeatureFlag('user_settings_enabled', false)
+  const conversationHistoryEnabled = useFeatureFlag('conversation_history', false)
   
   // Dynamic navigation based on feature flags
   const navigation = [
@@ -39,7 +41,8 @@ export function Sidebar() {
     ...(unifiedGenerationEnabled ? [{ name: 'Generate', href: '/unified-generation', icon: Home, description: 'Create applications' }] : []),
     ...(apiGalleryEnabled ? [{ name: 'API Gallery', href: '/gallery', icon: Library, description: 'Curated API docs' }] : []),
     { name: 'Knowledge', href: '/knowledge', icon: Database, description: 'Knowledge base' },
-    { name: 'Applications', href: '/applications', icon: Code, description: 'Generated apps' },
+    { name: 'Kiffs', href: '/applications', icon: Code, description: 'Generated kiffs' },
+    ...(conversationHistoryEnabled ? [{ name: 'Kiff History', href: '/conversations', icon: MessageSquare, description: 'Chat history' }] : []),
     ...(userSettingsEnabled ? [{ name: 'Settings', href: '/settings', icon: Settings, description: 'Configuration' }] : []),
   ]
 

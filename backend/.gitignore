@@ -9,7 +9,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-models/
+# models/ - temporarily removed for conversation history implementation
 data/
 *.log
 .DS_Store

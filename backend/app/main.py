@@ -23,7 +23,7 @@ except ImportError:
     logger.warning("langtrace-python-sdk not installed. LangTrace observability disabled.")
 
 from app.api.routes import (
-    auth, accounts, logs, health, tenant_management, support, audit, kiff, api_gallery, knowledge, conversational_chat, agno_chat, agno_generation, advanced_agno_generation, feature_flags, idea_generator, token_tracking, billing_consumption, modular_rag, conversation_documents
+    auth, accounts, logs, health, tenant_management, support, audit, kiff, api_gallery, knowledge, conversational_chat, agno_chat, agno_generation, advanced_agno_generation, feature_flags, idea_generator, token_tracking, billing_consumption, modular_rag, conversation_documents, conversation_history
 )
 from app.api.routes import analytics
 from app.api.routes import demo_usage
@@ -124,6 +124,12 @@ app.include_router(accounts.router, prefix="/api/accounts", tags=["accounts"])
 
 # Kiff routes - Main functionality for adaptive API documentation extraction
 app.include_router(kiff.router, prefix="/api/kiff", tags=["kiff"])
+
+# Conversation Documents routes - Session-scoped document processing
+app.include_router(conversation_documents.router, tags=["conversation-documents"])
+
+# Conversation History routes - Modular conversation history with feature flag control
+app.include_router(conversation_history.router, tags=["conversation-history"])
 
 # API Gallery routes - Curated API documentation collection
 app.include_router(api_gallery.router, tags=["api-gallery"])

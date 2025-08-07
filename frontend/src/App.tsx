@@ -11,6 +11,7 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { APIGalleryPage } from '@/pages/APIGalleryPage'
 import { KnowledgePage } from '@/pages/KnowledgePage'
+import { ConversationsPage } from '@/pages/ConversationsPage'
 import { LoginPage } from '@/pages/LoginPage'
 import AdminBillingPage from '@/pages/AdminBillingPage'
 import AdminSupportPage from '@/pages/AdminSupportPage'
@@ -96,6 +97,7 @@ function App() {
           } />
           <Route path="/knowledge" element={<Layout><KnowledgePage /></Layout>} />
           <Route path="/applications" element={<Layout><ApplicationsPage /></Layout>} />
+          <Route path="/conversations" element={<Layout><ConversationsPage /></Layout>} />
           <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
           <Route path="/account" element={<Layout><AccountPage /></Layout>} />
         </>

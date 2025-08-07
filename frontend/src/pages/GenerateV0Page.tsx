@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Database, Book, Zap, Code2, ExternalLink, Copy, Settings, Grid3X3, User, Download, FileText, Eye, Play, Folder, X, ChevronDown, RotateCcw, Shuffle } from 'lucide-react'
+import { Send, Loader2, Database, Book, Zap, Code2, ExternalLink, Copy, Settings, Grid3X3, User, Download, FileText, Eye, Play, Folder, X, ChevronDown, RotateCcw, Shuffle, MessageSquare } from 'lucide-react'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { KnowledgeManager, KnowledgeItem } from '../components/knowledge/KnowledgeManager'
-import { DocumentUpload } from '../components/conversation/DocumentUpload'
+import { DocumentUpload } from '../components/conversation/DocumentUpload';
+import { ConversationHistory } from '../components/conversation/ConversationHistory';
 import toast from 'react-hot-toast'
 
 interface ChatMessage {
@@ -38,7 +39,11 @@ interface AppInfo {
   downloadUrl?: string
 }
 
-
+interface KnowledgeSource {
+  id: string
+  name: string
+  description: string
+}
 
 export function GenerateV0Page() {
   const { theme } = useTheme()
@@ -67,8 +72,12 @@ export function GenerateV0Page() {
   // Knowledge state - connected to real knowledge engine
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([])
   const [selectedKnowledge, setSelectedKnowledge] = useState<KnowledgeItem | null>(null)
-  const [showKnowledgeManager, setShowKnowledgeManager] = useState(false)
-  const [showKnowledgePanel, setShowKnowledgePanel] = useState(true)
+  const [isKnowledgePanelOpen, setIsKnowledgePanelOpen] = useState(true);
+  const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>([]);
+  const [isConversationHistoryOpen, setIsConversationHistoryOpen] = useState(false);
+  const [conversationHistoryEnabled, setConversationHistoryEnabled] = useState(false);
+  const [showKnowledgeManager, setShowKnowledgeManager] = useState(false);
+  const [showKnowledgePanel, setShowKnowledgePanel] = useState(true);
   
   // Idea generator state
   const [currentIdea, setCurrentIdea] = useState<{idea: string, description: string, suggested_apis: string[]} | null>(null)
@@ -142,6 +151,33 @@ export function GenerateV0Page() {
       return () => clearTimeout(warmupTimer)
     }
   }, [user, sessionId, knowledgeItems.length, currentIdea])
+
+  // Check conversation history feature flag
+  useEffect(() => {
+    const checkConversationHistoryFlag = async () => {
+      try {
+        const response = await fetch('/api/admin/feature-flags/', {
+          headers: {
+            'x-tenant-id': tenantId || '4485db48-71b7-47b0-8128-c6dca5be352d'
+          }
+        });
+        if (response.ok) {
+          const flags = await response.json();
+          const conversationHistoryFlag = flags.find((flag: any) => flag.name === 'conversation_history');
+          setConversationHistoryEnabled(conversationHistoryFlag?.is_enabled || false);
+        }
+      } catch (error) {
+        console.error('Error checking conversation history flag:', error);
+      }
+    };
+    
+    checkConversationHistoryFlag();
+  }, [tenantId]);
+
+  // Initialize knowledge sources on component mount
+  useEffect(() => {
+    loadRealKnowledgeBase();
+  }, []);
 
   const initializeSession = async () => {
     if (isInitialized) return // Prevent duplicate initialization
@@ -465,7 +501,12 @@ export function GenerateV0Page() {
         }
         break
 
-      // New streaming events with rich progress
+      // New conversational streaming events
+      case 'conversation':
+        assistantMessage.content += `${assistantMessage.content ? '\n\n' : ''}${content.message}`
+        break
+
+      // Legacy streaming events (for backward compatibility)
       case 'status':
         assistantMessage.content += `\n${content.message}`
         break
@@ -480,6 +521,27 @@ export function GenerateV0Page() {
 
       case 'file_created':
         assistantMessage.content += `\n${content.message}`
+        
+        // Extract file information from the message and update generatedFiles
+        if (content.file_path && content.file_content) {
+          const newFile: GeneratedFile = {
+            path: content.file_path,
+            content: content.file_content,
+            type: content.file_path.split('.').pop() || 'txt'
+          }
+          
+          setGeneratedFiles(prev => {
+            // Check if file already exists and update it, or add new file
+            const existingIndex = prev.findIndex(f => f.path === content.file_path)
+            if (existingIndex >= 0) {
+              const updated = [...prev]
+              updated[existingIndex] = newFile
+              return updated
+            } else {
+              return [...prev, newFile]
+            }
+          })
+        }
         break
 
       case 'thinking':
@@ -509,19 +571,20 @@ export function GenerateV0Page() {
       case 'completed':
         assistantMessage.content += `\n${content.message}`
         
-        // Set up project info from completed event
+        // Set up project info from completed event with actual generated files
         const projectInfo: AppInfo = {
-          name: content.id || 'Generated App',
-          description: content.response || 'AGNO generated application',
+          name: content.id || 'Generated Kiff',
+          description: content.response || 'AGNO generated kiff application',
           framework: 'FastAPI',
-          files: [], // Will be populated if files data is available
+          files: generatedFiles, // Use the actual generated files
           status: 'ready',
           liveUrl: undefined,
           downloadUrl: undefined
         }
 
         setCurrentApp(projectInfo)
-        setActiveRightPanel('preview')
+        // Switch to files panel to show the generated files
+        setActiveRightPanel('files')
         break
 
       case 'error':
@@ -743,7 +806,7 @@ export function GenerateV0Page() {
             className={`w-full text-left p-2 rounded-lg transition-colors ${
               selectedFile?.path === node.path
                 ? 'bg-blue-500/10 border border-blue-400/30'
-                : 'hover:bg-gray-100 dark:hover:bg-slate-800/50'
+                : 'hover:bg-gray-100 dark:hover:bg-slate-800/50 border border-gray-200 dark:border-slate-700/50'
             }`}
             style={{ marginLeft: `${indent}px` }}
           >
@@ -783,21 +846,23 @@ export function GenerateV0Page() {
 
   return (
     <div className="h-full flex bg-white dark:bg-slate-950 relative">
+
+      
       {/* Left Panel - Chat Interface */}
-      <div className={`${currentApp ? 'w-1/2' : showKnowledgePanel ? 'w-2/3' : 'flex-1'} flex flex-col border-r border-gray-200 dark:border-slate-700/50 transition-all duration-300`}>
-        {/* Chat Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-700/50">
+      <div className={`${currentApp ? 'w-1/2' : isKnowledgePanelOpen ? 'w-2/3' : 'flex-1'} flex flex-col border-r border-gray-200 dark:border-slate-700/50 transition-all duration-300`}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg flex items-center justify-center border border-purple-400/30">
-              <Zap className="w-4 h-4 text-purple-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-200">Generate V0</h2>
-              <p className="text-xs text-gray-600 dark:text-slate-400">Real knowledge-powered generation</p>
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <h1 className="text-xl font-semibold text-gray-900">AI Developer</h1>
             </div>
           </div>
-          
+          <div className="flex items-center space-x-2">
 
+          </div>
         </div>
 
         {/* Messages */}
@@ -1006,8 +1071,6 @@ export function GenerateV0Page() {
         </div>
       </div>
 
-
-
       {/* Right Panel - Files & Preview */}
       {currentApp && (
         <div className="w-1/2 flex flex-col relative">
@@ -1121,22 +1184,23 @@ export function GenerateV0Page() {
         </div>
       )}
 
-      {/* Knowledge Panel - Canvas Attached (like PARAMETERS) */}
-      {showKnowledgePanel && (
-        <div className="w-80 flex flex-col bg-white dark:bg-slate-950 border-l border-gray-200 dark:border-slate-700/50">
-          {/* Knowledge Header with Toggle */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-slate-700/50 bg-gray-50 dark:bg-slate-800/30">
-            <div className="flex items-center space-x-2">
-              <h3 className="text-xs font-semibold text-gray-900 dark:text-slate-200 uppercase tracking-wide">Knowledge Sources</h3>
-            </div>
-            <button
-              onClick={() => setShowKnowledgePanel(false)}
-              className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors"
-              title="Hide Knowledge Panel"
-            >
-              <ChevronDown className="w-4 h-4 text-gray-500 dark:text-slate-400 rotate-90" />
-            </button>
+      {/* Right Sidebar - Groq-style Parameters Panel */}
+      <div className={`${isKnowledgePanelOpen ? 'w-1/3' : 'w-12'} flex flex-col border-l border-gray-200 dark:border-slate-700/50 bg-white dark:bg-slate-950 transition-all duration-300`}>
+        {isKnowledgePanelOpen ? (
+          <>
+            {/* Header with Close Button */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-700/50 bg-gray-50 dark:bg-slate-800/30">
+          <div className="flex items-center space-x-2">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-200 uppercase tracking-wide">Knowledge Sources</h3>
           </div>
+          <button
+            onClick={() => setIsKnowledgePanelOpen(false)}
+            className="p-1.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-md transition-colors"
+            title="Close Knowledge Panel"
+          >
+            <X className="w-4 h-4 text-gray-500 dark:text-slate-400" />
+          </button>
+        </div>
 
           {/* Knowledge Sources Count */}
           <div className="px-3 py-2 bg-gray-50 dark:bg-slate-800/30 border-b border-gray-200 dark:border-slate-700/50">
@@ -1254,22 +1318,19 @@ export function GenerateV0Page() {
               </div>
             </div>
           )}
+          </>
+        ) : (
+        <div className="flex flex-col items-center justify-start h-full pt-4">
+          <button
+            onClick={() => setIsKnowledgePanelOpen(true)}
+            className="p-2 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
+            title="Show Knowledge Panel"
+          >
+            <Database className="w-4 h-4" />
+          </button>
         </div>
       )}
-
-      {/* Toggle Button when Knowledge Panel is Hidden */}
-      {!showKnowledgePanel && (
-        <button
-          onClick={() => setShowKnowledgePanel(true)}
-          className="absolute top-4 right-4 z-10 p-2 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-700/50 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 hover:bg-gray-50 dark:hover:bg-slate-800"
-          title="Show Knowledge Sources"
-        >
-          <div className="flex items-center space-x-1">
-            <Database className="w-4 h-4 text-emerald-400" />
-            <ChevronDown className="w-3 h-3 text-gray-500 dark:text-slate-400 -rotate-90" />
-          </div>
-        </button>
-      )}
     </div>
+  </div>
   )
 }

@@ -720,7 +720,7 @@ export function ApplicationsPage() {
   return (
     <div className="p-6 h-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100 mb-2">Generated Applications</h1>
+        <h1 className="text-2xl font-bold text-slate-100 mb-2">Generated Kiffs</h1>
         <p className="text-slate-400">Browse and manage your AI-generated applications</p>
       </div>
 
@@ -730,7 +730,7 @@ export function ApplicationsPage() {
           <div className="p-4 border-b border-slate-700/50">
             <h2 className="font-semibold text-slate-100 flex items-center gap-2">
               <FolderOpen className="w-4 h-4" />
-              Applications ({apps.length})
+              Kiffs ({apps.length})
             </h2>
           </div>
           

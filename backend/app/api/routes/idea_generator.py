@@ -14,7 +14,7 @@ import logging
 from app.middleware.tenant_middleware import get_current_tenant_id
 from app.services.agno_application_generator import agno_app_generator
 from agno.agent import Agent
-from app.config.llm_providers import llm_quick
+from app.config.llm_providers import llm_quick, llm_reasoning
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +50,16 @@ async def generate_app_idea(
     try:
         # Simple prompt for generating concise ideas
         idea_prompt = """
-You are an AGNO Framework expert AI agent that generates simple, practical app ideas.
+You are an AI agent especialized in the Agno Framework.
 
-Using your knowledge of APIs and development frameworks, generate ONE concise app idea.
+Using your knowledge of APIs and development frameworks, generate ONE concise app idea that uses agno framework and agno agents.
 
 Requirements:
 1. Keep it under 160 characters total
 2. Focus on what the app DOES, not how to build it
 3. Make it practical and buildable using available knowledge
 4. Be creative but simple
+5. It must be agentic and use AI 
 
 Respond with ONLY the app idea description. Nothing else.
 
@@ -110,13 +111,13 @@ Generate a NEW app idea:"""
         logger.info("🤖 Creating AGNO agent for idea generation...")
         try:
             simple_agent = Agent(
-                model=llm_quick,  # Use quick model for ideas
+                model=llm_reasoning,  # Use quick model for ideas
                 knowledge=agno_app_generator.knowledge_base,  # Same dynamic knowledge base
                 search_knowledge=True,
                 tools=[],  # No file tools needed for ideas
                 instructions=[
-                    "You are an AGNO Framework expert that generates simple, practical app ideas.",
-                    "Generate ONE concise app idea under 160 characters.",
+                    "You are an AI agent expert in the Agno Framework that generates simple, practical app ideas.",
+                    "Generate ONE concise app idea under 160 characters that is inspired in the Agno Framework and your knowledge.",
                     "Focus on what the app DOES, not how to build it.",
                     "Be creative but practical."
                 ]
