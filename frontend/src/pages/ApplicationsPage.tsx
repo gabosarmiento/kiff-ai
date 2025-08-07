@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { FolderOpen, File, Code, Play, Download, Trash2, Calendar, FileText, ChevronRight, ChevronDown, Folder } from 'lucide-react'
+import { FolderOpen, File, Code, Download, Trash2, Calendar, FileText, ChevronRight, ChevronDown, Folder } from 'lucide-react'
 import { Editor } from '@monaco-editor/react'
 import { useTenant } from '@/contexts/TenantContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -47,8 +47,6 @@ export function ApplicationsPage() {
   const [fileCache, setFileCache] = useState<AppFileCache>({})
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [loadingFileCounts, setLoadingFileCounts] = useState<Set<string>>(new Set())
-  const [dockerStatus, setDockerStatus] = useState<{[key: string]: any}>({})
-  const [isTestingDocker, setIsTestingDocker] = useState<Set<string>>(new Set())
   const [isDownloading, setIsDownloading] = useState<Set<string>>(new Set())
   
   // Pagination state
@@ -570,77 +568,6 @@ export function ApplicationsPage() {
     }
   }
 
-  const testAppWithDocker = async (appName: string) => {
-    try {
-      setIsTestingDocker(prev => new Set(prev).add(appName))
-      
-      const response = await fetch(`/api/kiff/generated-apps/${appName}/test-docker`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tenantId && { 'X-Tenant-ID': tenantId })
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to test application with Docker')
-      }
-
-      const result = await response.json()
-      
-      if (result.success) {
-        setDockerStatus(prev => ({
-          ...prev,
-          [appName]: {
-            status: 'running',
-            container_name: result.container_name,
-            access_url: result.access_url,
-            port_info: result.port_info
-          }
-        }))
-        
-        toast.success(`Application is running! ${result.access_url ? `Access at: ${result.access_url}` : ''}`)
-      } else {
-        toast.error(`Docker test failed: ${result.message}`)
-      }
-    } catch (error) {
-      console.error('Error testing app with Docker:', error)
-      toast.error('Failed to test application with Docker')
-    } finally {
-      setIsTestingDocker(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(appName)
-        return newSet
-      })
-    }
-  }
-
-  const stopDockerContainer = async (appName: string) => {
-    try {
-      const response = await fetch(`/api/kiff/generated-apps/${appName}/docker-stop`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tenantId && { 'X-Tenant-ID': tenantId })
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to stop Docker container')
-      }
-
-      setDockerStatus(prev => {
-        const newStatus = { ...prev }
-        delete newStatus[appName]
-        return newStatus
-      })
-
-      toast.success('Docker container stopped successfully')
-    } catch (error) {
-      console.error('Error stopping Docker container:', error)
-      toast.error('Failed to stop Docker container')
-    }
-  }
 
   const renderFileTree = useCallback((nodes: FileNode[], depth = 0) => {
     return nodes.map((node) => {
@@ -938,25 +865,46 @@ export function ApplicationsPage() {
                         {app.status}
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteApp(app.id)
-                      }}
-                      disabled={deletingApps.has(app.id)}
-                      className={`p-1 transition-colors ${
-                        deletingApps.has(app.id)
-                          ? 'text-slate-600 cursor-not-allowed'
-                          : 'text-slate-500 hover:text-red-400'
-                      }`}
-                      title={deletingApps.has(app.id) ? 'Deleting...' : 'Delete application'}
-                    >
-                      {deletingApps.has(app.id) ? (
-                        <div className="w-3 h-3 border border-slate-600 border-t-slate-400 rounded-full animate-spin" />
-                      ) : (
-                        <Trash2 className="w-3 h-3" />
-                      )}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          downloadApp(app.name)
+                        }}
+                        disabled={isDownloading.has(app.name)}
+                        className={`p-1 transition-colors ${
+                          isDownloading.has(app.name)
+                            ? 'text-slate-600 cursor-not-allowed'
+                            : 'text-slate-500 hover:text-cyan-400'
+                        }`}
+                        title={isDownloading.has(app.name) ? 'Downloading...' : 'Download project as ZIP'}
+                      >
+                        {isDownloading.has(app.name) ? (
+                          <div className="w-3 h-3 border border-slate-600 border-t-slate-400 rounded-full animate-spin" />
+                        ) : (
+                          <Download className="w-3 h-3" />
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteApp(app.id)
+                        }}
+                        disabled={deletingApps.has(app.id)}
+                        className={`p-1 transition-colors ${
+                          deletingApps.has(app.id)
+                            ? 'text-slate-600 cursor-not-allowed'
+                            : 'text-slate-500 hover:text-red-400'
+                        }`}
+                        title={deletingApps.has(app.id) ? 'Deleting...' : 'Delete application'}
+                      >
+                        {deletingApps.has(app.id) ? (
+                          <div className="w-3 h-3 border border-slate-600 border-t-slate-400 rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -1039,47 +987,6 @@ export function ApplicationsPage() {
                 <Code className="w-4 h-4" />
                 {selectedFile ? selectedFile.name : 'Code Editor'}
               </h2>
-              {selectedFile && selectedApp && (
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => downloadApp(selectedApp.name)}
-                    disabled={isDownloading.has(selectedApp.name)}
-                    className="text-slate-400 hover:text-cyan-400 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Download application as ZIP"
-                  >
-                    {isDownloading.has(selectedApp.name) ? (
-                      <div className="w-4 h-4 border border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                  </button>
-                  
-                  {dockerStatus[selectedApp.name]?.status === 'running' ? (
-                    <button 
-                      onClick={() => stopDockerContainer(selectedApp.name)}
-                      className="text-red-400 hover:text-red-300 p-1"
-                      title={`Stop Docker container (${dockerStatus[selectedApp.name]?.access_url || 'running'})`}
-                    >
-                      <div className="w-4 h-4 border-2 border-red-400 rounded-sm flex items-center justify-center">
-                        <div className="w-2 h-2 bg-red-400 rounded-sm" />
-                      </div>
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={() => testAppWithDocker(selectedApp.name)}
-                      disabled={isTestingDocker.has(selectedApp.name)}
-                      className="text-slate-400 hover:text-green-400 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Test application with Docker Desktop"
-                    >
-                      {isTestingDocker.has(selectedApp.name) ? (
-                        <div className="w-4 h-4 border border-green-500/30 border-t-green-500 rounded-full animate-spin" />
-                      ) : (
-                        <Play className="w-4 h-4" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           </div>
           

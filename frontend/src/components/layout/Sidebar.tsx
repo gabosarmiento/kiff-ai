@@ -16,7 +16,6 @@ import {
 import { useStore } from '../../store/useStore'
 import { SubscriptionModal } from '../subscription/SubscriptionModal'
 import { SidebarBalance } from '../billing/SidebarBalance'
-import { TokenConsumptionBalance } from '../billing/TokenConsumptionBalance'
 import { useFeatureFlag } from '../../hooks/useFeatureFlags'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -144,13 +143,6 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Token Consumption Display */}
-        {sidebarOpen && user && (
-          <TokenConsumptionBalance 
-            tenantId={user.tenant_id || "4485db48-71b7-47b0-8128-c6dca5be352d"} 
-            userId={user.id.toString()} 
-          />
-        )}
         
         {/* Footer */}
         <div className={`border-t border-slate-700/50 transition-all duration-300 ${

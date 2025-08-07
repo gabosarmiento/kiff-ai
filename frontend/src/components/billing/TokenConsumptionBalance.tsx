@@ -79,9 +79,6 @@ export const TokenConsumptionBalance: React.FC<TokenConsumptionBalanceProps> = (
   useEffect(() => {
     if (tenantId && userId) {
       fetchConsumption()
-      // Set up polling every 30 seconds for real-time updates
-      const interval = setInterval(fetchConsumption, 30000)
-      return () => clearInterval(interval)
     } else {
       console.warn('TokenConsumptionBalance: Missing tenantId or userId', { tenantId, userId })
       setError('Missing tenant or user information')
@@ -171,10 +168,10 @@ export const TokenConsumptionBalance: React.FC<TokenConsumptionBalanceProps> = (
           <div className="mt-2 pt-2 border-t border-slate-700/30">
             <div className="flex justify-between text-xs">
               <span className="text-slate-500">
-                Input: {formatTokens(consumption.input_tokens)}
+                Input: {formatTokens(consumption.total_input_tokens)}
               </span>
               <span className="text-slate-500">
-                Output: {formatTokens(consumption.output_tokens)}
+                Output: {formatTokens(consumption.total_output_tokens)}
               </span>
             </div>
           </div>
