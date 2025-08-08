@@ -1,6 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "framework": null,
-  "ignoreCommand": "echo Monorepo root: no deploy"
+  "framework": "nextjs",
+  "buildCommand": "cd frontend-lite && npm run build",
+  "devCommand": "cd frontend-lite && npm run dev",
+  "outputDirectory": "frontend-lite/.next",
+  "installCommand": "npm install",
+  "routes": [
+    {
+      "src": "/storybook/(.*)",
+      "dest": "/storybook-static/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend-lite/$1"
+    }
+  ]
 }

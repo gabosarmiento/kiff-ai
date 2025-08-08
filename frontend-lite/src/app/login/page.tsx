@@ -3,7 +3,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authLogin, type Profile } from "../../lib/apiClient";
 import Link from "next/link";
-import { Button, Card, Input } from "@kiff/ui";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { Input } from "../../components/ui/Input";
 
 export default function LoginPage() {
   const router = useRouter();

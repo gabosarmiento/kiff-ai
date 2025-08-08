@@ -5,7 +5,12 @@ module.exports = {
   content: [
     './src/**/*.{ts,tsx}',
   ],
-  presets: [require('@kiff/ui/tailwind.preset.cjs')],
-  theme: { extend: {} },
+  theme: {
+    extend: {
+      animation: {
+        'spin': 'spin 1s linear infinite',
+      }
+    }
+  },
   plugins: [],
 };

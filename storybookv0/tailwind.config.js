@@ -5,7 +5,6 @@ module.exports = {
   content: [
     './src/**/*.{ts,tsx,mdx}',
   ],
-  presets: [require('@kiff/ui/tailwind.preset.cjs')],
   theme: {
     extend: {
       colors: {

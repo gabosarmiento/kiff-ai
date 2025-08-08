@@ -15,7 +15,6 @@
     "build": "storybook build"
   },
   "devDependencies": {
-    "@rollup/rollup-darwin-x64": "^4.46.2",
     "@storybook/addon-essentials": "^8.1.10",
     "@storybook/addon-interactions": "^8.1.10",
     "@storybook/react": "^8.1.10",
@@ -31,7 +30,6 @@
     "vite-tsconfig-paths": "^4.3.1"
   },
   "dependencies": {
-    "@kiff/ui": "0.1.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.441.0",
     "react": "^18.2.0",

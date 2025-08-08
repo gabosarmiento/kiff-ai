@@ -2,7 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authSignup, type Profile } from "../../lib/apiClient";
-import { Button, Card, Input } from "@kiff/ui";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { Input } from "../../components/ui/Input";
 
 export default function SignupPage() {
   const router = useRouter();
