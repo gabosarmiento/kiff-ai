@@ -3,7 +3,7 @@ import { KiffsListPage } from './KiffsListPage'
 import { PageContainer } from './PageContainer'
 
 const meta: Meta<typeof KiffsListPage> = {
-  title: 'Pages/Kiffs',
+  title: 'Kiffs/Default',
   component: KiffsListPage,
   parameters: {
     layout: 'fullscreen',

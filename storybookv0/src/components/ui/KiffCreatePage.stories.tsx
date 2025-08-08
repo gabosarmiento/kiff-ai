@@ -3,7 +3,7 @@ import React from "react";
 import { KiffCreatePage } from "./KiffCreatePage";
 
 const meta: Meta<typeof KiffCreatePage> = {
-  title: "UI/Kiffs/CreatePage",
+  title: "Kiffs/Create",
   component: KiffCreatePage,
   parameters: {
     layout: "fullscreen",

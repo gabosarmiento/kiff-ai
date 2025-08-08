@@ -1,84 +1,89 @@
 # Terraform AWS Deployment Status
 
-## Current Infrastructure Status ✅
+## Current Infrastructure Goal ✅
 
-Successfully deployed AWS infrastructure using Terraform with the following resources:
-
-### Completed Resources:
-- **ECR Repository**: `929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff-ai-backend`
-- **PostgreSQL Database**: RDS instance with encrypted storage (db.t3.micro)
-- **Redis Cache**: ElastiCache replication group (cache.t3.micro)  
-- **VPC & Networking**: Complete setup with subnets and security groups
-- **IAM Roles**: Configured for ECR access
-
-### Docker Image Status ✅
-- Built minimal FastAPI image for initial deployment
-- Successfully pushed to ECR: `929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff-ai-backend:latest`
-- Image contains basic health endpoints at `/health` and `/`
+Single, minimal backend-lite-v2 on AWS App Runner (eu-west-3, Paris), with a lightweight ECR image and NO additional managed data services for v2 (in-memory only). Legacy resources should be decommissioned if unused.
 
 ## Pending Tasks:
 
-### 1. App Runner Service Subscription 🔄
-**Issue**: AWS account requires App Runner service subscription acceptance
-**Error**: `The AWS Access Key Id needs a subscription for the service`
+### 1) Ensure App Runner subscription 🔄
+If this is the first App Runner usage in the account, accept terms in Console once.
 
-**Solution**: 
-- Go to AWS Console → App Runner
-- Accept service terms (one-time setup)
-- Then run: `terraform apply -target=aws_apprunner_service.kiff_ai_backend -auto-approve`
+Steps:
+- Console → App Runner → accept service terms.
 
-### 2. Current Terraform Commands:
+### 2) Teardown legacy services (cost control)
+Identify and delete legacy App Runner services not used by v2.
+
+Commands (uses local AWS CLI):
 ```bash
-# From terraform directory:
-cd /Users/caroco/Gabo-Dev/kiff-ai/terraform
-
-# Deploy App Runner after subscription:
-terraform apply -target=aws_apprunner_service.kiff_ai_backend -auto-approve
-
-# Get outputs:
-terraform output
+make aws-list-services                                   # list all services in eu-west-3
+make apprunner-delete SERVICE_ARN="<legacy_service_arn>" # delete specific legacy service
 ```
 
-### 3. Infrastructure Outputs:
+### 3) Build and deploy backend-lite-v2
+We deploy via ECR + App Runner. Region is `eu-west-3`.
+
+```bash
+# 0) Bootstrap local env from ~/.aws (writes private/aws.env)
+bash private/bootstrap_aws_env.sh
+
+# 1) Build and push image to ECR
+make ecr-push-v2
+
+# 2) Ensure IAM role for App Runner → ECR
+make apprunner-role-create
+
+# 3) Create App Runner service for v2
+make apprunner-create-v2
 ```
-ECR Repository: 929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff-ai-backend
-Region: eu-west-3
-Database: PostgreSQL (encrypted, 20GB)
-Redis: ElastiCache (encrypted at rest)
-VPC: Complete networking setup
+
+Alternatively, one-shot script (delete legacy + deploy v2):
+```bash
+bash private/deploy_v2.sh --delete-old --old-arn "arn:aws:apprunner:eu-west-3:ACCOUNT_ID:service/NAME/ID"
+```
+
+### 4) Retrieve service URL and update frontend
+```bash
+aws apprunner list-services --region eu-west-3 \
+  --query "ServiceSummaryList[?ServiceName=='kiff-backend-lite-v2'].ServiceUrl" --output text
+```
+Update `frontend-lite/.env.local`:
+```
+NEXT_PUBLIC_API_BASE_URL=https://<service-url>
+NEXT_PUBLIC_TENANT_ID=4485db48-71b7-47b0-8128-c6dca5be352d
+NEXT_PUBLIC_USE_MOCKS=false
 ```
 
 ## Next Steps After App Runner Subscription:
 
-1. **Complete App Runner deployment** 
-2. **Get backend URL** from terraform outputs
-3. **Update frontend environment** with backend URL in Vercel
-4. **Deploy full backend** (replace minimal image with complete application)
+1. Complete App Runner deployment for backend-lite-v2
+2. Get backend URL (see command above) and update frontend envs
+3. Verify tenant header in all calls: `X-Tenant-ID`
+4. Incremental features can be added post-stabilization
 
 ## Infrastructure Configuration:
 
-All AWS resources are configured in `/terraform/`:
-- `main.tf` - Main infrastructure definitions
-- `variables.tf` - Variable definitions  
-- `outputs.tf` - Output configurations
-- `terraform.tfvars` - Your API keys and secrets (configured)
+Terraform remains for future infra (DB/Redis/etc.) if needed later. For backend-lite-v2 minimal deployment we use CLI + App Runner directly.
+
+Terraform directory (legacy/optional): `/terraform/`
+- `variables.tf` — includes `aws_region` (default eu-west-3) and defaults like `default_tenant_id`
+- `terraform.tfvars.example` — example values
 
 ## Costs:
-- **Database**: db.t3.micro (~$13/month)
-- **Redis**: cache.t3.micro (~$15/month)  
-- **App Runner**: 0.25 vCPU, 0.5GB memory (pay-per-use)
-- **VPC**: Standard networking costs
+- Keep only one active App Runner for backend-lite-v2
+- Delete legacy services immediately after migration
+- Prefer small image and minimal dependencies
+- Optionally set AWS Budget + alerts
 
 ## Security:
-- All sensitive data stored securely in terraform.tfvars
-- Database and Redis encrypted
-- VPC isolation with security groups
-- Environment variables properly configured
+- Do NOT commit secrets; `private/aws.env` is git-ignored
+- App Runner pulls image from ECR via IAM role
+- Configure `ALLOWED_ORIGINS` for strict CORS in `private/aws.env`
 
-## Manual Alternative:
-If App Runner subscription continues to be an issue, you can:
-1. Use ECS Fargate instead (modify Terraform)
-2. Deploy to Railway/Render as backup
-3. Use EC2 with Auto Scaling Group
+## Manual Alternatives (if App Runner unsuitable):
+1) ECS Fargate
+2) Railway/Render
+3) EC2 Auto Scaling
 
-The infrastructure foundation is solid and ready for deployment once App Runner subscription is resolved.
+The deployment pipeline for backend-lite-v2 is ready and cost-conscious. Keep this doc updated with the latest service name, ECR repo, and the current App Runner URL.

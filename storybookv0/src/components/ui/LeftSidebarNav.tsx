@@ -25,155 +25,110 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
   onToggleCollapsed,
 }) => {
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-
   const isCollapsed = !!collapsed;
 
-  // Flat, sectioned rendering (no nested collapsibles) to match reference
-  const renderSectioned = (items: NavItem[]) => {
-    return items.map((item) => {
-      const hasChildren = !!(item.children && item.children.length > 0);
-      if (hasChildren) {
-        return (
-          <div key={item.id} style={{ marginBottom: 10 }}>
-            {/* Section header */}
-            {!isCollapsed && (
-              <div
-                style={{
-                  padding: "8px 12px",
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.6,
-                  color: isDark ? "rgba(226,232,240,0.65)" : "#475569", // slate-600 in light
-                }}
-              >
-                {item.label}
+  const SectionHeader: React.FC<{ label: string }> = ({ label }) => (
+    <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+      {label}
+    </div>
+  );
+
+  const ItemButton: React.FC<{ id: string; label: string; icon?: React.ReactNode; active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ id, label, icon, active, ...rest }) => (
+    <button
+      onClick={() => onSelect?.(id)}
+      title={isCollapsed ? label : undefined}
+      className={[
+        'group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition',
+        active ? 'bg-blue-50 ring-1 ring-inset ring-blue-500/20 text-slate-900' : 'hover:bg-slate-50 text-slate-700',
+        isCollapsed ? 'justify-center' : 'justify-start'
+      ].join(' ')}
+      {...rest}
+    >
+      {icon && (
+        <span className={[
+          'inline-flex h-5 w-5 items-center justify-center text-slate-500',
+          active ? 'text-blue-600' : 'group-hover:text-slate-700'
+        ].join(' ')}>
+          {icon}
+        </span>
+      )}
+      {!isCollapsed && <span className="truncate">{label}</span>}
+    </button>
+  );
+
+  const renderSectioned = (items: NavItem[]) => (
+    <div className="space-y-3">
+      {items.map((item) => {
+        const hasChildren = !!(item.children && item.children.length > 0);
+        if (hasChildren) {
+          return (
+            <div key={item.id} className="space-y-1">
+              {!isCollapsed && <SectionHeader label={item.label} />}
+              <div className="px-2">
+                {item.children!.map((c) => (
+                  <ItemButton key={c.id} id={c.id} label={c.label} icon={c.icon} active={c.active} />
+                ))}
               </div>
-            )}
-            {/* Section items (flat) */}
-            <div>
-              {item.children!.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onSelect?.(c.id)}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: isCollapsed ? "10px 10px" : "10px 12px",
-                    border: "none",
-                    background: !isCollapsed && c.active ? "rgba(37,99,235,0.22)" : "transparent",
-                    borderRadius: 8,
-                    color: "inherit",
-                    cursor: "pointer",
-                  }}
-                  title={isCollapsed ? c.label : undefined}
-                >
-                  {!isCollapsed && <span style={{ flex: 1 }}>{c.label}</span>}
-                </button>
-              ))}
             </div>
+          );
+        }
+        return (
+          <div key={item.id} className="px-2">
+            <ItemButton id={item.id} label={item.label} icon={item.icon} active={item.active} />
           </div>
         );
-      }
-      // Single item (no children)
-      return (
-        <div key={item.id} style={{ marginBottom: 6 }}>
-          <button
-            onClick={() => onSelect?.(item.id)}
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: isCollapsed ? "10px 10px" : "10px 12px",
-              border: "none",
-              background: !isCollapsed && item.active ? "rgba(37,99,235,0.22)" : "transparent",
-              borderRadius: 8,
-              color: "inherit",
-              cursor: "pointer",
-            }}
-            title={isCollapsed ? item.label : undefined}
-          >
-            {!isCollapsed && <span style={{ flex: 1 }}>{item.label}</span>}
-          </button>
-        </div>
-      );
-    });
-  };
+      })}
+    </div>
+  );
 
   return (
     <aside
-      style={{
-        position: "relative",
-        borderRight: isDark ? "1px solid #334155" : "1px solid rgba(0,0,0,0.08)",
-        background: isDark ? "#0b1324" : "#ffffff",
-        minWidth: isCollapsed ? 64 : 248,
-        width: isCollapsed ? 64 : 248,
-      }}
+      className={[
+        'fixed left-4 top-4 z-40 flex flex-col overflow-hidden border border-slate-200 bg-white/80 backdrop-blur shadow-lg',
+        'rounded-2xl',
+        isCollapsed ? 'w-[72px]' : 'w-[280px]',
+        'h-[calc(100vh-2rem)]'
+      ].join(' ')}
     >
-      {/* Top bar with burger & logo */}
+      {/* soft glow background */}
       <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 opacity-60"
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: isCollapsed ? "center" : "space-between",
-          padding: "12px 12px",
+          background:
+            'radial-gradient(40% 120% at 10% 10%, rgba(96,165,250,0.15), transparent 60%), radial-gradient(40% 120% at 90% 30%, rgba(34,197,94,0.12), transparent 60%), radial-gradient(40% 120% at 50% 80%, rgba(244,114,182,0.12), transparent 60%)'
         }}
-      >
+      />
+
+      <div className={['flex items-center', isCollapsed ? 'justify-center' : 'justify-between', 'px-3 py-3'].join(' ')}>
         <button
           aria-label="Toggle navigation"
           onClick={() => onToggleCollapsed?.(!isCollapsed)}
-          style={{
-            height: 36,
-            width: 36,
-            borderRadius: 8,
-            border: isDark ? "1px solid #334155" : "1px solid rgba(0,0,0,0.08)",
-            background: isDark ? "#1f2937" : "#ffffff",
-            color: "inherit",
-            cursor: "pointer",
-          }}
+          className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
         >
           ☰
         </button>
-        {!isCollapsed && <div style={{ marginLeft: 8, flex: 1 }}>{logo}</div>}
-        {/* Mobile menu button (separate state) */}
+        {!isCollapsed && <div className="ml-2 flex-1 truncate">{logo}</div>}
         <button
           aria-label="Open navigation"
           onClick={() => setMobileOpen(true)}
-          style={{
-            height: 36,
-            width: 36,
-            borderRadius: 8,
-            border: isDark ? "1px solid #334155" : "1px solid rgba(0,0,0,0.08)",
-            background: isDark ? "#1f2937" : "#ffffff",
-            color: "inherit",
-            cursor: "pointer",
-            display: "none",
-          }}
+          className="hidden h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
         >
           ☰
         </button>
       </div>
 
-      <div style={{ padding: "8px 10px" }}>{renderSectioned(items)}</div>
+      <div className="scrollbar-thin scrollbar-thumb-slate-200/80 scrollbar-track-transparent flex-1 overflow-auto px-0 pb-3 pt-1">
+        {renderSectioned(items)}
+      </div>
 
       {mobileOpen && (
         <div
           role="dialog"
           onClick={() => setMobileOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.3)",
-            display: "grid",
-            gridTemplateColumns: "280px 1fr",
-          }}
+          className="fixed inset-0 grid grid-cols-[280px_1fr] bg-black/30"
         >
-          <div style={{ background: isDark ? "#111827" : "#ffffff", padding: 12 }}>
-            {renderSectioned(items)}
-          </div>
+          <div className="bg-white p-3">{renderSectioned(items)}</div>
           <div />
         </div>
       )}

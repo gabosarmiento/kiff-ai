@@ -101,7 +101,7 @@ Generate a NEW app idea:"""
         # Verify knowledge base has content
         try:
             # Test if knowledge base is searchable (indicates it's properly loaded)
-            test_search = agno_app_generator.knowledge_base.search("test", num_results=1)
+            test_search = agno_app_generator.knowledge_base.search("test")
             logger.info(f"📊 Knowledge base is ready with searchable content")
         except Exception as e:
             logger.warning(f"⚠️ Knowledge base search test failed: {e}")

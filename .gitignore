@@ -133,3 +133,11 @@ playwright/.cache/
 *secret*
 *password*
 config/secrets/
+
+# Exceptions
+# Allow Docker ignore file for backend-lite-v2 service
+!backend-lite-v2/.dockerignore
+
+# Private local env files (prevent committing secrets)
+private/*.env
+private/aws.env

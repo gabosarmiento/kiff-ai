@@ -1,23 +1,17 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta } from '@storybook/react'
 import { SandboxPage } from './SandboxPage'
 import { PageContainer } from './PageContainer'
 
 const meta: Meta<typeof SandboxPage> = {
-  title: 'Pages/Sandbox',
+  title: 'Kiffs/Sandbox',
   component: SandboxPage,
   parameters: {
     layout: 'fullscreen',
+    // This story is intentionally disabled; use Kiffs/Flow instead.
+    docs: { disable: true },
   },
 }
 
 export default meta
 
-type Story = StoryObj<typeof meta>
-
-export const Default: Story = {
-  render: () => (
-    <PageContainer fullscreen>
-      <SandboxPage />
-    </PageContainer>
-  ),
-}
+// No named story exports on purpose to hide this entry from the sidebar.

@@ -4,7 +4,7 @@ import { PageContainer } from './PageContainer'
 import './APIExtractionTesterPage.stories.css'
 
 const meta: Meta<typeof APIExtractionTesterPage> = {
-  title: 'Pages/API Extraction Tester',
+  title: 'API Extraction Tester/Default',
   component: APIExtractionTesterPage,
   parameters: {
     layout: 'fullscreen',
