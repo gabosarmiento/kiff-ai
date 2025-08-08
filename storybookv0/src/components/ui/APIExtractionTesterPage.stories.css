@@ -1,0 +1,17 @@
+/* Scoped background fix for Storybook preview of API Extraction Tester only.
+   This does NOT alter the global theme; it only affects the wrapper class used in the story. */
+
+.storybook-api-extraction-tester {
+  /* Ensure the preview background follows theme properly */
+  background-color: #ffffff !important; /* light */
+}
+
+/* Tailwind dark mode usually toggles a .dark class on html/body. Honor it here. */
+.dark .storybook-api-extraction-tester {
+  background-color: #0b1220 !important; /* close to slate-950 */
+}
+
+/* Ensure full-bleed fill in the preview area */
+.storybook-api-extraction-tester {
+  min-height: 100vh;
+}

@@ -1,0 +1,30 @@
+# VCS
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# OS
+.DS_Store
+
+# Tests/docs/examples not needed in image
+.tests/
+tests/
+docs/
+examples/
+
+# Local env files
+.env
+.env.*
+
+# Misc
+*.log
+.tmp/

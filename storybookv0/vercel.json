@@ -2,5 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "framework": null,
-  "ignoreCommand": "echo Monorepo root: no deploy"
+  "buildCommand": "npx storybook build",
+  "outputDirectory": "storybook-static"
 }

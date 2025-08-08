@@ -136,6 +136,78 @@ kiff-ai/
 3. Deploy both frontend and backend automatically
 4. See `backend/VERCEL_DEPLOYMENT.md` for detailed instructions
 
+## Monorepo Vercel Setup (frontend-lite + storybookv0)
+
+This repo uses npm workspaces and multiple apps. Deploy each app as its own Vercel Project:
+
+- __frontend-lite__ (Next.js)
+  - Project root: `frontend-lite`
+  - Build/Install: auto-detected by Vercel
+  - Important: `next.config.js` already has `transpilePackages: ['@kiff/ui']`
+  - Env vars (Project Settings → Environment Variables):
+    - `NEXT_PUBLIC_API_BASE_URL = https://your-backend.example.com`
+    - `NEXT_PUBLIC_TENANT_ID = <your-tenant-id>`
+    - `NEXT_PUBLIC_USE_MOCKS = false`
+
+- __storybookv0__ (Static Storybook, Vite)
+  - Project root: `storybookv0`
+  - Build command: `npm run build` (uses `storybook build`)
+  - Output directory: `storybook-static`
+  - Env vars:
+    - `VITE_API_BASE_URL = https://your-backend.example.com`
+    - `VITE_TENANT_ID = <your-tenant-id>`
+    - `VITE_USE_MOCKS = false`
+
+- __Backend__ (`backend-lite-v2` FastAPI)
+  - Host separately (e.g., AWS App Runner, Fly.io, Render)
+  - CORS: set `ALLOWED_ORIGINS` to include both Vercel domains, comma-separated
+    - Example: `ALLOWED_ORIGINS=https://<frontend-lite>.vercel.app,https://<storybook>.vercel.app`
+
+### Tenant Header Requirement
+
+All frontend requests must include the exact header `X-Tenant-ID`. This is enforced by middleware in `backend-lite-v2`.
+
+- Next.js helper: `frontend-lite/src/lib/api.ts` ensures the header using `getTenantId()` and `NEXT_PUBLIC_TENANT_ID` fallback.
+- Storybook helper: `storybookv0/src/lib/api.ts` ensures the header using `VITE_TENANT_ID`.
+
+If you see "Tenant not specified", verify env vars and that the header is being sent.
+
+### Root Vercel Config
+
+The monorepo root `vercel.json` is intentionally a no-op to avoid conflicts. Configure deploys per project as above.
+
+## Local Development (3 processes)
+
+Run backend, frontend-lite (Next.js), and Storybook in parallel:
+
+```bash
+# 1) Backend (FastAPI)
+cd backend-lite-v2
+export ALLOWED_ORIGINS="http://localhost:3000,http://localhost:3001"
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 2) Frontend Lite (Next.js)
+cd frontend-lite
+export NEXT_PUBLIC_API_BASE_URL="http://localhost:8000"
+export NEXT_PUBLIC_TENANT_ID="4485db48-71b7-47b0-8128-c6dca5be352d"
+export NEXT_PUBLIC_USE_MOCKS="false"
+npm install
+npm run dev    # http://localhost:3000
+
+# 3) Storybook (Vite Storybook)
+cd storybookv0
+export VITE_API_BASE_URL="http://localhost:8000"
+export VITE_TENANT_ID="4485db48-71b7-47b0-8128-c6dca5be352d"
+export VITE_USE_MOCKS="false"
+npm install
+npm run storybook   # http://localhost:3001
+```
+
+Notes:
+- __Tenant header__: The helpers in `frontend-lite/src/lib/api.ts` and `storybookv0/src/lib/api.ts` always send `X-Tenant-ID`.
+- __CORS__: Ensure `ALLOWED_ORIGINS` includes `http://localhost:3000` and `http://localhost:3001`.
+- __Shared UI__: `@kiff/ui` is linked via workspaces; edits in `packages/ui/src` hot-reload in both apps.
+
 ## 📖 Comprehensive Documentation
 
 ### 🚀 **Getting Started**

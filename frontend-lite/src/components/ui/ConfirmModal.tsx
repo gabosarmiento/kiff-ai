@@ -1,0 +1,45 @@
+"use client";
+import React from "react";
+
+type Props = {
+  open: boolean;
+  title?: string;
+  message?: string;
+  confirmText?: string;
+  cancelText?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmMatch?: string; // when provided, user must type this exact text to enable confirm
+  confirmPlaceholder?: string;
+};
+
+export function ConfirmModal({ open, title = "Are you sure?", message, confirmText = "Confirm", cancelText = "Cancel", onConfirm, onCancel, confirmMatch, confirmPlaceholder, }: Props) {
+  const [value, setValue] = React.useState("");
+  const matchOk = confirmMatch ? value === confirmMatch : true;
+  if (!open) return null;
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal">
+        <div className="modal-header">{title}</div>
+        <div className="modal-body">
+          {message ? <div style={{ marginBottom: confirmMatch ? 10 : 0 }}>{message}</div> : null}
+          {confirmMatch ? (
+            <div className="field">
+              <label className="label">Type to confirm</label>
+              <input
+                className="input"
+                placeholder={confirmPlaceholder || confirmMatch}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </div>
+          ) : null}
+        </div>
+        <div className="modal-actions">
+          <button className="button" onClick={onCancel}>{cancelText}</button>
+          <button className="button danger" onClick={onConfirm} disabled={!matchOk}>{confirmText}</button>
+        </div>
+      </div>
+    </div>
+  );
+}

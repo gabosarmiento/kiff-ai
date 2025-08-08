@@ -1,0 +1,35 @@
+{
+  "root": true,
+  "extends": ["next/core-web-vitals"],
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "ignorePatterns": [
+    "next.config.js",
+    "postcss.config.js",
+    "tailwind.config.js"
+  ],
+  "overrides": [
+    {
+      "files": ["next.config.js", "postcss.config.js", "tailwind.config.js"],
+      "env": { "node": true },
+      "parser": "espree",
+      "rules": {
+        "@next/next/no-html-link-for-pages": "off"
+      }
+    }
+  ],
+  "rules": {
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "@next/next/no-html-link-for-pages": "off"
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "project": "./tsconfig.json"
+      }
+    }
+  }
+}

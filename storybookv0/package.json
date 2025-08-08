@@ -1,0 +1,43 @@
+{
+  "name": "kiff-storybookv0",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "storybook": {
+    "framework": "@storybook/react-vite",
+    "stories": [
+      "src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+      "src/**/*.mdx"
+    ]
+  },
+  "scripts": {
+    "storybook": "storybook dev -p 3001 --host 0.0.0.0",
+    "build": "storybook build"
+  },
+  "devDependencies": {
+    "@rollup/rollup-darwin-x64": "^4.46.2",
+    "@storybook/addon-essentials": "^8.1.10",
+    "@storybook/addon-interactions": "^8.1.10",
+    "@storybook/react": "^8.1.10",
+    "@storybook/react-vite": "^8.1.10",
+    "@types/node": "^20.12.12",
+    "autoprefixer": "^10.4.19",
+    "esbuild": "^0.25.8",
+    "postcss": "^8.4.39",
+    "rollup": "^4.0.0",
+    "tailwindcss": "^3.4.7",
+    "typescript": "^5.4.5",
+    "vite": "^5.4.0",
+    "vite-tsconfig-paths": "^4.3.1"
+  },
+  "dependencies": {
+    "@kiff/ui": "0.1.0",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.441.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^6.26.2",
+    "tailwind-merge": "^2.2.1"
+  }
+}
