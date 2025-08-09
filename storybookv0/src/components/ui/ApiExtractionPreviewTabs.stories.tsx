@@ -39,7 +39,12 @@ const docs: ExtractedDocument[] = [
 export const Default: Story = {
   render: () => (
     <div className="h-screen w-full bg-slate-50 p-6">
-      <ApiExtractionPreviewTabs docs={docs} />
+      <ApiExtractionPreviewTabs
+        docs={docs}
+        stats={{ durationMs: 1840, totalTokens: 742, totalChunks: docs.length, costUSD: 0.0021 }}
+        title="API Extraction Tester"
+        onBack={() => window.history.back()}
+      />
     </div>
   )
 }

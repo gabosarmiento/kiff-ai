@@ -90,15 +90,6 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
         'h-[calc(100vh-2rem)]'
       ].join(' ')}
     >
-      {/* soft glow background */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 opacity-60"
-        style={{
-          background:
-            'radial-gradient(40% 120% at 10% 10%, rgba(96,165,250,0.15), transparent 60%), radial-gradient(40% 120% at 90% 30%, rgba(34,197,94,0.12), transparent 60%), radial-gradient(40% 120% at 50% 80%, rgba(244,114,182,0.12), transparent 60%)'
-        }}
-      />
 
       <div className={['flex items-center', isCollapsed ? 'justify-center' : 'justify-between', 'px-3 py-3'].join(' ')}>
         <button

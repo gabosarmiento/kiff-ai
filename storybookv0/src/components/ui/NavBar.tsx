@@ -27,11 +27,7 @@ export const NavBar: React.FC<NavBarProps> = ({ logo, items = [], onSelect, righ
   const CtaButton = cta ? (
     <button
       onClick={cta.onClick}
-      className="relative inline-flex items-center justify-center rounded-full px-4 py-1.5 text-sm font-medium text-slate-900"
-      style={{
-        background: 'linear-gradient(#fff,#fff) padding-box, linear-gradient(90deg,#60a5fa,#22c55e,#f472b6) border-box',
-        border: '1px solid transparent'
-      }}
+      className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
     >
       {cta.label}
     </button>
@@ -40,14 +36,6 @@ export const NavBar: React.FC<NavBarProps> = ({ logo, items = [], onSelect, righ
   return (
     <header className={[sticky ? 'fixed top-4 left-1/2 z-40 -translate-x-1/2' : 'fixed top-4 left-1/2 -translate-x-1/2 z-40', 'mx-auto'].join(' ')}>
       <div className="relative flex items-center gap-4 rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 shadow-lg backdrop-blur">
-        {/* subtle glow */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -inset-1 -z-10 rounded-2xl opacity-60 blur-lg"
-          style={{
-            background: 'radial-gradient(40% 120% at 10% 50%, rgba(96,165,250,0.18), transparent 60%), radial-gradient(40% 120% at 60% 50%, rgba(34,197,94,0.16), transparent 60%), radial-gradient(40% 120% at 100% 50%, rgba(244,114,182,0.16), transparent 60%)'
-          }}
-        />
 
         {/* Left / Logo */}
         <div className="pl-1 pr-2">
@@ -73,10 +61,9 @@ export const NavBar: React.FC<NavBarProps> = ({ logo, items = [], onSelect, righ
                     </span>
                     <span className="pointer-events-none absolute inset-x-3 -bottom-0.5 h-0.5 overflow-hidden rounded-full">
                       <span className={[
-                        'block h-full w-full scale-x-0 transform rounded-full transition-transform duration-300 ease-out',
+                        'block h-full w-full scale-x-0 transform rounded-full bg-slate-300 transition-transform duration-300 ease-out',
                         item.active ? 'scale-x-100' : 'group-hover:scale-x-100'
-                      ].join(' ')}
-                      style={{ background: 'linear-gradient(90deg, #60a5fa 0%, #22c55e 50%, #f472b6 100%)' }} />
+                      ].join(' ')} />
                     </span>
                   </button>
                 </li>

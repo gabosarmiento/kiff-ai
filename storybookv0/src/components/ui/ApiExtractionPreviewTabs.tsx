@@ -15,13 +15,44 @@ export type ApiExtractionPreviewTabsProps = {
   docs: ExtractedDocument[]
   initialDocId?: string
   initialView?: PreviewView
+  stats?: {
+    durationMs: number
+    totalTokens: number
+    totalChunks: number
+    costUSD?: number
+  }
+  title?: string
+  onBack?: () => void
 }
 
-export const ApiExtractionPreviewTabs: React.FC<ApiExtractionPreviewTabsProps> = ({ docs, initialDocId, initialView = 'text' }) => {
+export const ApiExtractionPreviewTabs: React.FC<ApiExtractionPreviewTabsProps> = ({ docs, initialDocId, initialView = 'text', stats, title = 'API Extraction Tester', onBack }) => {
   const [activeDoc, setActiveDoc] = React.useState<string>(initialDocId || (docs[0]?.id ?? ''))
   const [view, setView] = React.useState<PreviewView>(initialView)
 
   const doc = React.useMemo(() => docs.find(d => d.id === activeDoc) || docs[0], [docs, activeDoc])
+
+  // Derive simple stats if not provided (storybook-only heuristic)
+  const derived = React.useMemo(() => {
+    if (stats) return stats
+    const choose = (d: ExtractedDocument) => (view === 'text' && d.text) || (view === 'markdown' && d.markdown) || (view === 'raw' && d.raw) || d.text || d.markdown || d.raw || ''
+    const contents = docs.map(choose)
+    const totalChars = contents.reduce((acc, s) => acc + s.length, 0)
+    const totalTokens = Math.max(1, Math.round(totalChars / 4)) // rough char->token estimate
+    const totalChunks = docs.length
+    const durationMs = 1200 + totalChunks * 150 // playful heuristic
+    return { durationMs, totalTokens, totalChunks } as Required<NonNullable<ApiExtractionPreviewTabsProps['stats']>>
+  }, [docs, view, stats])
+
+  // Per-view counts used in tab labels (proxy for chunk counts in SB demo)
+  const viewCounts = React.useMemo(() => {
+    const has = (k: PreviewView, d: ExtractedDocument) =>
+      (k === 'text' && !!d.text) || (k === 'markdown' && !!d.markdown) || (k === 'raw' && !!d.raw)
+    return {
+      text: docs.filter(d => has('text', d)).length,
+      markdown: docs.filter(d => has('markdown', d)).length,
+      raw: docs.filter(d => has('raw', d)).length,
+    }
+  }, [docs])
 
   const renderContent = () => {
     if (!doc) return null
@@ -58,29 +89,34 @@ export const ApiExtractionPreviewTabs: React.FC<ApiExtractionPreviewTabsProps> =
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-lg backdrop-blur">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -inset-1 -z-10 rounded-2xl opacity-50 blur-xl"
-          style={{
-            background:
-              'radial-gradient(40% 120% at 10% 20%, rgba(96,165,250,0.18), transparent 60%), radial-gradient(40% 120% at 60% 40%, rgba(34,197,94,0.16), transparent 60%), radial-gradient(40% 120% at 100% 60%, rgba(244,114,182,0.16), transparent 60%)',
-          }}
-        />
-
-        {/* Top: document floating pill tabs (scrollable) */}
+    <div className="h-screen w-full p-4 md:p-6">
+      <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {/* Header */}
+        <div className="mb-3 flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+              aria-label="Go back"
+            >
+              ← Back
+            </button>
+          )}
+          <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
+        </div>
+        {/* Top: document tabs (scrollable) */}
         <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
           {docs.map(d => (
             <button
               key={d.id}
               onClick={() => setActiveDoc(d.id)}
-              className={[
-                'whitespace-nowrap rounded-full border px-3 py-1.5 text-sm shadow-sm transition',
-                activeDoc === d.id
-                  ? 'border-blue-200 bg-blue-50 text-slate-900'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              ].join(' ')}
+              className={
+                [
+                  'whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition',
+                  activeDoc === d.id
+                    ? 'border-slate-300 bg-slate-100 text-slate-900'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                ].join(' ')}
               title={d.title}
             >
               {d.title}
@@ -88,25 +124,46 @@ export const ApiExtractionPreviewTabs: React.FC<ApiExtractionPreviewTabsProps> =
           ))}
         </div>
 
-        {/* Secondary pill view switcher */}
+        {/* View switcher */}
         <div className="mb-4 flex items-center gap-2">
           {(['text','markdown','raw'] as PreviewView[]).map(v => (
             <button
               key={v}
               onClick={() => setView(v)}
-              className={[
-                'rounded-full px-3 py-1.5 text-xs font-medium transition',
-                view === v ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              ].join(' ')}
+              className={
+                [
+                  'rounded-full px-3 py-1.5 text-xs font-medium transition',
+                  view === v ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                ].join(' ')}
             >
-              {v.toUpperCase()}
+              {v.toUpperCase()} {viewCounts[v] ? `(${viewCounts[v]} Chunks)` : ''}
             </button>
           ))}
         </div>
 
-        {/* Full-size document area */}
-        <div className="min-h-[60vh] rounded-xl border border-slate-200 bg-white/60 p-4">
-          {renderContent()}
+        {/* Content + Stats */}
+        <div className="min-h-0 flex-1">
+          <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
+            <div className="min-h-0 overflow-auto rounded-lg border border-slate-200 bg-white p-4">
+              {renderContent()}
+            </div>
+            <aside className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3 text-sm font-semibold text-slate-900">Run stats</div>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between"><span className="text-slate-500">Duration</span><span className="font-medium text-slate-900" aria-label="duration">{Math.round(derived.durationMs)} ms</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-500">Total tokens</span><span className="font-medium text-slate-900" aria-label="tokens">{derived.totalTokens.toLocaleString()}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-500">Chunks</span><span className="font-medium text-slate-900" aria-label="chunks">{derived.totalChunks}</span></div>
+                {stats?.costUSD !== undefined && (
+                  <div className="flex items-center justify-between"><span className="text-slate-500">Est. cost</span><span className="font-medium text-slate-900" aria-label="cost">${stats.costUSD.toFixed(4)}</span></div>
+                )}
+              </div>
+              <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                <div className="mb-1 font-medium text-slate-700">Context</div>
+                <div>View: <span className="font-semibold">{view.toUpperCase()}</span></div>
+                <div className="truncate" title={doc?.title}>Doc: <span className="font-semibold">{doc?.title}</span></div>
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
     </div>
