@@ -31,11 +31,11 @@ export async function getPreview(jobId: string): Promise<PreviewResponse> {
 
 export async function deleteAccount(): Promise<{ ok: true }>{
   if (USE_MOCKS) return deleteAccountMock();
-  return request<{ ok: true }>(`/account`, { method: "DELETE" });
+  return request<{ ok: true }>(`/api/auth/delete`, { method: "DELETE" });
 }
 
 // Auth types
-export type Profile = { email: string; role: "admin" | "user"; tenant_id: string };
+export type Profile = { email: string; role: "admin" | "user"; tenant_id: string; has_password: boolean };
 export type LoginBody = { email: string; password: string; tenant_id?: string };
 export type SignupBody = { email: string; password: string; role?: "admin" | "user"; tenant_id?: string };
 
@@ -54,4 +54,11 @@ export async function authLogout(): Promise<{ ok: boolean }>{
 
 export async function authMe(): Promise<Profile> {
   return request<Profile>(`/api/auth/me`);
+}
+
+export async function changePassword(current_password: string, new_password: string): Promise<{ ok: true }>{
+  return request<{ ok: true }>(`/api/auth/password`, {
+    method: "POST",
+    body: JSON.stringify({ current_password, new_password }),
+  });
 }

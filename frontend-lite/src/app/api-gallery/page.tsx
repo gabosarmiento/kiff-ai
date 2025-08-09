@@ -1,7 +1,8 @@
 "use client";
 import { Navbar } from "../../components/layout/Navbar";
-import { Sidebar } from "../../components/layout/Sidebar";
 import React from "react";
+import { AppSidebar } from "../../components/navigation/AppSidebar";
+import { useLayoutState } from "../../components/layout/LayoutState";
 
 const CATEGORIES = [
   "AI/ML",
@@ -88,6 +89,8 @@ function ProviderCard(props: {
 export default function ApiGalleryPage() {
   const [query, setQuery] = React.useState("");
   const [activeCats, setActiveCats] = React.useState<string[]>([]);
+  const { collapsed } = useLayoutState();
+  const leftWidth = collapsed ? 72 : 280;
 
   const toggleCat = (c: string) => {
     setActiveCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -96,11 +99,8 @@ export default function ApiGalleryPage() {
   return (
     <div className="app-shell">
       <Navbar />
-      <div className="dashboard-grid">
-        <aside className="sidebar pane">
-          <Sidebar />
-        </aside>
-        <main className="pane" style={{ padding: 16, maxWidth: 1100 }}>
+      <AppSidebar />
+      <main className="pane" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 22 }}>API Gallery</h1>
@@ -166,8 +166,7 @@ export default function ApiGalleryPage() {
               ]}
             />
           </div>
-        </main>
-      </div>
+      </main>
     </div>
   );
 }

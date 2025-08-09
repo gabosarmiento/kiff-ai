@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  kiff-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.local-clean
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=development
+      # Use local SQLite for simple testing
+      - DATABASE_URL=sqlite:///./local_test.db
+    volumes:
+      # Mount generated content separately to avoid pollution
+      - ./generated_output:/app/generated_apps
+      - ./tmp_data:/app/tmp
+      - ./local_lancedb:/app/lancedb_data
+      - ./local_knowledge:/app/knowledge_db
+      # Mount source code for development (optional)
+      - ./backend/app:/app:ro  # read-only to prevent pollution
+    depends_on:
+      - redis
+    networks:
+      - kiff-local
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - kiff-local
+
+  # Optional: PostgreSQL for full testing
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=kiff_local
+      - POSTGRES_USER=kiff
+      - POSTGRES_PASSWORD=kiff123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kiff-local
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  kiff-local:
+    driver: bridge

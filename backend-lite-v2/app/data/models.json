@@ -1,0 +1,38 @@
+[
+  {
+    "id": "llama-3.1-8b-instant",
+    "name": "Llama 3.1 8B Instant",
+    "provider": "groq",
+    "context_window": 128000,
+    "speed_tps": 840,
+    "price_per_million_input": 50.0,
+    "price_per_million_output": 80.0,
+    "price_per_1k_input": 0.05,
+    "price_per_1k_output": 0.08,
+    "active": true
+  },
+  {
+    "id": "kimi-k2-1t-128k",
+    "name": "Kimi K2 1T 128k",
+    "provider": "kimi",
+    "context_window": 128000,
+    "speed_tps": 200,
+    "price_per_million_input": 1000.0,
+    "price_per_million_output": 3000.0,
+    "price_per_1k_input": 1.0,
+    "price_per_1k_output": 3.0,
+    "active": true
+  },
+  {
+    "id": "llama-3.3-70b-versatile",
+    "name": "Llama 3.3 70B Versatile",
+    "provider": "groq",
+    "context_window": 128000,
+    "speed_tps": 394,
+    "price_per_million_input": 590.0,
+    "price_per_million_output": 790.0,
+    "price_per_1k_input": 0.59,
+    "price_per_1k_output": 0.79,
+    "active": true
+  }
+]

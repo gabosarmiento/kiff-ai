@@ -1,0 +1,42 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies (including build tools for some packages)
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Copy poetry files first for dependency caching
+COPY pyproject.toml poetry.lock* ./
+
+# Install Poetry and use it for dependencies (matches your exact versions)
+RUN pip install --no-cache-dir poetry==1.8.3 && \
+    poetry config virtualenvs.create false && \
+    poetry install --only=main --no-root
+
+# Copy only the backend app code (clean, no generated files)
+COPY backend/app /app
+
+# Create directories for generated content (will be mounted as volumes)
+RUN mkdir -p /app/generated_apps /app/tmp /app/lancedb_data /app/knowledge_db
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# For local development, use lightweight defaults
+ENV DEBUG=true
+ENV LOG_LEVEL=INFO
+ENV ENVIRONMENT=development
+
+EXPOSE 8000
+
+# Health check using the correct path
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Use development server with reload for local testing
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

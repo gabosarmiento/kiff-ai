@@ -1,0 +1,62 @@
+[
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "description": "Leading AI company providing GPT models and tools.",
+    "website": "https://openai.com",
+    "icon": "🧠",
+    "categories": ["AI/ML", "Text Generation", "Conversation"],
+    "docs_url": "https://platform.openai.com/docs",
+    "sitemap_url": "https://platform.openai.com/sitemap.xml",
+    "url_filters": ["https://platform.openai.com/docs"],
+    "status": "active",
+    "apis_count": 3,
+    "created_at": null,
+    "updated_at": null
+  },
+  {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "description": "AI safety company creating helpful, harmless, and honest AI.",
+    "website": "https://anthropic.com",
+    "icon": "✨",
+    "categories": ["AI/ML", "Conversation"],
+    "docs_url": "https://docs.anthropic.com/claude",
+    "sitemap_url": "https://docs.anthropic.com/sitemap.xml",
+    "url_filters": ["https://docs.anthropic.com"],
+    "status": "active",
+    "apis_count": 2,
+    "created_at": null,
+    "updated_at": null
+  },
+  {
+    "id": "stripe",
+    "name": "Stripe",
+    "description": "Complete payment infrastructure for internet businesses.",
+    "website": "https://stripe.com",
+    "icon": "💳",
+    "categories": ["Payments", "Finance"],
+    "docs_url": "https://docs.stripe.com",
+    "sitemap_url": "https://docs.stripe.com/sitemap.xml",
+    "url_filters": ["https://docs.stripe.com"],
+    "status": "active",
+    "apis_count": 3,
+    "created_at": null,
+    "updated_at": null
+  },
+  {
+    "id": "google-cloud",
+    "name": "Google Cloud",
+    "description": "Comprehensive cloud platform with AI, data, and infra.",
+    "website": "https://cloud.google.com",
+    "icon": "🟦",
+    "categories": ["AI/ML", "Data"],
+    "docs_url": "https://cloud.google.com/docs",
+    "sitemap_url": "https://cloud.google.com/sitemap.xml",
+    "url_filters": ["https://cloud.google.com"],
+    "status": "active",
+    "apis_count": 2,
+    "created_at": null,
+    "updated_at": null
+  }
+]

@@ -1,21 +1,18 @@
 "use client";
+import React from "react";
 import Link from "next/link";
-import { useTheme } from "../theme/ThemeProvider";
-import { getTenantId, setTenantId } from "../../lib/tenant";
-import { useEffect, useState } from "react";
-import { useLayoutState } from "./LayoutState";
+import { useRouter } from "next/navigation";
 import { authMe, authLogout, type Profile } from "../../lib/apiClient";
 
+// Floating pill navbar with subtle glow, Storybook style
 export function Navbar() {
-  const { collapsed, toggleCollapsed } = useLayoutState();
-  const { theme, toggle } = useTheme();
-  const [tenant, setTenant] = useState("");
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const router = useRouter();
+  const [profile, setProfile] = React.useState<Profile | null>(null);
+  const [loadingProfile, setLoadingProfile] = React.useState(true);
+  const [open, setOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    setTenant(getTenantId());
-    // Attempt to load session profile
+  React.useEffect(() => {
     (async () => {
       try {
         const me = await authMe();
@@ -28,69 +25,121 @@ export function Navbar() {
     })();
   }, []);
 
-  return (
-    <header className="topnav" style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--bg)" }}>
-      <button
-        aria-label="Toggle sidebar"
-        onClick={toggleCollapsed}
-        className="button"
-        style={{ padding: "6px 10px", background: "transparent", color: "inherit", border: "1px solid var(--border)" }}
-      >
-        ☰
-      </button>
-      <Link href="/" style={{ textDecoration: "none", color: "inherit", fontWeight: 700, marginLeft: 8 }}>Kiff AI</Link>
-      <nav style={{ display: "flex", gap: 14, marginLeft: 16 }}>
-        <Link href="/docs" style={{ textDecoration: "none", color: "inherit" }}>Docs</Link>
-        <Link href="/account" style={{ textDecoration: "none", color: "inherit" }}>Account ▾</Link>
-        {loadingProfile ? null : profile ? (
-          <>
-            {profile.role === "admin" ? (
-              <Link href="/admin" style={{ textDecoration: "none", color: "inherit" }}>Admin</Link>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Link href="/login" style={{ textDecoration: "none", color: "inherit" }}>Login</Link>
-            <Link href="/signup" style={{ textDecoration: "none", color: "inherit" }}>Signup</Link>
-          </>
-        )}
-      </nav>
+  // Close on click/tap outside or Escape
+  React.useEffect(() => {
+    const handlePointer = (e: MouseEvent | TouchEvent) => {
+      const el = menuRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("touchstart", handlePointer, { passive: true });
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("touchstart", handlePointer as any);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, []);
 
-      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-        <span className="label">Tenant</span>
-        <input
-          className="input"
-          style={{ width: 260 }}
-          value={tenant}
-          onChange={(e) => setTenant(e.target.value)}
-          onBlur={() => setTenantId(tenant)}
-          placeholder="Tenant ID"
-        />
-        <button className="button" onClick={toggle} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-          {theme === "dark" ? "Light" : "Dark"}
-        </button>
-        {!loadingProfile && profile ? (
-          <>
-            <span className="label" title={profile.email}>
-              {profile.role === "admin" ? "Admin" : "User"}
-            </span>
-            <button
-              className="button"
-              onClick={async () => {
-                try {
-                  await authLogout();
-                } finally {
-                  setProfile(null);
-                  // Optional hard refresh so cookies/state are in sync
-                  if (typeof window !== "undefined") window.location.reload();
-                }
-              }}
+  return (
+    <>
+      <header className="fixed left-1/2 top-4 z-40 -translate-x-1/2">
+        <div className="relative flex items-center rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 shadow-lg backdrop-blur">
+
+          {/* Left / Logo */}
+          <div className="pl-1 pr-2">
+            <Link href="/" className="text-sm font-semibold text-slate-900" style={{ textDecoration: "none" }}>
+              Kiff
+            </Link>
+          </div>
+
+          {/* Right actions: profile only. The expanding pill is in normal flow so the container grows together */}
+          <div
+            ref={menuRef}
+            className="ml-auto flex items-center"
+            onBlur={(e) => {
+              // If focus leaves the menu container entirely, close it
+              const el = menuRef.current;
+              const next = e.relatedTarget as Node | null;
+              if (el && (!next || !el.contains(next))) {
+                setOpen(false);
+              }
+            }}
+          >
+            {/* Expanding segment to the left of the icon */}
+            <div
+              className={[
+                "flex h-8 items-center overflow-hidden rounded-full border border-slate-200 bg-white pl-2 pr-2 text-sm text-slate-700 shadow-sm transition-[width,opacity] duration-200",
+                open ? "mr-2 w-[220px] opacity-100" : "w-0 opacity-0",
+              ].join(" ")}
+              style={{ willChange: "width, opacity" }}
             >
-              Logout
+              {loadingProfile ? null : profile ? (
+                <>
+                  <button
+                    onClick={() => router.push("/account")}
+                    className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50"
+                  >
+                    Account
+                  </button>
+                  <span className="mx-2 h-4 w-px bg-slate-200" />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await authLogout();
+                      } finally {
+                        if (typeof window !== "undefined") window.location.reload();
+                      }
+                    }}
+                    className="inline-flex items-center rounded-full px-2 py-1 text-rose-600 hover:bg-rose-50"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => router.push("/login")} className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50">
+                    Login
+                  </button>
+                  <span className="mx-2 h-4 w-px bg-slate-200" />
+                  <button onClick={() => router.push("/signup")} className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50">
+                    Signup
+                  </button>
+                </>
+              )}
+            </div>
+            {/* Profile icon stays at far right */}
+            <button
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+              onClick={() => setOpen((v) => !v)}
+              aria-label="Profile"
+            >
+              {/* Inline user icon to avoid cross-package JSX typing issues */}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
             </button>
-          </>
-        ) : null}
-      </div>
-    </header>
+          </div>
+        </div>
+      </header>
+      {/* Spacer to push page content below the floating nav */}
+      <div aria-hidden className="h-[72px] w-full" />
+    </>
   );
 }

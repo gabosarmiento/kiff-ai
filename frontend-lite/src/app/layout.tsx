@@ -9,6 +9,7 @@ import { ThemeProvider } from '../components/theme/ThemeProvider';
 import { LayoutStateProvider } from '../components/layout/LayoutState';
 import { AuthProvider } from '../contexts/AuthContext';
 import ToasterClient from '../components/ToasterClient';
+import AppFrame from '@/components/layout/AppFrame';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AuthProvider>
             <LayoutStateProvider>
-              {children}
+              <AppFrame>{children}</AppFrame>
             </LayoutStateProvider>
             <ToasterClient />
           </AuthProvider>

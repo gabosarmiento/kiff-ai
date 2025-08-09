@@ -8,6 +8,7 @@ import os
 from .middleware.tenant import TenantMiddleware
 from .routes import generate, status, preview, account
 from .routes import auth
+from .routes import providers, sitemap, extract, kb, kiffs, apis, models, users
 
 
 def get_allowed_origins() -> list[str]:
@@ -39,6 +40,14 @@ app.include_router(generate.router)
 app.include_router(status.router)
 app.include_router(preview.router)
 app.include_router(account.router)
+app.include_router(apis.router)
+app.include_router(providers.router)
+app.include_router(sitemap.router)
+app.include_router(extract.router)
+app.include_router(kb.router)
+app.include_router(kiffs.router)
+app.include_router(models.router)
+app.include_router(users.router)
 
 
 @app.get("/")
