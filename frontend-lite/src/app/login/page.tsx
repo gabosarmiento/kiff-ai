@@ -1,5 +1,5 @@
-import { LoginPage } from "../../components/auth/LoginPage";
+import NextAuthLoginPage from "../../components/auth/NextAuthLoginPage";
 
 export default function LoginRoute() {
-  return <LoginPage />;
+  return <NextAuthLoginPage />;
 }

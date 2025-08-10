@@ -14,7 +14,7 @@ export default function LogoutPage() {
         // ignore
       } finally {
         // Hard redirect to clear any client state
-        router.replace("/auth/login");
+        router.replace("/login");
         if (typeof window !== "undefined") window.location.reload();
       }
     })();

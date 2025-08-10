@@ -1,4 +1,14 @@
 import React from "react";
+import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
+
+// Icon wrapper to avoid JSX typing issues in this workspace
+const createIconWrapper = (C: any) => {
+  const Wrapped: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
+    React.createElement(C as any, props as any);
+  Wrapped.displayName = `${C?.displayName || C?.name || "Icon"}Wrapper`;
+  return Wrapped;
+};
+const MenuIcon = createIconWrapper(Menu);
 
 export type NavItem = {
   id: string;
@@ -35,7 +45,7 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
   const ItemButton: React.FC<{ id: string; label: string; icon?: React.ReactNode; active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ id, label, icon, active, ...rest }) => (
     <button
       onClick={() => onSelect?.(id)}
-      title={isCollapsed ? label : undefined}
+      title={label}
       className={[
         'group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition',
         active ? 'bg-blue-50 ring-1 ring-inset ring-blue-500/20 text-slate-900' : 'hover:bg-slate-50 text-slate-700',
@@ -95,17 +105,18 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           onClick={() => onToggleCollapsed?.(!isCollapsed)}
-          className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+          className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center"
         >
-          ☰
+          <MenuIcon className="h-5 w-5" />
         </button>
         {!isCollapsed && <div className="ml-2 flex-1 truncate">{logo}</div>}
         <button
           aria-label="Open navigation"
+          title="Open navigation"
           onClick={() => setMobileOpen(true)}
-          className="hidden h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+          className="hidden h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center"
         >
-          ☰
+          <MenuIcon className="h-5 w-5" />
         </button>
       </div>
 

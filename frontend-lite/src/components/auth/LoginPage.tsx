@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
@@ -27,7 +27,26 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState<'none' | 'password' | SocialProvider>('none')
-  const { login } = useAuth()
+  const { login, isAuthenticated, isLoading } = useAuth()
+
+  // Client-side guard: if already authenticated, redirect out of auth page
+  useEffect(() => {
+    if (isLoading) return
+    if (!isAuthenticated) return
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const next = sp.get('next') || undefined
+      if (next && next.startsWith('/')) {
+        window.location.replace(next)
+        return
+      }
+      const raw = localStorage.getItem('kiff_user_data')
+      const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
+      window.location.replace(role === 'admin' ? '/admin/users' : '/kiffs/create')
+    } catch {
+      window.location.replace('/kiffs/create')
+    }
+  }, [isAuthenticated, isLoading])
 
   const onPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,8 +57,19 @@ export function LoginPage() {
     try {
       setLoading('password')
       await login({ email, password })
-      // Redirect based on stored user role
+      // Redirect preference: ?next= if present and safe, else role-based
       try {
+        const next = (() => {
+          try {
+            const sp = new URLSearchParams(window.location.search)
+            const n = sp.get('next') || undefined
+            return n && n.startsWith('/') ? n : undefined
+          } catch { return undefined }
+        })()
+        if (next) {
+          window.location.href = next
+          return
+        }
         const raw = localStorage.getItem('kiff_user_data')
         const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
         window.location.href = role === 'admin' ? '/admin' : '/kiffs/create'

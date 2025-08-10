@@ -1,12 +1,12 @@
 "use client";
 import { Navbar } from "../../components/layout/Navbar";
-import { AppSidebar } from "../../components/navigation/AppSidebar";
+import { Sidebar } from "../../components/navigation/Sidebar";
 import { useLayoutState } from "../../components/layout/LayoutState";
 import { getTenantId } from "../../lib/tenant";
 import { useEffect, useState } from "react";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { deleteAccount } from "../../lib/apiClient";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function AccountPage() {
   const { user } = useAuth();
@@ -20,19 +20,9 @@ export default function AccountPage() {
   useEffect(() => {
     // hydrate tenant from local util
     setTenant(getTenantId());
-    // hydrate email from auth context or backend /api/auth/me
+    // hydrate email from NextAuth context
     if (user?.email) {
       setEmail(user.email);
-    } else {
-      // best-effort fetch
-      fetch((process.env.NEXT_PUBLIC_BACKEND_ORIGIN || "http://localhost:8000") + "/api/auth/me", {
-        credentials: "include",
-      })
-        .then(async (r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data?.email) setEmail(data.email);
-        })
-        .catch(() => {});
     }
   }, [user?.email]);
 
@@ -47,7 +37,7 @@ export default function AccountPage() {
   return (
     <div className="app-shell">
       <Navbar />
-      <AppSidebar />
+      <Sidebar />
       <main className="pane" style={{ padding: 16, paddingLeft: leftWidth + 32, marginTop: 80 }}>
           <div style={{ maxWidth: 1400, margin: "0 auto" }}>
             <h1 style={{ margin: 0, fontSize: 22 }}>Account</h1>

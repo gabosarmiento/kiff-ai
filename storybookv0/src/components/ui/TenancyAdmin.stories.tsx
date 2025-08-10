@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { TenancyAdmin, TenantSettings } from './TenancyAdmin'
+import { AdminLayout } from './AdminLayout'
 
 const meta: Meta<typeof TenancyAdmin> = {
   title: 'Admin/TenancyAdmin',
@@ -32,26 +33,32 @@ const demoSettings: TenantSettings = {
 }
 
 export const Default: Story = {
-  render: () => <TenancyAdmin settings={demoSettings} />,
+  render: () => (
+    <AdminLayout initialActive="tenancy">
+      <TenancyAdmin settings={demoSettings} />
+    </AdminLayout>
+  ),
 }
 
 export const EmptyState: Story = {
   render: () => (
-    <TenancyAdmin
-      settings={{
-        id: 'tenant-demo',
-        name: 'New Tenant',
-        slug: 'new-tenant',
-        logo: '',
-        primary_color: '#2563eb',
-        billing_email: '',
-        domains: [],
-        api_keys: [],
-        rag: {},
-        defaults: {},
-        quotas: {},
-        stats: { users: 0, docs_indexed: 0, chunks: 0, tokens_month: 0 },
-      }}
-    />
+    <AdminLayout initialActive="tenancy">
+      <TenancyAdmin
+        settings={{
+          id: 'tenant-demo',
+          name: 'New Tenant',
+          slug: 'new-tenant',
+          logo: '',
+          primary_color: '#2563eb',
+          billing_email: '',
+          domains: [],
+          api_keys: [],
+          rag: {},
+          defaults: {},
+          quotas: {},
+          stats: { users: 0, docs_indexed: 0, chunks: 0, tokens_month: 0 },
+        }}
+      />
+    </AdminLayout>
   ),
 }

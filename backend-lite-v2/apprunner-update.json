@@ -1,0 +1,29 @@
+{
+  "ServiceArn": "arn:aws:apprunner:eu-west-3:929018226542:service/kiff-backend-lite-v2/5476fceb75c34923a51eaa8778d60256",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff/backend-lite-v2:latest",
+      "ImageConfiguration": {
+        "RuntimeEnvironmentVariables": {
+          "ALLOWED_ORIGINS": "https://your-vercel-domain,http://localhost:3000",
+          "ALLOW_TENANT_FALLBACK": "false",
+          "DEFAULT_TENANT_ID": "4485db48-71b7-47b0-8128-c6dca5be352d",
+          "AWS_REGION": "eu-west-3",
+          "DYNAMO_TABLE_PREVIEW_SESSIONS": "preview_sessions",
+          "E2B_API_KEY": "e2b_30608986a9ccf1499cd55bc1c4cc19991042a282"
+        },
+        "Port": "8000"
+      },
+      "ImageRepositoryType": "ECR"
+    },
+    "AutoDeploymentsEnabled": true,
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "arn:aws:iam::929018226542:role/AppRunnerECRAccessRole"
+    }
+  },
+  "InstanceConfiguration": {
+    "Cpu": "1024",
+    "Memory": "2048",
+    "InstanceRoleArn": "arn:aws:iam::929018226542:role/kiff-ai-app-runner-role"
+  }
+}

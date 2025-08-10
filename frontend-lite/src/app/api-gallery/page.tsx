@@ -1,7 +1,7 @@
 "use client";
 import { Navbar } from "../../components/layout/Navbar";
 import React from "react";
-import { AppSidebar } from "../../components/navigation/AppSidebar";
+import { Sidebar } from "../../components/navigation/Sidebar";
 import { useLayoutState } from "../../components/layout/LayoutState";
 
 const CATEGORIES = [
@@ -99,7 +99,7 @@ export default function ApiGalleryPage() {
   return (
     <div className="app-shell">
       <Navbar />
-      <AppSidebar />
+      <Sidebar />
       <main className="pane" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>

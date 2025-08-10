@@ -3,7 +3,7 @@
 import React from "react";
 import { useParams } from "next/navigation";
 import { Navbar } from "../../../components/layout/Navbar";
-import { AppSidebar } from "../../../components/navigation/AppSidebar";
+import { Sidebar } from "../../../components/navigation/Sidebar";
 import { useLayoutState } from "../../../components/layout/LayoutState";
 import { apiJson } from "../../../lib/api";
 
@@ -37,7 +37,7 @@ export default function KiffRunPage() {
   return (
     <div className="app-shell">
       <Navbar />
-      <AppSidebar />
+      <Sidebar />
       <main className="pane" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>

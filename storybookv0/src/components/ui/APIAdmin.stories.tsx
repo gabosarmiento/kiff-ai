@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { APIAdmin } from './APIAdmin'
 import { APIProvider } from './APIGallery'
 import { useState } from 'react'
-import { PageContainer } from './PageContainer'
+import { AdminLayout } from './AdminLayout'
 
 const meta: Meta<typeof APIAdmin> = {
   title: 'Admin/APIAdmin',
@@ -146,9 +146,9 @@ export const Default: Story = {
     providers: mockProviders,
   },
   render: (args) => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="apis">
       <APIAdmin {...args} />
-    </PageContainer>
+    </AdminLayout>
   ),
 }
 
@@ -182,14 +182,14 @@ export const InteractiveDemo: Story = {
     }
 
     return (
-      <PageContainer padded fullscreen>
+      <AdminLayout initialActive="apis">
         <APIAdmin
           providers={providers}
           onCreateProvider={handleCreate}
           onUpdateProvider={handleUpdate}
           onDeleteProvider={handleDelete}
         />
-      </PageContainer>
+      </AdminLayout>
     )
   },
 }
@@ -200,9 +200,9 @@ export const EmptyState: Story = {
     providers: [],
   },
   render: (args) => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="apis">
       <APIAdmin {...args} />
-    </PageContainer>
+    </AdminLayout>
   ),
 }
 
@@ -239,7 +239,7 @@ export const AdminDashboard: Story = {
     }
 
     return (
-      <PageContainer fullscreen>
+      <AdminLayout initialActive="apis">
         {/* Admin Header with Stats */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -321,7 +321,7 @@ export const AdminDashboard: Story = {
             onDeleteProvider={handleDelete}
           />
         </div>
-      </PageContainer>
+      </AdminLayout>
     )
   },
   parameters: {
@@ -332,7 +332,7 @@ export const AdminDashboard: Story = {
 // Quick actions demo
 export const QuickActions: Story = {
   render: () => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="apis">
       <div className="max-w-7xl mx-auto">
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-6 mb-6">
           <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
@@ -349,7 +349,7 @@ export const QuickActions: Story = {
 
         <APIAdmin providers={mockProviders} />
       </div>
-    </PageContainer>
+    </AdminLayout>
   ),
 }
 
@@ -364,16 +364,16 @@ export const MobileView: Story = {
     },
   },
   render: (args) => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="apis">
       <APIAdmin {...args} />
-    </PageContainer>
+    </AdminLayout>
   ),
 }
 
 // Form validation demo
 export const FormValidation: Story = {
   render: () => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="apis">
       <div className="max-w-4xl mx-auto">
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6 mb-6">
           <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
@@ -390,6 +390,6 @@ export const FormValidation: Story = {
 
         <APIAdmin providers={[]} />
       </div>
-    </PageContainer>
+    </AdminLayout>
   ),
 }

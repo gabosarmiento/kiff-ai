@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,7 +26,20 @@ export function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState<'none' | 'password' | SocialProvider>('none')
-  const { signup } = useAuth()
+  const { signup, isAuthenticated, isLoading } = useAuth()
+
+  // Client-side guard: prevent authenticated users from viewing signup
+  useEffect(() => {
+    if (isLoading) return
+    if (!isAuthenticated) return
+    try {
+      const raw = localStorage.getItem('kiff_user_data')
+      const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
+      window.location.replace(role === 'admin' ? '/admin/users' : '/kiffs/create')
+    } catch {
+      window.location.replace('/kiffs/create')
+    }
+  }, [isAuthenticated, isLoading])
 
   const onRegister = async (e: React.FormEvent) => {
     e.preventDefault()

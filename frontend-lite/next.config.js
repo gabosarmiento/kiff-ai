@@ -6,13 +6,38 @@ const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || 'http://localhost:8000'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@kiff/ui'],
   reactStrictMode: true,
+  swcMinify: true,
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react', 'react-hot-toast'],
+  },
   async rewrites() {
     return [
+      // Proxy specific backend API routes
       {
-        source: '/api/:path*',
-        destination: `${BACKEND_ORIGIN}/api/:path*`,
+        source: '/api/kb/:path*',
+        destination: `${BACKEND_ORIGIN}/api/kb/:path*`,
+      },
+      {
+        source: '/api/users/:path*',
+        destination: `${BACKEND_ORIGIN}/api/users/:path*`,
+      },
+      {
+        source: '/api/extract/:path*',
+        destination: `${BACKEND_ORIGIN}/api/extract/:path*`,
+      },
+      {
+        source: '/api/kiffs/:path*',
+        destination: `${BACKEND_ORIGIN}/api/kiffs/:path*`,
+      },
+      {
+        source: '/api/models/:path*',
+        destination: `${BACKEND_ORIGIN}/api/models/:path*`,
+      },
+      {
+        source: '/api/compose/:path*',
+        destination: `${BACKEND_ORIGIN}/api/compose/:path*`,
       },
     ]
   },

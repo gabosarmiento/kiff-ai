@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from ..state.memory import STORE, JobResult, FileInfo, now_ts
 import uuid
+from ..state.tokens import record_consumption
+from ..util.session import get_session_from_request
 
 router = APIRouter()
 
@@ -37,6 +39,23 @@ async def generate(req: GenerateRequest, request: Request):
         files=files,
     )
     STORE.save_job(result)
+
+    # Record token consumption (rough estimate ~4 chars per token)
+    try:
+        total_tokens = sum(max(1, len(f.content) // 4) for f in files)
+        sess = get_session_from_request(dict(request.headers), request.cookies)
+        user_key = (sess or {}).get("email") or "anonymous"
+        record_consumption(
+            tenant_id,
+            user_key=user_key,
+            tokens=total_tokens,
+            model=req.model,
+            action="generate",
+            meta={"job_id": job_id},
+        )
+    except Exception:
+        # Do not block generation on metering failures
+        pass
 
     return {
         "id": job_id,

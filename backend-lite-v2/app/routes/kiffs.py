@@ -28,6 +28,22 @@ class RunKiffRequest(BaseModel):
     prompt: str
 
 
+@router.get("", response_model=List[Kiff])
+async def list_kiffs():
+    """Return all kiffs in the minimal in-memory store.
+    Supports the frontend's preferred GET /api/kiffs listing.
+    """
+    return [Kiff(**k) for k in _KIFFS.values()]
+
+
+@router.post("/list", response_model=List[Kiff])
+async def list_kiffs_post():
+    """Alternate listing endpoint for backends that use POST /list.
+    Keeps frontend fallbacks working as well.
+    """
+    return [Kiff(**k) for k in _KIFFS.values()]
+
+
 @router.post("", response_model=Kiff)
 async def create_kiff(req: CreateKiffRequest):
     import uuid

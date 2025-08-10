@@ -2,28 +2,15 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authMe, authLogout, type Profile } from "../../lib/apiClient";
+import { signOut } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Floating pill navbar with subtle glow, Storybook style
 export function Navbar() {
   const router = useRouter();
-  const [profile, setProfile] = React.useState<Profile | null>(null);
-  const [loadingProfile, setLoadingProfile] = React.useState(true);
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [open, setOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const me = await authMe();
-        setProfile(me);
-      } catch {
-        setProfile(null);
-      } finally {
-        setLoadingProfile(false);
-      }
-    })();
-  }, []);
 
   // Close on click/tap outside or Escape
   React.useEffect(() => {
@@ -54,9 +41,20 @@ export function Navbar() {
 
           {/* Left / Logo */}
           <div className="pl-1 pr-2">
-            <Link href="/" className="text-sm font-semibold text-slate-900" style={{ textDecoration: "none" }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (isAuthenticated) {
+                  if (user?.role === "admin") router.push("/admin/users");
+                  else router.push("/kiffs/create");
+                } else {
+                  router.push("/login");
+                }
+              }}
+              className="text-sm font-semibold text-slate-900 hover:opacity-80"
+            >
               Kiff
-            </Link>
+            </button>
           </div>
 
           {/* Right actions: profile only. The expanding pill is in normal flow so the container grows together */}
@@ -75,12 +73,11 @@ export function Navbar() {
             {/* Expanding segment to the left of the icon */}
             <div
               className={[
-                "flex h-8 items-center overflow-hidden rounded-full border border-slate-200 bg-white pl-2 pr-2 text-sm text-slate-700 shadow-sm transition-[width,opacity] duration-200",
-                open ? "mr-2 w-[220px] opacity-100" : "w-0 opacity-0",
+                "flex h-8 items-center overflow-hidden rounded-full border border-slate-200 bg-white text-sm text-slate-700 shadow-sm transition-opacity duration-200",
+                open ? "mr-2 w-auto px-2 opacity-100" : "w-0 px-0 opacity-0",
               ].join(" ")}
-              style={{ willChange: "width, opacity" }}
             >
-              {loadingProfile ? null : profile ? (
+              {isLoading ? null : isAuthenticated && user ? (
                 <>
                   <button
                     onClick={() => router.push("/account")}
@@ -90,11 +87,13 @@ export function Navbar() {
                   </button>
                   <span className="mx-2 h-4 w-px bg-slate-200" />
                   <button
-                    onClick={async () => {
+                    onClick={async () => { 
                       try {
-                        await authLogout();
-                      } finally {
-                        if (typeof window !== "undefined") window.location.reload();
+                        await signOut({ redirect: false });
+                        router.push("/login");
+                      } catch (error) {
+                        console.error('Logout error:', error);
+                        router.push("/login");
                       }
                     }}
                     className="inline-flex items-center rounded-full px-2 py-1 text-rose-600 hover:bg-rose-50"

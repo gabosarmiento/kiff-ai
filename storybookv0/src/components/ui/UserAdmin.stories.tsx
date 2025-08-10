@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { useState } from 'react'
 import { UserAdmin, UserItem } from './UserAdmin'
+import { AdminLayout } from './AdminLayout'
 
 const meta: Meta<typeof UserAdmin> = {
   title: 'Admin/UserAdmin',
@@ -25,7 +26,9 @@ export const Default: Story = {
     users: demoUsers,
   },
   render: (args) => (
-    <UserAdmin {...args} />
+    <AdminLayout initialActive="users">
+      <UserAdmin {...args} />
+    </AdminLayout>
   ),
 }
 
@@ -38,7 +41,9 @@ export const InteractiveDemo: Story = {
     const deleteUser = (id: string) => setUsers(prev => prev.filter(x => x.id !== id))
 
     return (
-      <UserAdmin users={users} onCreateUser={createUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} />
+      <AdminLayout initialActive="users">
+        <UserAdmin users={users} onCreateUser={createUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} />
+      </AdminLayout>
     )
   }
 }
@@ -48,6 +53,8 @@ export const EmptyState: Story = {
     users: [],
   },
   render: (args) => (
-    <UserAdmin {...args} />
+    <AdminLayout initialActive="users">
+      <UserAdmin {...args} />
+    </AdminLayout>
   ),
 }

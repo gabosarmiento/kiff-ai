@@ -11,3 +11,11 @@ export function getTenantId(): string {
 export function setTenantId(id: string) {
   if (typeof window !== "undefined") window.localStorage.setItem(TENANT_KEY, id);
 }
+
+// Always include exact-case tenant header with safe fallback
+export function withTenantHeaders(headers: HeadersInit = {}): HeadersInit {
+  const tenant =
+    (typeof window !== 'undefined' && localStorage.getItem(TENANT_KEY)) ||
+    DEFAULT_TENANT_ID;
+  return { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, ...headers } as HeadersInit;
+}

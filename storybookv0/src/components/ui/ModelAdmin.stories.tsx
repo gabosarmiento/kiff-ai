@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { useState } from 'react'
 import { ModelAdmin, ModelItem } from './ModelAdmin'
-import { PageContainer } from './PageContainer'
+import { AdminLayout } from './AdminLayout'
 
 const meta: Meta<typeof ModelAdmin> = {
   title: 'Admin/ModelAdmin',
@@ -62,9 +62,9 @@ export const Default: Story = {
     models: mockModels,
   },
   render: (args) => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="models">
       <ModelAdmin {...args} />
-    </PageContainer>
+    </AdminLayout>
   ),
 }
 
@@ -88,14 +88,14 @@ export const InteractiveDemo: Story = {
     }
 
     return (
-      <PageContainer padded fullscreen>
+      <AdminLayout initialActive="models">
         <ModelAdmin
           models={models}
           onCreateModel={handleCreate}
           onUpdateModel={handleUpdate}
           onDeleteModel={handleDelete}
         />
-      </PageContainer>
+      </AdminLayout>
     )
   },
 }
@@ -105,8 +105,8 @@ export const EmptyState: Story = {
     models: [],
   },
   render: (args) => (
-    <PageContainer padded fullscreen>
+    <AdminLayout initialActive="models">
       <ModelAdmin {...args} />
-    </PageContainer>
+    </AdminLayout>
   ),
 }

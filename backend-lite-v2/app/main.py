@@ -4,11 +4,16 @@ from fastapi.middleware.gzip import GZipMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env (for local/dev) BEFORE importing routes
+load_dotenv()
 
 from .middleware.tenant import TenantMiddleware
 from .routes import generate, status, preview, account
 from .routes import auth
-from .routes import providers, sitemap, extract, kb, kiffs, apis, models, users
+from .routes import providers, sitemap, extract, kb, kiffs, apis, models, users, tokens, compose
+from .routes import preview_live
 
 
 def get_allowed_origins() -> list[str]:
@@ -16,6 +21,8 @@ def get_allowed_origins() -> list[str]:
     raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://localhost:3000")
     return [o.strip() for o in raw.split(",") if o.strip()]
 
+
+# (Already loaded above)
 
 app = FastAPI(title="Kiff Backend Lite v2", version="0.1.0")
 
@@ -47,7 +54,10 @@ app.include_router(extract.router)
 app.include_router(kb.router)
 app.include_router(kiffs.router)
 app.include_router(models.router)
+app.include_router(compose.router)
 app.include_router(users.router)
+app.include_router(tokens.router)
+app.include_router(preview_live.router)
 
 
 @app.get("/")
