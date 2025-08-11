@@ -14,6 +14,9 @@ from .routes import generate, status, preview, account
 from .routes import auth
 from .routes import providers, sitemap, extract, kb, kiffs, apis, models, users, tokens, compose
 from .routes import preview_live
+from .routes import admin_url_extractor
+from .routes import admin_api_gallery_editor
+from .routes import api_gallery_public
 
 
 def get_allowed_origins() -> list[str]:
@@ -58,6 +61,9 @@ app.include_router(compose.router)
 app.include_router(users.router)
 app.include_router(tokens.router)
 app.include_router(preview_live.router)
+app.include_router(admin_url_extractor.router)
+app.include_router(admin_api_gallery_editor.router)
+app.include_router(api_gallery_public.router)
 
 
 @app.get("/")
