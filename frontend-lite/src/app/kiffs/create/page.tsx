@@ -5,6 +5,7 @@ import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { KiffCreatePage } from "@/components/kiffs/KiffCreatePage";
 import { Navbar } from "@/components/layout/Navbar";
 import { Sidebar } from "@/components/navigation/Sidebar";
+import { BottomNav } from "@/components/navigation/BottomNav";
 import { useLayoutState } from "@/components/layout/LayoutState";
 
 export default function KiffsCreatePage() {
@@ -30,11 +31,12 @@ function KiffsCreatePageContent() {
       <Navbar />
       <Sidebar />
       <main
-        className="pane"
+        className="pane pane-with-sidebar"
         style={{ padding: 16, maxWidth: 1200, paddingLeft: leftWidth + 24, margin: "0 auto" }}
       >
         <KiffCreatePage mode="light" onCreate={handleCreate} />
       </main>
+      <BottomNav />
     </div>
   );
 }

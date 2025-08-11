@@ -1,11 +1,12 @@
 "use client";
 
 import React from "react";
-import { Navbar } from "../../components/layout/Navbar";
-import { Sidebar } from "../../components/navigation/Sidebar";
-import { useLayoutState } from "../../components/layout/LayoutState";
-import { apiJson, recommendExtract } from "../../lib/api";
-import { getTenantId } from "../../lib/tenant";
+import { Navbar } from "../../../components/layout/Navbar";
+import { Sidebar } from "../../../components/navigation/Sidebar";
+import { useLayoutState } from "../../../components/layout/LayoutState";
+import { apiJson, recommendExtract } from "../../../lib/api";
+import { getTenantId } from "../../../lib/tenant";
+import ProtectedRoute from "../../../components/auth/ProtectedRoute";
 
 type ApiItem = {
   id: string;
@@ -47,7 +48,7 @@ type ExtractPreviewResp = {
   costs: Costs;
 };
 
-export default function ExtractorPage() {
+function AdminExtractorPageContent() {
   const { collapsed } = useLayoutState();
   const leftWidth = collapsed ? 72 : 280;
   const [apis, setApis] = React.useState<ApiItem[]>([]);
@@ -330,17 +331,17 @@ export default function ExtractorPage() {
       <Sidebar />
       {/* Local spacer to clear fixed Navbar on this page only (dynamic) */}
       <div style={{ height: navSpacer }} aria-hidden="true" />
-      <main className="pane" style={{ position: 'relative', zIndex: 0, padding: 16, maxWidth: 1200, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
+      <main className="pane pane-with-sidebar" style={{ position: 'relative', zIndex: 0, padding: 16, maxWidth: 1200, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 22 }}>API Extraction Tester</h1>
-              <p className="label" style={{ marginTop: 8 }}>Select a provider, configure chunking, preview results, then ingest into LanceDB.</p>
+              <p className="label" style={{ marginTop: 8 }}>Admin only: Select a provider, configure chunking, preview results, then ingest into LanceDB.</p>
             </div>
             {/* Tenant display intentionally hidden; header still sent via withTenantHeaders() */}
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
-            <div className="card-body" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 12 }}>
+            <div className="card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
               {/* Left: API select and URLs (auto-fetched) */}
               <div>
                 <label className="label">API Provider</label>
@@ -680,5 +681,13 @@ export default function ExtractorPage() {
           </div>
       </main>
     </div>
+  );
+}
+
+export default function AdminExtractorPage() {
+  return (
+    <ProtectedRoute requireAdmin>
+      <AdminExtractorPageContent />
+    </ProtectedRoute>
   );
 }

@@ -21,20 +21,19 @@ const BookOpenIcon = createIconWrapper(BookOpen);
 const ZapIcon = createIconWrapper(Zap);
 const UserIcon = createIconWrapper(User);
 const LogOutIcon = createIconWrapper(LogOut);
+const SettingsIcon = createIconWrapper(Settings);
 
 const iconCls = "h-5 w-5";
 
 const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
   { id: "/kiffs/create", label: "Dashboard", href: "/kiffs/create", icon: <HomeIcon className={iconCls} /> },
   { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <PuzzleIcon className={iconCls} /> },
-  { id: "/extractor", label: "Extractor", href: "/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
   { id: "/kb", label: "Knowledge Base", href: "/kb", icon: <BookOpenIcon className={iconCls} /> },
   { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <ZapIcon className={iconCls} /> },
 ];
 
 const ACCOUNT_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
   { id: "/account", label: "Account", href: "/account", icon: <UserIcon className={iconCls} /> },
-  { id: "action:logout", label: "Logout", href: "#", icon: <LogOutIcon className={iconCls} /> },
 ];
 
 export function Sidebar() {
@@ -59,17 +58,28 @@ export function Sidebar() {
   if (pathname.startsWith("/admin") && user?.role === "admin") {
     const ADMIN_LINKS = [
       { id: "/admin/users", label: "Users", href: "/admin/users", icon: <UserIcon className={iconCls} /> },
-      { id: "/admin/models", label: "Models", href: "/admin/models", icon: <PuzzleIcon className={iconCls} /> },
+      { id: "/admin/models", label: "Models", href: "/admin/models", icon: <SettingsIcon className={iconCls} /> },
+      { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <PuzzleIcon className={iconCls} /> },
+      { id: "/admin/extractor", label: "Extractor", href: "/admin/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
     ];
     items = [
       { id: "admin", label: "Admin", children: mkChildren(ADMIN_LINKS) },
-      { id: "account", label: "Account", children: mkChildren([{ id: "action:logout", label: "Logout", href: "#", icon: <LogOutIcon className={iconCls} /> }]) },
+      { id: "account", label: "Account", children: mkChildren(ACCOUNT_LINKS) },
     ];
   } else {
     items = [
       { id: "workspace", label: "Workspace", children: mkChildren(WORKSPACE_LINKS) },
-      { id: "account", label: "Account", children: mkChildren(ACCOUNT_LINKS) },
     ];
+    if (user?.role === "admin") {
+      const ADMIN_LINKS = [
+        { id: "/admin/users", label: "Users", href: "/admin/users", icon: <UserIcon className={iconCls} /> },
+        { id: "/admin/models", label: "Models", href: "/admin/models", icon: <SettingsIcon className={iconCls} /> },
+        { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <PuzzleIcon className={iconCls} /> },
+        { id: "/admin/extractor", label: "Extractor", href: "/admin/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
+      ];
+      items.push({ id: "admin", label: "Admin", children: mkChildren(ADMIN_LINKS) });
+    }
+    items.push({ id: "account", label: "Account", children: mkChildren(ACCOUNT_LINKS) });
   }
 
   return (
@@ -79,16 +89,6 @@ export function Sidebar() {
       onToggleCollapsed={(next) => setCollapsed(next)}
       logo={<span className="font-semibold">Kiff</span>}
       onSelect={async (id) => {
-        if (id === "action:logout") {
-          try {
-            await signOut({ redirect: false });
-            router.push("/login");
-          } catch (error) {
-            console.error('Logout error:', error);
-            router.push("/login");
-          }
-          return;
-        }
         router.push(id);
       }}
     />

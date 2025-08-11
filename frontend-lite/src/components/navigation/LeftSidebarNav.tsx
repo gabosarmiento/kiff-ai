@@ -91,14 +91,16 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
   );
 
   return (
-    <aside
-      className={[
-        'fixed left-4 top-4 z-40 flex flex-col overflow-hidden border border-slate-200 bg-white/80 backdrop-blur shadow-lg',
-        'rounded-2xl',
-        isCollapsed ? 'w-[72px]' : 'w-[280px]',
-        'h-[calc(100vh-2rem)]'
-      ].join(' ')}
-    >
+    <>
+      {/* Desktop Sidebar */}
+      <aside
+        className={[
+          'hidden md:flex fixed left-4 top-4 z-40 flex-col overflow-hidden border border-slate-200 bg-white/80 backdrop-blur shadow-lg',
+          'rounded-2xl',
+          isCollapsed ? 'w-[72px]' : 'w-[280px]',
+          'h-[calc(100vh-2rem)]'
+        ].join(' ')}
+      >
 
       <div className={['flex items-center', isCollapsed ? 'justify-center' : 'justify-between', 'px-3 py-3'].join(' ')}>
         <button
@@ -124,17 +126,9 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
         {renderSectioned(items)}
       </div>
 
-      {mobileOpen && (
-        <div
-          role="dialog"
-          onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 grid grid-cols-[280px_1fr] bg-black/30"
-        >
-          <div className="bg-white p-3">{renderSectioned(items)}</div>
-          <div />
-        </div>
-      )}
-    </aside>
+      </aside>
+
+    </>
   );
 };
 

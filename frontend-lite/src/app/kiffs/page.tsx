@@ -2,6 +2,7 @@
 import React from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Sidebar } from "@/components/navigation/Sidebar";
+import { BottomNav } from "@/components/navigation/BottomNav";
 import { useLayoutState } from "@/components/layout/LayoutState";
 import { apiJson } from "@/lib/api";
 import PageContainer from "@/components/ui/PageContainer";
@@ -60,7 +61,7 @@ export default function KiffsIndexPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
+      <main className="pane pane-with-sidebar" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
         <PageContainer padded>
           <div className="flex items-center justify-between">
             <div>
@@ -136,6 +137,7 @@ export default function KiffsIndexPage() {
           )}
         </PageContainer>
       </main>
+      <BottomNav />
     </div>
   );
 }

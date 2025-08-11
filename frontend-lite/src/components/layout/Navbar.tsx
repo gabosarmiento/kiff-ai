@@ -78,12 +78,22 @@ export function Navbar() {
               ].join(" ")}
             >
               {isLoading ? null : isAuthenticated && user ? (
-                <button
-                  onClick={() => router.push("/account")}
-                  className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50"
-                >
-                  Account
-                </button>
+                <>
+                  {user.role === 'admin' && (
+                    <button
+                      onClick={() => router.push('/admin/api-gallery-editor')}
+                      className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50"
+                    >
+                      Editor
+                    </button>
+                  )}
+                  <button
+                    onClick={() => router.push("/account")}
+                    className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50"
+                  >
+                    Account
+                  </button>
+                </>
               ) : (
                 <>
                   <button onClick={() => router.push("/login")} className="inline-flex items-center rounded-full px-2 py-1 hover:bg-slate-50">

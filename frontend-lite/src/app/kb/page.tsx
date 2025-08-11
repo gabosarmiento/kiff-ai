@@ -2,6 +2,7 @@
 import React from "react";
 import { Navbar } from "../../components/layout/Navbar";
 import { Sidebar } from "../../components/navigation/Sidebar";
+import { BottomNav } from "../../components/navigation/BottomNav";
 import { useLayoutState } from "../../components/layout/LayoutState";
 import { createKB, listKBs } from "../../lib/api";
 
@@ -91,7 +92,10 @@ export default function KBPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane px-4" style={mainStyle}>
+      <main 
+        className="pane pane-with-sidebar px-4"
+        style={mainStyle}
+      >
         <div className="flex items-center justify-between">
           <div>
             <h1 className="m-0 text-xl font-semibold">Knowledge Base</h1>
@@ -313,6 +317,7 @@ export default function KBPage() {
 
 
       </main>
+      <BottomNav />
     </div>
   );
 

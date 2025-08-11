@@ -38,6 +38,18 @@ html body {
 .pane { background: var(--bg); }
 .pane + .pane { border-left: 1px solid var(--border); }
 
+/* Mobile responsive layout */
+@media (max-width: 767px) {
+  .pane-with-sidebar { 
+    padding-left: 1rem !important; 
+    padding-right: 1rem !important;
+    padding-bottom: 8rem !important; /* Space for bottom navigation */
+  }
+  .pane { 
+    padding-bottom: 8rem !important; /* Space for bottom navigation */
+  }
+}
+
 /* Dashboard layout */
 .dashboard-grid { flex: 1; display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
 .sidebar { border-right: 1px solid var(--border); }

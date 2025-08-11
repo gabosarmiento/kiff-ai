@@ -151,6 +151,10 @@ async function maybeMock(path: string): Promise<Response | null> {
 export async function apiFetch(path: string, init: ApiInit = {}): Promise<Response> {
   const mock = await maybeMock(path);
   if (mock) return mock;
+  // If calling a Next.js local API route (proxy), don't prefix with API_BASE_URL
+  if (path.startsWith('/api/')) {
+    return fetch(path, normalizeInit(init));
+  }
   return fetch(`${API_BASE_URL}${path}`, normalizeInit(init));
 }
 

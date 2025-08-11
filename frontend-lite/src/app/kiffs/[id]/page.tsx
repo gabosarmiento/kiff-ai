@@ -4,6 +4,7 @@ import React from "react";
 import { useParams } from "next/navigation";
 import { Navbar } from "../../../components/layout/Navbar";
 import { Sidebar } from "../../../components/navigation/Sidebar";
+import { BottomNav } from "../../../components/navigation/BottomNav";
 import { useLayoutState } from "../../../components/layout/LayoutState";
 import { apiJson } from "../../../lib/api";
 
@@ -38,7 +39,7 @@ export default function KiffRunPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
+      <main className="pane pane-with-sidebar" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 22 }}>Kiff Sandbox</h1>
@@ -77,6 +78,7 @@ export default function KiffRunPage() {
             </div>
           )}
       </main>
+      <BottomNav />
     </div>
   );
 }
