@@ -26,7 +26,7 @@ const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.R
   { id: "/", label: "Dashboard", href: "/", icon: <HomeIcon className={iconCls} /> },
   { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <PuzzleIcon className={iconCls} /> },
   { id: "/extractor", label: "Extractor", href: "/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
-  { id: "/kb", label: "Knowledge Base", href: "/kb", icon: <BookOpenIcon className={iconCls} /> },
+  { id: "/kp", label: "Kiff Packs", href: "/kp", icon: <BookOpenIcon className={iconCls} /> },
   { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <ZapIcon className={iconCls} /> },
 ];
 

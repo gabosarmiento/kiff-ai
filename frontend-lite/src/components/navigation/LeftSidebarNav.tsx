@@ -42,7 +42,12 @@ export const LeftSidebarNav: React.FC<LeftSidebarNavProps> = ({
     </div>
   );
 
-  const ItemButton: React.FC<{ id: string; label: string; icon?: React.ReactNode; active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ id, label, icon, active, ...rest }) => (
+  const ItemButton: React.FC<{
+    id: string;
+    label: string;
+    icon?: React.ReactNode;
+    active?: boolean;
+  } & React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ id, label, icon, active, ...rest }) => (
     <button
       onClick={() => onSelect?.(id)}
       title={label}

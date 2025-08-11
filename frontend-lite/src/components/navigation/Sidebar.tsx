@@ -2,7 +2,7 @@
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Home, Puzzle, FlaskConical, BookOpen, Zap, User, LogOut, Settings } from "lucide-react";
+import { Home, Puzzle, FlaskConical, BookOpen, Zap, User, LogOut, Settings, Plus } from "lucide-react";
 import { LeftSidebarNav, type NavItem } from "./LeftSidebarNav";
 import { useLayoutState } from "../layout/LayoutState";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,13 +22,26 @@ const ZapIcon = createIconWrapper(Zap);
 const UserIcon = createIconWrapper(User);
 const LogOutIcon = createIconWrapper(LogOut);
 const SettingsIcon = createIconWrapper(Settings);
+const PlusIcon = createIconWrapper(Plus);
+// Blue circular plus icon that fits within the existing 20x20 wrapper
+const BluePlusCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg
+    viewBox="0 0 20 20"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    {...props}
+  >
+    <circle cx="10" cy="10" r="10" fill="#2563EB" />
+    <path d="M10 5v10M5 10h10" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
 
 const iconCls = "h-5 w-5";
 
 const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
-  { id: "/kiffs/create", label: "Dashboard", href: "/kiffs/create", icon: <HomeIcon className={iconCls} /> },
+  { id: "/kiffs/compose", label: "New Kiff", href: "/kiffs/compose", icon: <BluePlusCircleIcon className="h-5 w-5" /> },
   { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <PuzzleIcon className={iconCls} /> },
-  { id: "/kb", label: "Knowledge Base", href: "/kb", icon: <BookOpenIcon className={iconCls} /> },
+  { id: "/kp", label: "Kiff Packs", href: "/kp", icon: <BookOpenIcon className={iconCls} /> },
   { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <ZapIcon className={iconCls} /> },
 ];
 

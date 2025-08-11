@@ -19,7 +19,7 @@ const NAV: NavItem[] = [
       { id: "home", label: "Dashboard", href: "/", icon: "🏠" },
       { id: "api-gallery", label: "API Gallery", href: "/api-gallery", icon: "🧩" },
       { id: "extractor", label: "Extractor", href: "/extractor", icon: "🧪" },
-      { id: "kb", label: "Knowledge Base", href: "/kb", icon: "📚" },
+      { id: "kp", label: "Kiff Packs", href: "/kp", icon: "📚" },
       { id: "kiffs", label: "Kiffs", href: "/kiffs", icon: "⚡" },
     ],
   },

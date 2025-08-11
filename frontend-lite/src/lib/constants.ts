@@ -8,12 +8,8 @@ export function readEnv(key: string, fallback?: string): string | undefined {
 }
 
 export const API_BASE_URL = readEnv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000")!;
-export const USE_MOCKS = (readEnv("NEXT_PUBLIC_USE_MOCKS", "true") || "true").toLowerCase() === "true";
+export const USE_MOCKS = (readEnv("NEXT_PUBLIC_USE_MOCKS", "false") || "false").toLowerCase() === "true";
 export const PREVIEW_URL = readEnv("NEXT_PUBLIC_PREVIEW_URL", "https://example.org")!;
 
-export type ModelId = "kimi-k2" | "gpt-oss-120b" | "gpt-oss-20b";
-export const MODELS: { id: ModelId; label: string }[] = [
-  { id: "kimi-k2", label: "Kimi K2 (default)" },
-  { id: "gpt-oss-120b", label: "GPT-OSS 120B" },
-  { id: "gpt-oss-20b", label: "GPT-OSS 20B" },
-];
+// Model identifiers are dynamic; use a flexible string type
+export type ModelId = string;

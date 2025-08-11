@@ -17,5 +17,7 @@ export function withTenantHeaders(headers: HeadersInit = {}): HeadersInit {
   const tenant =
     (typeof window !== 'undefined' && localStorage.getItem(TENANT_KEY)) ||
     DEFAULT_TENANT_ID;
-  return { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, ...headers } as HeadersInit;
+  // Do NOT set Content-Type here to avoid breaking FormData uploads.
+  // Callers (or api helpers) are responsible for setting appropriate Content-Type when needed.
+  return { 'X-Tenant-ID': tenant, ...headers } as HeadersInit;
 }

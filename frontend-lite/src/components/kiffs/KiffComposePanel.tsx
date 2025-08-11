@@ -2,6 +2,7 @@
 import React from "react";
 import { apiJson, apiFetch } from "@/lib/api";
 import { listKBs } from "@/lib/api";
+import { createPreviewSandbox, streamApplyFiles, restartDevServer, fetchPreviewLogs, type PreviewSandbox, type ApplyFile, type PreviewEvent } from "@/lib/preview";
 
 function normalizeModelIds(input: any): string[] {
   if (!input) return [];
@@ -32,7 +33,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   availableKBs = ["Marketing Docs", "OpenAI API", "Stripe API"],
   availableTools = [],
   availableMCPs = [],
-  models = ["kimi-k2", "gpt-oss-120b", "gpt-oss-20b"],
+  models = [],
   onSubmit,
 }) => {
   // Core state
@@ -49,7 +50,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   const [hoverDoc, setHoverDoc] = React.useState<string | null>(null);
 
   // Dynamic data from backend
-  const [modelOptions, setModelOptions] = React.useState<string[]>(models);
+  const [modelOptions, setModelOptions] = React.useState<string[]>([]);
   const [toolOptions, setToolOptions] = React.useState<string[]>(availableTools);
   const [mcpOptions, setMcpOptions] = React.useState<string[]>(availableMCPs);
 
@@ -72,20 +73,27 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [savedKiffId, setSavedKiffId] = React.useState<string | null>(null);
 
+  // Preview/E2B state
+  const [previewSandbox, setPreviewSandbox] = React.useState<PreviewSandbox | null>(null);
+  const [deploying, setDeploying] = React.useState<boolean>(false);
+  const [deployLogs, setDeployLogs] = React.useState<string[]>([]);
+  const [showPreview, setShowPreview] = React.useState<boolean>(false);
+
   async function saveKiffAuto(finalContent?: string) {
     if (savedKiffId) return; // prevent duplicate saves
     try {
       const name = (prompt || "Untitled Kiff").slice(0, 60);
-      const body: any = {
+      if (!kb) {
+        console.warn("Auto-save skipped: no KB selected");
+        return;
+      }
+      // Backend expects: { name, kb_id, model, top_k? }
+      const body = {
         name,
+        kb_id: kb,
         model: model,
-        session_id: sessionId,
-        tool_ids: tools,
-        mcp_ids: mcps,
-        kb: kb,
-        content_preview: (finalContent || "").slice(0, 2000),
       };
-      const resp = await apiJson<{ id: string }>("/api/kiffs", { method: "POST", body });
+      const resp = await apiJson<{ id: string }>("/api/kiffs", { method: "POST", body: body as any });
       if (resp?.id) setSavedKiffId(resp.id);
     } catch (e) {
       // Non-fatal; keep composer usable even if save fails
@@ -94,6 +102,22 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   }
 
   // Initial load of models and tools - parallel requests for better performance
+  // Utility to choose default model with Kimi preference
+  function chooseDefaultModel(ids: string[], current: string | undefined): string {
+    if (current && ids.includes(current)) return current;
+    const preferred = ["kimi-k2", "moonshotai/kimi-k2-instruct"];
+    for (const p of preferred) if (ids.includes(p)) return p;
+    return ids[0] || "";
+  }
+
+  function reorderPreferred(ids: string[], preferred: string[]): string[] {
+    const set = new Set(ids);
+    const ordered: string[] = [];
+    for (const p of preferred) if (set.has(p)) ordered.push(p);
+    for (const id of ids) if (!ordered.includes(id)) ordered.push(id);
+    return ordered;
+  }
+
   React.useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -120,8 +144,11 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
       if (modelsRes && !modelsRes.error) {
         const ids = normalizeModelIds(modelsRes);
         if (ids.length) {
-          setModelOptions(ids);
-          if (!ids.includes(model)) setModel(ids[0]);
+          const preferred = ["kimi-k2", "moonshotai/kimi-k2-instruct"];
+          const ordered = reorderPreferred(ids, preferred);
+          setModelOptions(ordered);
+          const next = chooseDefaultModel(ordered, model);
+          if (next && next !== model) setModel(next);
         }
       } else if (modelsRes?.error) {
         setError(modelsRes.error);
@@ -167,7 +194,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
     setError(null);
     try {
       const body = {
-        model_id: model || "kimi-k2",
+        model_id: model || (modelOptions[0] || ""),
         tool_ids: tools,
         mcp_ids: mcps,
         knowledge_space_ids: kb ? [kb] : [],
@@ -318,8 +345,129 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
     }
   }
 
+  // Parse code output into files for E2B deployment
+  function parseCodeOutput(content: string): ApplyFile[] {
+    const files: ApplyFile[] = [];
+    
+    // Look for code blocks with file paths
+    const codeBlockRegex = /```(\w+)?\s*(?:\/\/\s*(.+\.(?:tsx?|jsx?|html|css|json|md))\s*)?\n([\s\S]*?)```/g;
+    let match;
+    
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+      const language = match[1] || 'javascript';
+      const filePath = match[2];
+      const code = match[3].trim();
+      
+      if (filePath && code) {
+        files.push({
+          path: filePath,
+          content: code,
+          language: language
+        });
+      }
+    }
+    
+    // If no explicit file paths found, create default React app structure
+    if (files.length === 0 && content.trim()) {
+      // Try to extract React components or HTML
+      if (content.includes('React') || content.includes('jsx') || content.includes('tsx')) {
+        files.push({
+          path: 'src/App.tsx',
+          content: content,
+          language: 'typescript'
+        });
+      } else if (content.includes('<html') || content.includes('<!DOCTYPE')) {
+        files.push({
+          path: 'index.html',
+          content: content,
+          language: 'html'
+        });
+      } else {
+        // Default React component wrapper
+        files.push({
+          path: 'src/App.tsx',
+          content: `import React from 'react';
+
+export default function App() {
   return (
-    <div className="mx-auto max-w-5xl p-6">
+    <div className="p-4">
+      <h1>Generated App</h1>
+      <div>
+        ${content.split('\n').map(line => `        <p>${line}</p>`).join('\n')}
+      </div>
+    </div>
+  );
+}`,
+          language: 'typescript'
+        });
+      }
+    }
+    
+    return files;
+  }
+
+  async function deployToPreview() {
+    if (!output.trim()) {
+      setError("No code output to deploy. Generate some code first.");
+      return;
+    }
+    
+    setDeploying(true);
+    setDeployLogs([]);
+    setError(null);
+    
+    try {
+      // Create or reuse sandbox
+      let sandbox = previewSandbox;
+      if (!sandbox) {
+        setDeployLogs(prev => [...prev, "Creating E2B sandbox..."]);
+        sandbox = await createPreviewSandbox(sessionId || undefined);
+        setPreviewSandbox(sandbox);
+      }
+      
+      if (sandbox.status === 'error' || !sandbox.sandbox_id) {
+        throw new Error(sandbox.message || "Failed to create sandbox");
+      }
+      
+      // Parse output into files
+      setDeployLogs(prev => [...prev, "Parsing generated code..."]);
+      const files = parseCodeOutput(output);
+      
+      if (files.length === 0) {
+        throw new Error("No deployable files found in output");
+      }
+      
+      setDeployLogs(prev => [...prev, `Deploying ${files.length} files...`]);
+      
+      // Stream file deployment
+      await streamApplyFiles(
+        sandbox.sandbox_id,
+        files,
+        (event: PreviewEvent) => {
+          if (event.type === 'log') {
+            setDeployLogs(prev => [...prev, event.message || 'Processing...']);
+          } else if (event.type === 'error') {
+            setDeployLogs(prev => [...prev, `Error: ${event.message}`]);
+          }
+        }
+      );
+      
+      setDeployLogs(prev => [...prev, "Restarting development server..."]);
+      await restartDevServer(sandbox.sandbox_id);
+      
+      setDeployLogs(prev => [...prev, "✅ Deployment complete! App is live."]);
+      setShowPreview(true);
+      
+    } catch (e: any) {
+      setError(e?.message || "Deployment failed");
+      setDeployLogs(prev => [...prev, `❌ Error: ${e?.message || "Deployment failed"}`]);
+    } finally {
+      setDeploying(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl p-3 sm:p-6">
       {/* Local styles for animated border */}
       <style>{`
         @keyframes kiff-dash { 
@@ -333,7 +481,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         @media (prefers-reduced-motion: reduce) { .kiff-rag-stroke { animation: none; } }
       `}</style>
 
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-lg backdrop-blur">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-4 sm:p-6 shadow-lg backdrop-blur">
         <div
           aria-hidden
           className="pointer-events-none absolute -inset-1 -z-10 rounded-2xl opacity-50 blur-xl"
@@ -366,7 +514,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         )}
 
         <div className="mt-4">
-          <label className="block text-xs text-slate-600">Knowledge Base</label>
+          <label className="block text-xs text-slate-600">Kiff Packs</label>
           <div className="mt-1 flex flex-wrap gap-2">
             {kbs.map((space) => (
               <button
@@ -383,7 +531,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
                 {space.name}
               </button>
             ))}
-            <a href="/kb" className="rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600">
+            <a href="/kp" className="rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600">
               + New
             </a>
           </div>
@@ -540,7 +688,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
                     >
                       {u.chunk_id}
                       {hoverDoc === u.chunk_id && (
-                        <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-amber-200 bg-white p-2 text-[12px] text-amber-900 shadow-md">
+                        <div className="absolute left-0 top-full z-10 mt-1 w-64 sm:w-72 max-w-sm rounded-lg border border-amber-200 bg-white p-2 text-[12px] text-amber-900 shadow-md">
                           <div className="font-medium">Summary</div>
                           <div className="opacity-90">{u.summary}</div>
                         </div>
@@ -622,8 +770,70 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
 
             {output && (
               <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm">
-                <div className="text-xs font-semibold text-slate-700">Output</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-slate-700">Output</div>
+                  <button
+                    onClick={deployToPreview}
+                    disabled={deploying || !output.trim()}
+                    className="rounded-full bg-blue-600 px-3 py-1.5 text-xs text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
+                  >
+                    {deploying ? "Deploying…" : "🚀 Deploy Live Preview"}
+                  </button>
+                </div>
                 <pre className="whitespace-pre-wrap text-[13px] text-slate-800">{output}</pre>
+              </div>
+            )}
+
+            {/* Live Preview Panel */}
+            {(deployLogs.length > 0 || previewSandbox) && (
+              <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/30 p-3 text-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-blue-800">Live Preview</div>
+                  {previewSandbox?.preview_url && (
+                    <a
+                      href={previewSandbox.preview_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 transition-colors"
+                    >
+                      🌐 Open Live App
+                    </a>
+                  )}
+                </div>
+
+                {/* Deployment Logs */}
+                {deployLogs.length > 0 && (
+                  <div className="mb-3 rounded-lg bg-slate-900 p-3 font-mono text-xs text-green-400 max-h-32 overflow-y-auto">
+                    {deployLogs.map((log, i) => (
+                      <div key={i} className="mb-1">
+                        <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> {log}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Preview Status */}
+                {previewSandbox && (
+                  <div className="flex items-center justify-between text-xs text-blue-700">
+                    <div>
+                      <span className="font-medium">Status:</span>{' '}
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        previewSandbox.status === 'ready' 
+                          ? 'bg-green-100 text-green-800' 
+                          : previewSandbox.status === 'error'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {previewSandbox.status}
+                      </span>
+                    </div>
+                    {previewSandbox.sandbox_id && (
+                      <div className="font-mono text-xs text-slate-500">
+                        Sandbox: {previewSandbox.sandbox_id.slice(0, 8)}...
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

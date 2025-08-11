@@ -16,6 +16,10 @@ const nextConfig = {
     return [
       // Proxy specific backend API routes
       {
+        source: '/backend/:path*',
+        destination: `${BACKEND_ORIGIN}/:path*`,
+      },
+      {
         source: '/api/kb/:path*',
         destination: `${BACKEND_ORIGIN}/api/kb/:path*`,
       },

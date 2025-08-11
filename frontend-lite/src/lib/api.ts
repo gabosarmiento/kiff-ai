@@ -71,32 +71,7 @@ async function maybeMock(path: string): Promise<Response | null> {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-  if (path === '/api/kiffs' || path === '/api/kiffs/' || path === '/api/kiffs/list') {
-    const mockKiffs = [
-      {
-        id: 'kiff-1',
-        name: 'Email Newsletter Integration',
-        created_at: new Date('2024-01-15').toISOString(),
-        content_preview: 'Automated email newsletter using GPT-4 for content generation and Mailchimp for distribution'
-      },
-      {
-        id: 'kiff-2', 
-        name: 'Social Media Scheduler',
-        created_at: new Date('2024-01-20').toISOString(),
-        content_preview: 'Schedule and generate social media posts across multiple platforms with AI-powered content'
-      },
-      {
-        id: 'kiff-3',
-        name: 'Customer Support Bot',
-        created_at: new Date('2024-01-25').toISOString(),
-        content_preview: 'Intelligent customer support chatbot with knowledge base integration and ticket routing'
-      }
-    ];
-    return new Response(JSON.stringify(mockKiffs), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  // Intentionally no mocks for /api/kiffs to avoid showing non-existent projects
   if (path === '/api/apis') {
     const mockApis = [
       {
@@ -152,7 +127,7 @@ export async function apiFetch(path: string, init: ApiInit = {}): Promise<Respon
   const mock = await maybeMock(path);
   if (mock) return mock;
   // If calling a Next.js local API route (proxy), don't prefix with API_BASE_URL
-  if (path.startsWith('/api/')) {
+  if (path.startsWith('/api/') || path.startsWith('/backend/')) {
     return fetch(path, normalizeInit(init));
   }
   return fetch(`${API_BASE_URL}${path}`, normalizeInit(init));
@@ -178,7 +153,7 @@ export async function recommendExtract(body: Record<string, any>): Promise<{
 }> {
   const res = await fetch(`${API_BASE_URL}/api/extract/recommend`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     credentials: 'include',
   });
@@ -198,7 +173,7 @@ export async function recommendExtract(body: Record<string, any>): Promise<{
 export async function extractPreview(body: Record<string, any>): Promise<any> {
   const res = await fetch(`${API_BASE_URL}/api/extract/preview`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     credentials: 'include',
   });
@@ -218,7 +193,7 @@ export async function createKB(body: {
 }): Promise<{ id: string; name: string }>{
   const res = await fetch(`${API_BASE_URL}/api/kb/create`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({
       vector_store: 'lancedb',
       retrieval_mode: 'agentic-search',
@@ -263,7 +238,7 @@ export async function kbIndex(body: {
 }): Promise<any> {
   const res = await fetch(`${API_BASE_URL}/api/kb/index`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     credentials: 'include',
   });
@@ -279,7 +254,7 @@ export async function kbIngest(params: {
   const { kb_id, items } = params;
   const res = await fetch(`${API_BASE_URL}/api/kb/${encodeURIComponent(kb_id)}/ingest`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ items }),
     credentials: 'include',
   });

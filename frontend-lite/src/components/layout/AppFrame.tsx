@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 const AUTH_PAGES = new Set<string>(["/", "/login", "/signup", "/auth/logout"]);
-const BARE_PAGES = new Set<string>(["/account", "/extractor", "/kiffs", "/kiffs/create", "/kiffs/compose", "/api-gallery", "/kb"]);
+const BARE_PAGES = new Set<string>(["/account", "/extractor", "/kiffs", "/kiffs/create", "/kiffs/compose", "/api-gallery", "/kp"]);
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

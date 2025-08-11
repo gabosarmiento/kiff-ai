@@ -18,6 +18,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/api/auth')) return true
   // Allow other API routes (you can make these protected later if needed)
   if (pathname.startsWith('/api')) return true
+  // Allow backend proxy path so requests reach FastAPI without middleware redirecting
+  if (pathname.startsWith('/backend')) return true
   return false
 }
 
