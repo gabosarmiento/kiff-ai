@@ -36,6 +36,115 @@ async function maybeMock(path: string): Promise<Response | null> {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+  if (path === '/api/models') {
+    const mockModels = [
+      {
+        id: 'gpt-3.5-turbo',
+        name: 'GPT-3.5 Turbo',
+        provider: 'OpenAI',
+        modality: 'text',
+        status: 'active',
+        pricing: { input: 0.0015, output: 0.002 },
+        max_tokens: 4096
+      },
+      {
+        id: 'gpt-4',
+        name: 'GPT-4',
+        provider: 'OpenAI', 
+        modality: 'text',
+        status: 'active',
+        pricing: { input: 0.03, output: 0.06 },
+        max_tokens: 8192
+      },
+      {
+        id: 'claude-3-sonnet',
+        name: 'Claude 3 Sonnet',
+        provider: 'Anthropic',
+        modality: 'text',
+        status: 'active',
+        pricing: { input: 0.003, output: 0.015 },
+        max_tokens: 200000
+      }
+    ];
+    return new Response(JSON.stringify(mockModels), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (path === '/api/kiffs' || path === '/api/kiffs/' || path === '/api/kiffs/list') {
+    const mockKiffs = [
+      {
+        id: 'kiff-1',
+        name: 'Email Newsletter Integration',
+        created_at: new Date('2024-01-15').toISOString(),
+        content_preview: 'Automated email newsletter using GPT-4 for content generation and Mailchimp for distribution'
+      },
+      {
+        id: 'kiff-2', 
+        name: 'Social Media Scheduler',
+        created_at: new Date('2024-01-20').toISOString(),
+        content_preview: 'Schedule and generate social media posts across multiple platforms with AI-powered content'
+      },
+      {
+        id: 'kiff-3',
+        name: 'Customer Support Bot',
+        created_at: new Date('2024-01-25').toISOString(),
+        content_preview: 'Intelligent customer support chatbot with knowledge base integration and ticket routing'
+      }
+    ];
+    return new Response(JSON.stringify(mockKiffs), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (path === '/api/apis') {
+    const mockApis = [
+      {
+        id: 'stripe-api',
+        name: 'Stripe Payment API',
+        icon: '💳',
+        base_url: 'https://api.stripe.com',
+        status: 'active'
+      },
+      {
+        id: 'github-api',
+        name: 'GitHub API',
+        icon: '🐙',
+        base_url: 'https://api.github.com',
+        status: 'active'
+      },
+      {
+        id: 'openai-api',
+        name: 'OpenAI API',
+        icon: '🤖',
+        base_url: 'https://api.openai.com',
+        status: 'active'
+      }
+    ];
+    return new Response(JSON.stringify(mockApis), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (path.startsWith('/api/apis/') && path.includes('/sitemap')) {
+    const apiId = path.split('/')[3];
+    const mockSitemap = {
+      api_id: apiId,
+      sitemap_url: `https://api.${apiId}.com/sitemap.xml`,
+      total_urls: 15,
+      selected_urls: [
+        `https://docs.${apiId}.com/getting-started`,
+        `https://docs.${apiId}.com/authentication`,  
+        `https://docs.${apiId}.com/api-reference`,
+        `https://docs.${apiId}.com/webhooks`,
+        `https://docs.${apiId}.com/examples`
+      ]
+    };
+    return new Response(JSON.stringify(mockSitemap), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   return null;
 }
 

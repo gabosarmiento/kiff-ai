@@ -26,7 +26,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const applyTheme = useCallback((t: ThemeMode) => {
     if (typeof document === "undefined") return;
-    document.documentElement.setAttribute("data-theme", t);
+    // Force DaisyUI "lofi" theme globally
+    document.documentElement.setAttribute("data-theme", "lofi");
+    // Keep body classes for any custom CSS relying on them
     document.body.classList.remove("theme-light", "theme-dark");
     document.body.classList.add(t === "dark" ? "theme-dark" : "theme-light");
   }, []);
