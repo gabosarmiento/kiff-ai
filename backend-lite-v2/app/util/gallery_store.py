@@ -12,6 +12,8 @@ F_APIS = os.path.join(DATA_DIR, "api_services.json")
 F_DOCURLS = os.path.join(DATA_DIR, "doc_urls.json")
 F_KB = os.path.join(DATA_DIR, "kb_collections.json")
 F_RUNS = os.path.join(DATA_DIR, "extraction_runs.json")
+F_CATEGORIES = os.path.join(DATA_DIR, "categories.json")
+F_BAG = os.path.join(DATA_DIR, "user_bag.json")
 
 
 def _now_iso() -> str:
@@ -78,6 +80,44 @@ def delete_provider(pid: str) -> bool:
     apis = [a for a in apis if a.get("provider_id") != pid]
     save_api_services(apis)
     return True
+
+
+# Curated Categories
+
+def list_categories() -> List[str]:
+    """Return curated category list from storage. If missing, return empty list.
+
+    Stored format is a JSON array of strings for simplicity, but we keep helpers
+    consistent with the dict-based loaders above by adapting read/write.
+    """
+    if not os.path.exists(F_CATEGORIES):
+        return []
+    try:
+        with open(F_CATEGORIES, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # Accept either ["AI/ML", ...] or [{"name": "AI/ML"}, ...]
+            if isinstance(data, list):
+                if data and isinstance(data[0], dict):
+                    return [str(d.get("name")) for d in data if d.get("name")]
+                return [str(x) for x in data]
+            return []
+    except Exception:
+        return []
+
+
+def save_categories(categories: List[str]):
+    """Save curated categories preserving order and uniqueness."""
+    _ensure_dir()
+    # normalize, drop falsy, preserve order
+    seen = set()
+    out: List[str] = []
+    for c in categories:
+        s = str(c).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    with open(F_CATEGORIES, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
 
 
 # ApiServices
@@ -227,6 +267,91 @@ def mark_api_indexed(api_service_id: str, url_count: int):
             apis[i] = {**a, "url_count": int(url_count), "last_indexed_at": _now_iso()}
             break
     save_api_services(apis)
+
+
+def is_ready_api(api: Dict[str, Any]) -> bool:
+    """Return True if an API is user-ready (visible, ready status, and indexed).
+
+    We treat an API as indexed if url_count > 0 or last_indexed_at exists.
+    """
+    if not bool(api.get("is_visible", True)):
+        return False
+    status = str(api.get("status", "")).lower() if api.get("status") is not None else ""
+    if status and status != "ready":
+        return False
+    url_count = int(api.get("url_count", 0) or 0)
+    last_idx = api.get("last_indexed_at")
+    return url_count > 0 or bool(last_idx)
+
+
+# Tenant-scoped Bag (selected APIs)
+
+def _load_bag() -> List[Dict[str, Any]]:
+    return _load_file(F_BAG)
+
+
+def _save_bag(items: List[Dict[str, Any]]):
+    _save_file(F_BAG, items)
+
+
+def list_bag_for_tenant(tenant_id: str) -> List[Dict[str, Any]]:
+    """Return bag items for a tenant.
+
+    Each item shape: { id, tenant_id, api_service_id, provider_id, created_at }
+    """
+    items = _load_bag()
+    return [it for it in items if it.get("tenant_id") == tenant_id]
+
+
+def add_bag_item(tenant_id: str, api_service_id: str, provider_id: Optional[str]) -> Dict[str, Any]:
+    """Idempotently add an API to the tenant's bag.
+
+    Only adds if API is user-ready per is_ready_api().
+    """
+    apis = list_api_services()
+    api = next((a for a in apis if a.get("id") == api_service_id), None)
+    if not api or not is_ready_api(api):
+        raise ValueError("API not ready or not found")
+
+    items = _load_bag()
+    for it in items:
+        if it.get("tenant_id") == tenant_id and it.get("api_service_id") == api_service_id:
+            return it
+
+    now = _now_iso()
+    obj = {
+        "id": str(uuid.uuid4()),
+        "tenant_id": tenant_id,
+        "api_service_id": api_service_id,
+        "provider_id": provider_id or api.get("provider_id"),
+        "created_at": now,
+    }
+    items.append(obj)
+    _save_bag(items)
+    return obj
+
+
+def remove_bag_item(tenant_id: str, api_service_id: str) -> bool:
+    items = _load_bag()
+    new_items = [it for it in items if not (it.get("tenant_id") == tenant_id and it.get("api_service_id") == api_service_id)]
+    changed = len(new_items) != len(items)
+    if changed:
+        _save_bag(new_items)
+    return changed
+
+
+def clear_bag(tenant_id: str) -> int:
+    items = _load_bag()
+    keep = [it for it in items if it.get("tenant_id") != tenant_id]
+    removed = len(items) - len(keep)
+    if removed:
+        _save_bag(keep)
+    return removed
+
+
+def provider_has_bag_item(tenant_id: str, provider_id: str) -> bool:
+    items = _load_bag()
+    return any(it.get("tenant_id") == tenant_id and it.get("provider_id") == provider_id for it in items)
 
 
 def get_provider_by_name(name: str) -> Optional[Dict[str, Any]]:

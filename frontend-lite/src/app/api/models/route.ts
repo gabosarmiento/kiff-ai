@@ -48,7 +48,7 @@ const FALLBACK_MODELS = [
 
 export async function GET(request: NextRequest) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/models`, {
+    const response = await fetch(`${API_BASE_URL}/api/models/`, {
       method: 'GET',
       headers: withTenantHeaders(),
       cache: 'no-store'

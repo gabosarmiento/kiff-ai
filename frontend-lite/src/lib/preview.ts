@@ -13,12 +13,28 @@ export type PreviewSandbox = {
 export async function createPreviewSandbox(session_id?: string): Promise<PreviewSandbox> {
   const res = await fetch(`${API_BASE_URL}/api/preview/sandbox`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id }),
     credentials: 'include',
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json() as Promise<PreviewSandbox>;
+}
+
+export async function createPreviewSandboxRuntime(args: {
+  session_id?: string;
+  runtime?: 'python' | 'vite' | 'node';
+  port?: number;
+  python_entry?: string;
+}): Promise<PreviewSandbox> {
+  const res = await fetch(`${API_BASE_URL}/api/preview/sandbox`, {
+    method: 'POST',
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export type ApplyFile = { path: string; content: string; language?: string };
@@ -97,7 +113,7 @@ export async function streamInstallPackages(
 export async function restartDevServer(session_id: string): Promise<{ status: string; message: string; tenant_id: string }>{
   const res = await fetch(`${API_BASE_URL}/api/preview/restart`, {
     method: 'POST',
-    headers: withTenantHeaders(),
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id }),
     credentials: 'include',
   });
@@ -119,6 +135,45 @@ export async function fetchPreviewLogs(session_id: string): Promise<{
     headers: withTenantHeaders(),
     credentials: 'include',
   });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function setSecrets(session_id: string, secrets: Record<string, string>): Promise<{ status: string }>{
+  const res = await fetch(`${API_BASE_URL}/api/preview/secrets`, {
+    method: 'POST',
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id, secrets }),
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function applyUnifiedDiff(session_id: string, unified_diff: string): Promise<{ status: string }>{
+  const res = await fetch(`${API_BASE_URL}/api/preview/patch`, {
+    method: 'POST',
+    headers: { ...withTenantHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id, unified_diff }),
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchFileTree(session_id: string): Promise<{ files: Array<{ path: string; size: number }> }>{
+  const url = new URL(`${API_BASE_URL}/api/preview/tree`);
+  url.searchParams.set('session_id', session_id);
+  const res = await fetch(url.toString(), { headers: withTenantHeaders(), credentials: 'include' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchFileContent(session_id: string, path: string): Promise<{ path: string; content: string }>{
+  const url = new URL(`${API_BASE_URL}/api/preview/file`);
+  url.searchParams.set('session_id', session_id);
+  url.searchParams.set('path', path);
+  const res = await fetch(url.toString(), { headers: withTenantHeaders(), credentials: 'include' });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

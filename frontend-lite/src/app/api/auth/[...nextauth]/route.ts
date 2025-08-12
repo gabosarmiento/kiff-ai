@@ -26,7 +26,7 @@ const handler = NextAuth({
 
         try {
           // Call your existing backend API
-          const backendUrl = process.env.BACKEND_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+          const backendUrl = process.env.BACKEND_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || 'https://rfn5agrmiw.eu-west-3.awsapprunner.com'
           const response = await fetch(`${backendUrl}/api/auth/login`, {
             method: 'POST',
             headers: {
@@ -90,7 +90,7 @@ const handler = NextAuth({
       if (account?.provider === 'google' || account?.provider === 'github') {
         try {
           // Optional: sync with your backend
-          const backendUrl = process.env.BACKEND_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+          const backendUrl = process.env.BACKEND_ORIGIN || process.env.NEXT_PUBLIC_API_BASE_URL || 'https://rfn5agrmiw.eu-west-3.awsapprunner.com'
           const response = await fetch(`${backendUrl}/api/auth/social-sync`, {
             method: 'POST',
             headers: {

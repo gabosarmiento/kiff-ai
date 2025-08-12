@@ -5,6 +5,16 @@ import { Sidebar } from "@/components/navigation/Sidebar";
 import { BottomNav } from "@/components/navigation/BottomNav";
 import { useLayoutState } from "@/components/layout/LayoutState";
 import { KiffComposePanel } from "@/components/kiffs/KiffComposePanel";
+import { SandboxPreview } from "@/components/compose/SandboxPreview";
+import { BuildProgress, type BuildEvent } from "@/components/compose/BuildProgress";
+import {
+  createPreviewSandboxRuntime,
+  streamApplyFiles,
+  restartDevServer,
+  fetchPreviewLogs,
+  type PreviewEvent,
+  type ApplyFile,
+} from "@/lib/preview";
 import { apiJson } from "@/lib/api";
 
 export default function KiffComposerPage() {
@@ -19,6 +29,67 @@ export default function KiffComposerPage() {
   const [bag, setBag] = React.useState<BagItem[]>([]);
   const [bagLoading, setBagLoading] = React.useState<boolean>(false);
   const [editOpen, setEditOpen] = React.useState<boolean>(false);
+
+  // Minimal orchestration state (right column)
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [status, setStatus] = React.useState<string>("unavailable");
+  const [events, setEvents] = React.useState<BuildEvent[]>([]);
+  const [busy, setBusy] = React.useState<boolean>(false);
+  const [logs, setLogs] = React.useState<string>("");
+
+  const pushEvent = React.useCallback((e: PreviewEvent) => setEvents((prev) => [...prev, e]), []);
+
+  function parseFilesFromOutput(content: string): ApplyFile[] {
+    const files: ApplyFile[] = [];
+    const codeBlockRegex = /```(\w+)?\s*(?:\/\/\s*(.+\.(?:tsx?|jsx?|html|css|json|md))\s*)?\n([\s\S]*?)```/g;
+    let match: RegExpExecArray | null;
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+      const language = match[1] || "javascript";
+      const filePath = match[2];
+      const code = (match[3] || "").trim();
+      if (filePath && code) files.push({ path: filePath, content: code, language });
+    }
+    if (files.length === 0 && content.trim()) {
+      if (content.includes("<html") || content.includes("<!DOCTYPE")) {
+        files.push({ path: "index.html", content: content, language: "html" });
+      } else {
+        files.push({ path: "README.md", content, language: "md" });
+      }
+    }
+    return files;
+  }
+
+  async function handleOutput(content: string) {
+    try {
+      setBusy(true);
+      setEvents([]);
+      // 1) Create or attach sandbox (default vite runtime for quick preview)
+      const resp = await createPreviewSandboxRuntime({ runtime: "vite", port: 5173, session_id: sessionId || undefined });
+      setStatus(resp.status);
+      setPreviewUrl(resp.preview_url || null);
+      if (!sessionId) setSessionId(resp.session_id);
+
+      const sid = sessionId || resp.session_id;
+      // 2) Extract files from output and apply
+      const files = parseFilesFromOutput(content);
+      if (files.length) {
+        await streamApplyFiles(sid, files, pushEvent);
+      }
+      // 3) Restart
+      await restartDevServer(sid);
+      // 4) Fetch logs once
+      try {
+        const r = await fetchPreviewLogs(sid);
+        const text = (r.logs || []).map((x: any) => (typeof x === "string" ? x : JSON.stringify(x))).join("\n");
+        setLogs(text);
+      } catch {}
+    } catch (e) {
+      setEvents((prev) => [...prev, { type: "error", message: (e as any)?.message || String(e) }]);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function refreshBag() {
     try {
@@ -87,7 +158,25 @@ export default function KiffComposerPage() {
           </div>
         </div>
 
-        <KiffComposePanel />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div>
+            <KiffComposePanel onOutput={handleOutput} />
+          </div>
+          <div className="space-y-4">
+            <SandboxPreview
+              previewUrl={previewUrl}
+              status={status}
+              onOpen={() => previewUrl && window.open(previewUrl, "_blank")}
+            />
+            <BuildProgress events={events} busy={busy} onRestart={() => sessionId && restartDevServer(sessionId)} />
+            {logs ? (
+              <div className="rounded border bg-white">
+                <div className="px-3 py-2 border-b text-sm font-medium">Logs</div>
+                <pre className="p-2 h-40 overflow-auto text-xs font-mono whitespace-pre-wrap">{logs}</pre>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </main>
       <BottomNav />
       {/* Edit modal to manage Kiff Packs */}

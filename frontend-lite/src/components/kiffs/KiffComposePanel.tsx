@@ -26,6 +26,7 @@ export type KiffComposePanelProps = {
     mcps: string[];
     model: string;
   }) => void;
+  onOutput?: (content: string) => void | Promise<void>;
 };
 
 export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
@@ -35,6 +36,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   availableMCPs = [],
   models = [],
   onSubmit,
+  onOutput,
 }) => {
   // Core state
   // KBs fetched from backend (id + name). We store the selected value as the KB ID.
@@ -279,6 +281,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
       setOutput(text);
       await saveKiffAuto(text);
       await fetchUsedContext(id);
+      try { if (onOutput) await onOutput(text); } catch {}
     } catch (e: any) {
       setError(e?.message || "Failed to send message");
     } finally {
@@ -290,6 +293,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
     setLoading(true);
     setError(null);
     setOutput("");
+    let buffer = "";
     try {
       let id = sessionId;
       if (!id) {
@@ -317,10 +321,12 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
           if (payload === "[DONE]") {
             await fetchUsedContext(id);
             await saveKiffAuto(output);
+            try { if (buffer && onOutput) await onOutput(buffer); } catch {}
             setLoading(false);
             return;
           }
-          setOutput((prev) => prev + payload);
+          buffer += payload;
+          setOutput(buffer);
         }
       }
     } catch (e: any) {

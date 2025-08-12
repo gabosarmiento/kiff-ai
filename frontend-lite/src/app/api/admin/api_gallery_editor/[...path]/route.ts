@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Simple proxy to backend admin API, preserving cookies and headers for auth.
 // Resolve backend base URL; avoid pointing to frontend origin to prevent 404 from Next
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://rfn5agrmiw.eu-west-3.awsapprunner.com";
 const API_BASE = RAW_API_BASE.includes("localhost:3000")
   ? RAW_API_BASE.replace("3000", "8000")
   : RAW_API_BASE;

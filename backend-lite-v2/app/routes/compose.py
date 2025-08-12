@@ -19,37 +19,55 @@ def _normalize(s: str) -> str:
 
 
 def _resolve_model_id(model_id: str) -> str:
-    """Resolve a friendly or alias id to a provider-specific id present in catalog/registry."""
+    """Resolve a requested id to a provider-specific id using only the backend catalog.
+
+    Strategy:
+    - If it's already in the in-memory registry, return as-is.
+    - Load `models.json` and try exact id and normalized name/id matches.
+    - If still unresolved, and the id exists in catalog but isn't a provider id,
+      try to find another entry with the same family that looks like a provider id (contains '/').
+    - Otherwise, return the original id.
+    """
     if not model_id:
         return model_id
     mid = model_id
-    # 1) Explicit alias map
-    if mid in MODEL_ALIASES:
-        return MODEL_ALIASES[mid]
-    # 2) If already exists in registry, keep as-is
+    # 1) If already exists in registry, keep as-is
     if mid in GROQ_LLM_REGISTRY:
         return mid
-    # 3) Search catalog by exact id or normalized id/name
+    # 2) Catalog-driven resolution
     _load_model_catalog()
     if not MODEL_CATALOG:
         return mid
     norm_target = _normalize(mid)
+    exact_entry = None
     # exact id match
     for m in MODEL_CATALOG:
         if m.get("id") == mid:
-            return mid
+            exact_entry = m
+            break
+    if exact_entry is not None:
+        # If it's already a provider-looking id (e.g., contains '/'), return it
+        if "/" in exact_entry.get("id", ""):
+            return exact_entry["id"]
+        # Else, try to find a provider id within the same family
+        fam = exact_entry.get("family")
+        if fam:
+            for m in MODEL_CATALOG:
+                if m.get("family") == fam and "/" in m.get("id", ""):
+                    return m["id"]
+        return exact_entry["id"]
     # normalized id or name match
     for m in MODEL_CATALOG:
         cand_id = m.get("id", "")
         cand_name = m.get("name", "")
         if _normalize(cand_id) == norm_target or _normalize(cand_name) == norm_target:
+            # Prefer provider-style ids if available for the same family
+            fam = m.get("family")
+            if fam:
+                for mm in MODEL_CATALOG:
+                    if mm.get("family") == fam and "/" in mm.get("id", ""):
+                        return mm["id"]
             return cand_id
-    # substring heuristic for kimi
-    if "kimi" in norm_target:
-        for m in MODEL_CATALOG:
-            cand_id = m.get("id", "")
-            if "kimi" in _normalize(cand_id):
-                return cand_id
     return mid
 
 
@@ -61,6 +79,12 @@ from typing import List, Optional, Dict, Any
 import time
 import uuid
 import asyncio
+
+# Reuse the cached embedder builder from extract routes
+try:
+    from app.routes.extract import _build_embedder as _build_cached_embedder  # type: ignore
+except Exception:
+    _build_cached_embedder = None  # type: ignore
 
 router = APIRouter(prefix="/api/compose", tags=["compose"]) 
 
@@ -74,12 +98,23 @@ AgnoAgent = None  # type: ignore
 PDFKnowledgeBase = None  # type: ignore
 LanceDb = None  # type: ignore
 GroqLLM = None  # type: ignore
+OpenAILLM = None  # type: ignore
 AGNO_AVAILABLE = False
 GROQ_LLM_REGISTRY: Dict[str, Any] = {}
 MODEL_CATALOG: List[Dict[str, Any]] = []
 MODEL_ALIASES: Dict[str, str] = {
     # Friendly name -> provider id
     "kimi-k2": "moonshotai/kimi-k2-instruct",
+    # Common Groq Llama aliases
+    "llama-3.1-8b": "llama-3.1-8b-instant",
+    "llama-3.1 8b": "llama-3.1-8b-instant",
+    "llama3.1-8b": "llama-3.1-8b-instant",
+    "llama-3.3-70b": "llama-3.3-70b-versatile",
+    "llama-3.3 70b": "llama-3.3-70b-versatile",
+    "llama3.3-70b": "llama-3.3-70b-versatile",
+    # GPT-OSS shortcuts
+    "gpt-oss-120b": "openai/gpt-oss-120b",
+    "gpt-oss-20b": "openai/gpt-oss-20b",
 }
 
 # Try multiple import paths to support different agno versions
@@ -119,6 +154,18 @@ try:
                 from agno.providers.groq import Groq as GroqLLM  # type: ignore
             except Exception:
                 GroqLLM = None  # type: ignore
+
+    # OpenAI provider variants (to route through Groq's OpenAI-compatible API)
+    try:
+        from agno.models.openai import OpenAI as OpenAILLM  # type: ignore
+    except Exception:
+        try:
+            from agno.llms.openai import OpenAI as OpenAILLM  # type: ignore
+        except Exception:
+            try:
+                from agno.providers.openai import OpenAI as OpenAILLM  # type: ignore
+            except Exception:
+                OpenAILLM = None  # type: ignore
 
     AGNO_AVAILABLE = AgnoAgent is not None
 except Exception:
@@ -221,50 +268,49 @@ def _get_or_build_agent(session_id: str, sess: Dict[str, Any]) -> Any:
     # Build minimal AGNO Agent
     requested_model = sess.get("model_id") or "kimi-k2"
     model = _resolve_model_id(requested_model)
-    # Build a Groq LLM object if possible (AGNO expects a Model/LLM, not a raw string)
-    llm_obj = None
-    # Try registry-first, then build on-demand
-    if GROQ_LLM_REGISTRY:
-        llm_obj = GROQ_LLM_REGISTRY.get(model)
-    if llm_obj is None and GroqLLM is not None:
-        api_key = os.getenv("GROQ_API_KEY")
-        # Prefer the canonical signature for Groq in Agno
-        llm_attempts = [
-            {"id": model, "api_key": api_key, "temperature": 0.2},
-            {"id": model, "api_key": api_key},
-            {"id": model},
-            {"model": model},
-            {"name": model},
-            {"model_name": model},
-        ]
-        for kwargs in llm_attempts:
-            try:
-                llm_obj = GroqLLM(**kwargs)  # type: ignore
-                break
-            except TypeError:
-                continue
-            except Exception:
-                continue
+    # Build Groq LLM object exactly per AGNO best practice
+    if GroqLLM is None:
+        sess["agent_init_error"] = "GroqLLM class unavailable"
+        return None
+    api_key = os.getenv("GROQ_API_KEY")
+    try:
+        llm_obj = GroqLLM(id=model, api_key=api_key, temperature=0.3)  # type: ignore
+    except Exception as e:
+        sess["agent_init_error"] = f"GroqLLM init failed: {e}"
+        return None
     kb = None
-    if PDFKnowledgeBase and LanceDb:
-        # Create a session-scoped table
-        table_name = f"kb_{sess['tenant_id']}_{session_id}".replace("-", "_")
-        uri = os.getenv("LANCEDB_URI", "tmp/lancedb")
-        kb = PDFKnowledgeBase(
-            path=[],  # paths will be attached via /attach later
-            vector_db=LanceDb(table_name=table_name, uri=uri),  # type: ignore
-        )
-    # Construct Agent per docs/reference: minimal, markdown enabled
+    # Only build knowledge base if caller provided knowledge_space_ids
+    if sess.get("knowledge_space_ids"):
+        # Build or reuse a local sentence-transformers embedder to avoid defaulting to OpenAI
+        embedder = None
+        if _build_cached_embedder is not None:
+            try:
+                logs: List[str] = []
+                embedder = _build_cached_embedder("sentence-transformers", logs)
+            except Exception:
+                embedder = None
+        # Initialize Knowledge Base only if vector DB and embedder are available
+        if PDFKnowledgeBase and LanceDb and embedder is not None:
+            # Create a session-scoped table
+            table_name = f"kb_{sess['tenant_id']}_{session_id}".replace("-", "_")
+            uri = os.getenv("LANCEDB_URI", "tmp/lancedb")
+            kb = PDFKnowledgeBase(
+                path=[],  # paths will be attached via /attach later
+                vector_db=LanceDb(table_name=table_name, uri=uri, embedder=embedder),  # type: ignore
+            )
+    # Construct Agent per docs: pass a Model/LLM object using 'model'
+    agent_kwargs: Dict[str, Any] = {"markdown": True}
     if llm_obj is None:
         return None
-    agent_kwargs = {
-        "model": llm_obj,
-        "markdown": True,
-    }
+    agent_kwargs["model"] = llm_obj
     if kb is not None:
         agent_kwargs["knowledge"] = kb
         agent_kwargs["enable_agentic_knowledge_filters"] = True
-    agent = AgnoAgent(**agent_kwargs)  # type: ignore
+    try:
+        agent = AgnoAgent(**agent_kwargs)  # type: ignore
+    except Exception as e:
+        sess["agent_init_error"] = f"Agent init failed: {e}"
+        return None
     AGENTS[session_id] = agent
     return agent
 
@@ -335,7 +381,9 @@ async def compose_message(payload: ComposeMessageRequest, x_tenant_id: str = Hea
             try:
                 # AGNO doc pattern: pass prompt as positional argument
                 result = agent.run(prompt)  # type: ignore
-                content = str(result)
+                # Prefer plain content if available
+                content_val = getattr(result, "content", None)
+                content = content_val if isinstance(content_val, str) else str(result)
             except Exception as e:
                 # Fall back to echo if AGNO call fails
                 content = f"[AGNO error: {e}] Model={payload.model_id or sess['model_id']} echo: {prompt}"
@@ -452,13 +500,24 @@ async def compose_stream(session_id: str, prompt: str, x_tenant_id: str = Header
             try:
                 response_stream = agent.run(prompt, stream=True)  # type: ignore
                 for ev in response_stream:
-                    # Try to extract incremental text; fallback to str(ev)
-                    chunk = getattr(ev, "delta", None) or getattr(ev, "content", None) or str(ev)
-                    # Stream line-by-line
-                    if isinstance(chunk, str):
-                        yield f"data: {chunk}\n\n"
-                    else:
-                        yield f"data: {str(chunk)}\n\n"
+                    # Extract only human-readable text. Skip event reprs.
+                    text = None
+                    # Most token events expose `.delta`
+                    d = getattr(ev, "delta", None)
+                    if isinstance(d, str) and d:
+                        text = d
+                    # Some events carry `.text` or `.content`
+                    if text is None:
+                        t = getattr(ev, "text", None)
+                        if isinstance(t, str) and t:
+                            text = t
+                    if text is None:
+                        c = getattr(ev, "content", None)
+                        if isinstance(c, str) and c:
+                            text = c
+                    # Only emit if we found text; otherwise, ignore control/meta events
+                    if text:
+                        yield f"data: {text}\n\n"
                     await asyncio.sleep(0)
                 yield "data: [DONE]\n\n"
                 return

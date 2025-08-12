@@ -8,6 +8,7 @@ export const metadata = {
 import { ThemeProvider } from '../components/theme/ThemeProvider';
 import { LayoutStateProvider } from '../components/layout/LayoutState';
 import { NextAuthProvider } from '../contexts/NextAuthProvider';
+import { AuthProvider } from '../contexts/AuthContext';
 import ToasterClient from '../components/ToasterClient';
 import AppFrame from '@/components/layout/AppFrame';
 
@@ -16,12 +17,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <NextAuthProvider>
-          <ThemeProvider>
-            <LayoutStateProvider>
-              <AppFrame>{children}</AppFrame>
-            </LayoutStateProvider>
-            <ToasterClient />
-          </ThemeProvider>
+          <AuthProvider>
+            <ThemeProvider>
+              <LayoutStateProvider>
+                <AppFrame>{children}</AppFrame>
+              </LayoutStateProvider>
+              <ToasterClient />
+            </ThemeProvider>
+          </AuthProvider>
         </NextAuthProvider>
       </body>
     </html>

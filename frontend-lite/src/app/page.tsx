@@ -14,7 +14,7 @@ export default async function RootLanding() {
     const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || DEFAULT_TENANT_ID;
     const cookieHeader = headers().get("cookie") || "";
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+      const base = process.env.NEXT_PUBLIC_API_BASE_URL || "https://rfn5agrmiw.eu-west-3.awsapprunner.com";
       const res = await fetch(`${base}/api/auth/me`, {
         method: "GET",
         headers: {

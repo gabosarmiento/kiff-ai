@@ -10,6 +10,9 @@ ALLOW_TENANT_FALLBACK = os.getenv("ALLOW_TENANT_FALLBACK", "true").lower() == "t
 
 class TenantMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Allow CORS preflight requests to pass through without tenant checks
+        if request.method == "OPTIONS":
+            return await call_next(request)
         path = request.url.path or "/"
         # Exemptions: root, health, and auth endpoints must not block
         exempt = path in {"/", "/health"} or path.startswith("/api/auth/") or path == "/api/auth"

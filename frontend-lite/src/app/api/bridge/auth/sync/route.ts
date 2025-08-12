@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
-const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || 'http://localhost:8000'
+const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || 'https://rfn5agrmiw.eu-west-3.awsapprunner.com'
 const BRIDGE_SECRET = process.env.BRIDGE_SECRET || ''
 
 function sign(email: string, role: string): string {

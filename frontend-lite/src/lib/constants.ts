@@ -7,7 +7,7 @@ export function readEnv(key: string, fallback?: string): string | undefined {
   return value ?? fallback;
 }
 
-export const API_BASE_URL = readEnv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:8000")!;
+export const API_BASE_URL = readEnv("NEXT_PUBLIC_API_BASE_URL", "https://rfn5agrmiw.eu-west-3.awsapprunner.com")!;
 export const USE_MOCKS = (readEnv("NEXT_PUBLIC_USE_MOCKS", "false") || "false").toLowerCase() === "true";
 export const PREVIEW_URL = readEnv("NEXT_PUBLIC_PREVIEW_URL", "https://example.org")!;
 

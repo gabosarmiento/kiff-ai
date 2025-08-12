@@ -11,6 +11,8 @@ from ..util.session import encode_session, make_cookie, clear_cookie
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 SECURE_COOKIES = os.getenv("SECURE_COOKIES", "false").lower() == "true"
+BRIDGE_SECRET = os.getenv("BRIDGE_SECRET", "")
+ALLOW_DEV_BRIDGE = os.getenv("ALLOW_DEV_BRIDGE", "true").lower() == "true"
 
 
 class LoginBody(BaseModel):
@@ -80,6 +82,41 @@ async def signup(req: Request, res: Response, body: SignupBody):
 async def logout(res: Response):
     res.set_cookie(**clear_cookie())
     return {"ok": True}
+
+
+class SyncBody(BaseModel):
+    email: EmailStr
+    role: Optional[str] = "admin"
+
+
+def _verify_bridge_signature(req: Request, email: str, role: str) -> bool:
+    import hmac, hashlib
+    sig = req.headers.get("X-Bridge-Signature") or ""
+    if not BRIDGE_SECRET:
+        return ALLOW_DEV_BRIDGE  # allow in dev if no secret set
+    msg = f"{email}:{role}".encode("utf-8")
+    key = BRIDGE_SECRET.encode("utf-8")
+    expected = hmac.new(key, msg, hashlib.sha256).hexdigest()
+    try:
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
+
+
+@router.post("/sync", response_model=Profile)
+async def sync_backend_session(req: Request, res: Response, body: SyncBody):
+    # Verify HMAC signature from Next bridge
+    if not _verify_bridge_signature(req, body.email, body.role or "admin"):
+        raise HTTPException(status_code=401, detail="Invalid bridge signature")
+    tenant_id = getattr(req.state, "tenant_id", None) or os.getenv("DEFAULT_TENANT_ID", "4485db48-71b7-47b0-8128-c6dca5be352d")
+    token = encode_session({
+        "sub": str(body.email).lower(),
+        "role": (body.role or "admin"),
+        "tenant_id": tenant_id,
+    })
+    cookie = make_cookie(token, secure=SECURE_COOKIES)
+    res.set_cookie(**cookie)
+    return Profile(email=str(body.email).lower(), role=(body.role or "admin"), tenant_id=tenant_id, has_password=True)
 
 
 class PasswordChangeBody(BaseModel):
