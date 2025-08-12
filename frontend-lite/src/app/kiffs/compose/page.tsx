@@ -37,6 +37,8 @@ export default function KiffComposerPage() {
   const [events, setEvents] = React.useState<BuildEvent[]>([]);
   const [busy, setBusy] = React.useState<boolean>(false);
   const [logs, setLogs] = React.useState<string>("");
+  // Current KIFF name for breadcrumb while building
+  const [kiffName, setKiffName] = React.useState<string | undefined>(undefined);
 
   const pushEvent = React.useCallback((e: PreviewEvent) => setEvents((prev) => [...prev, e]), []);
 
@@ -126,7 +128,7 @@ export default function KiffComposerPage() {
 
   return (
     <div className="app-shell">
-      <Navbar />
+      <Navbar kiffName={kiffName} />
       <Sidebar />
       <main
         className="pane pane-with-sidebar"
@@ -149,6 +151,8 @@ export default function KiffComposerPage() {
               selectedAPIs={bag}
               bagLoading={bagLoading}
               onEditBag={() => setEditOpen(true)}
+              onKiffName={(name) => setKiffName(name)}
+              onKiffSaved={(info) => setKiffName(info.name)}
             />
           </div>
           

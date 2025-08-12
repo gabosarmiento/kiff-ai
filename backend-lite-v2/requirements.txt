@@ -16,4 +16,5 @@ e2b-code-interpreter>=1.5.2
 # AGNO + Groq LLM provider and local embedder
 agno
 groq
+chonkie  # Required for semantic chunking in agno
 sentence-transformers

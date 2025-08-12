@@ -1,0 +1,49 @@
+OpenAI
+Anthropic
+Google Gemini AI
+Groq
+Mistral AI
+Together AI
+Cohere
+Hugging Face
+Rasa
+ElevenLabs
+Play.ht
+AssemblyAI
+Deepgram
+Speechmatics
+Murf AI
+Stability AI
+Leonardo.ai
+Ideogram
+Runway
+Clipdrop
+Freepik API
+DeepAI
+Synthesia
+Pictory
+HeyGen
+Fliki
+Luma AI
+Pinecone
+Weaviate
+LangChain API
+Metaphor
+Stripe
+Supabase
+E2B.dev
+Agno
+Apify
+CrewAI
+Relevance AI
+LangGraph
+AutoGen
+MetaGPT
+SmolAgents
+AgentLite
+AgentScope
+Dify
+Composio
+Toolhouse
+Vercel AI SDK
+Gradio

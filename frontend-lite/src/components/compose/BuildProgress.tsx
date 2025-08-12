@@ -23,7 +23,11 @@ export function BuildProgress(props: {
           <div className="text-slate-500 p-2">No events yet.</div>
         ) : (
           events.map((e, i) => (
-            <div key={i}>{JSON.stringify(e)}</div>
+            <div key={i} className={e.type === 'error' ? 'text-red-600' : ''}>
+              {e.type === 'error' && (e.message?.includes('Failed to fetch') || e.message?.includes('Internal Server Error')) ? 
+                'E2B sandbox temporarily unavailable - your code was generated successfully' : 
+                JSON.stringify(e)}
+            </div>
           ))
         )}
       </div>

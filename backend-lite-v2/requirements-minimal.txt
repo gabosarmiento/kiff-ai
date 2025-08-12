@@ -12,10 +12,11 @@ e2b-code-interpreter>=1.5.2
 
 # Essential AI/ML packages for compose functionality
 agno
-groq  
+groq
+chonkie  # Required for semantic chunking in agno  
 
-# Optional: Only include if full ML features are needed (heavy)
-# lancedb>=0.5.0
-# pyarrow>=15.0.0
-# numpy>=1.26.0
-# sentence-transformers
+# Vector DB and ML dependencies (required for KB/indexing features)
+lancedb>=0.5.0
+pyarrow>=15.0.0
+numpy>=1.26.0
+sentence-transformers

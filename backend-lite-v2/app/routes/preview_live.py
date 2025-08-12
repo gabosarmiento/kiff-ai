@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any, Iterator, AsyncIterator
 import asyncio
 import json
 import os
+from decimal import Decimal
 from app.util.preview_store import PreviewStore
 from app.util.sandbox_e2b import E2BProvider, E2BUnavailable
 
@@ -17,6 +18,17 @@ router = APIRouter(prefix="/api/preview", tags=["preview"])
 # Replace the placeholders with calls to your sandbox provider (e.g., E2B) later.
 
 HEARTBEAT_SECONDS = float(os.getenv("PREVIEW_SSE_HEARTBEAT_SECONDS", "25"))
+
+
+def _decimal_to_serializable(obj: Any) -> Any:
+    """Convert Decimal objects and nested structures to JSON-serializable types."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: _decimal_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_decimal_to_serializable(item) for item in obj]
+    return obj
 
 
 def _store() -> PreviewStore:
@@ -228,7 +240,9 @@ async def create_sandbox(request: Request, body: Any = Body(...)):
         "runtime": item.get("runtime"),
         "port": item.get("port"),
     }
-    return JSONResponse(resp)
+    # Convert any Decimal objects to serializable types
+    serializable_resp = _decimal_to_serializable(resp)
+    return JSONResponse(serializable_resp)
 
 
 @router.post("/files")

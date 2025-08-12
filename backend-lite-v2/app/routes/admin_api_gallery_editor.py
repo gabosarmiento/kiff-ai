@@ -176,15 +176,7 @@ async def reindex_api(req: Request, api_id: str):
                     
                     # Store the URLs
                     try:
-                        bulk_upsert_doc_urls([
-                            {
-                                "api_service_id": api_id,
-                                "url": url,
-                                "status": "discovered_agentic",
-                                "priority": 1.0,
-                                "created_at": __import__("datetime").datetime.utcnow().isoformat() + "Z"
-                            } for url in filtered
-                        ])
+                        bulk_upsert_doc_urls(api_id, [(url, None, None) for url in filtered])
                     except Exception as e:
                         print(f"Warning: Failed to store agentic URLs for {api_name}: {e}")
                     
@@ -234,15 +226,7 @@ async def reindex_api(req: Request, api_id: str):
         
         # Store the URLs for future reference
         try:
-            bulk_upsert_doc_urls([
-                {
-                    "api_service_id": api_id,
-                    "url": url,
-                    "status": "discovered",
-                    "priority": 1.0,
-                    "created_at": __import__("datetime").datetime.utcnow().isoformat() + "Z"
-                } for url in filtered
-            ])
+            bulk_upsert_doc_urls(api_id, [(url, None, None) for url in filtered])
         except Exception as e:
             print(f"Warning: Failed to store URLs for {api_name}: {e}")
         
@@ -326,15 +310,7 @@ async def agentic_discovery_api(req: Request, api_id: str):
         
         # Store the URLs
         try:
-            bulk_upsert_doc_urls([
-                {
-                    "api_service_id": api_id,
-                    "url": url,
-                    "status": "discovered_agentic",
-                    "priority": 1.0,
-                    "created_at": __import__("datetime").datetime.utcnow().isoformat() + "Z"
-                } for url in filtered
-            ])
+            bulk_upsert_doc_urls(api_id, [(url, None, None) for url in filtered])
         except Exception as e:
             print(f"Warning: Failed to store agentic URLs for {api_name}: {e}")
         
@@ -451,3 +427,109 @@ async def preindex_all(req: Request):
         except Exception:
             results.append({"api_service_id": api.get("id"), "error": True})
     return {"ok": True, "results": results}
+
+
+# --- Full end-to-end indexing: discover (sitemap + agentic) -> create/reuse KB -> index into LanceDB ---
+from pydantic import BaseModel as _BaseModel
+
+
+class IndexFullBody(_BaseModel):
+    strategy: str = "semantic"  # fixed | semantic | agentic | recursive | document
+    mode: str = "fast"          # fast | agentic
+    embedder: str = "sentence-transformers"
+    chunk_size: int = 4400
+    chunk_overlap: int = 300
+    budget_cap_usd: Optional[float] = None
+    create_kb_if_missing: bool = True
+    kb_name: Optional[str] = None  # default: f"API:{api_name}"
+
+
+@router.post("/api/{api_id}/index_full")
+async def index_full(req: Request, api_id: str, body: IndexFullBody):
+    """Admin-only: Ensure URLs exist (sitemap + agentic fallback), then index into a tenant KB via /api/kb.
+
+    This works even if there is no sitemap. It will:
+      1) Call the existing reindex flow to persist URLs (falls back to agentic discovery).
+      2) Find or create a LanceDB KB for this tenant (named per API).
+      3) Call /api/kb/index with api_id to chunk+ingest into LanceDB.
+    """
+    require_admin(req)
+
+    # Step 0: load API object and derive defaults
+    apis = list_api_services()
+    api = next((a for a in apis if a.get("id") == api_id), None)
+    if not api:
+        raise HTTPException(status_code=404, detail="api not found")
+
+    api_name = api.get("name", "Unknown")
+    kb_display = body.kb_name or f"API:{api_name}"
+
+    # Step 1: Ensure URLs are discovered and stored
+    _ = await reindex_api(req, api_id)  # reuses sitemap + agentic fallback and persists doc_urls
+
+    # Step 2: Find or create a KB for this tenant
+    import httpx as _httpx
+
+    base_url = str(req.base_url).rstrip("/")
+    # Propagate tenant header if present
+    tenant_hdr = req.headers.get("X-Tenant-ID")
+    headers = {"Content-Type": "application/json"}
+    if tenant_hdr:
+        headers["X-Tenant-ID"] = tenant_hdr
+
+    async with _httpx.AsyncClient(timeout=60.0) as client:
+        # List KBs
+        kb_id: Optional[str] = None
+        try:
+            r_list = await client.get(f"{base_url}/api/kb", headers=headers)
+            if r_list.status_code == 200:
+                for kb in r_list.json():
+                    if kb.get("name") == kb_display:
+                        kb_id = kb.get("id")
+                        break
+        except Exception:
+            pass
+
+        # Create if missing
+        if not kb_id and body.create_kb_if_missing:
+            r_create = await client.post(
+                f"{base_url}/api/kb/create",
+                headers=headers,
+                json={
+                    "name": kb_display,
+                    "vector_store": "lancedb",
+                    "retrieval_mode": "agentic-search",
+                    "embedder": body.embedder,
+                },
+            )
+            if r_create.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"failed to create kb: {r_create.text}")
+            kb_id = r_create.json().get("id")
+
+        if not kb_id:
+            raise HTTPException(status_code=400, detail="kb not found and not created")
+
+        # Step 3: Index via /api/kb/index using api_id (will resolve URLs from gallery store)
+        payload = {
+            "kb_id": kb_id,
+            "api_id": api_id,
+            "mode": body.mode,
+            "strategy": body.strategy,
+            "embedder": body.embedder,
+            "chunk_size": body.chunk_size,
+            "chunk_overlap": body.chunk_overlap,
+        }
+        # If no budget cap specified, use a very high cap to effectively disable it
+        payload["budget_cap_usd"] = body.budget_cap_usd if body.budget_cap_usd is not None else 9999.0
+        r_index = await client.post(f"{base_url}/api/kb/index", headers=headers, json=payload)
+        if r_index.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"indexing failed: {r_index.text}")
+
+        out = r_index.json()
+        return {
+            "ok": True,
+            "api_service_id": api_id,
+            "api_name": api_name,
+            "kb_id": kb_id,
+            "indexing": out,
+        }

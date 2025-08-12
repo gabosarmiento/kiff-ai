@@ -164,6 +164,14 @@ try:
     )
 except Exception:
     fetch_text = None  # type: ignore
+    _resolve_urls_from_api = None  # type: ignore
+    _load_api = None  # type: ignore
+
+# Prefer URLs discovered and persisted by the admin gallery flow
+try:
+    from ..util.gallery_store import list_doc_urls  # type: ignore
+except Exception:
+    list_doc_urls = None  # type: ignore
 
 
 class IndexRequest(BaseModel):
@@ -196,10 +204,20 @@ async def index_into_kb(req: IndexRequest, x_tenant_id: Optional[str] = Header(N
     if req.urls:
         urls = req.urls[:50]
     elif req.api_id:
-        api = _load_api(req.api_id)
-        if not api:
-            raise HTTPException(status_code=404, detail="api_id not found")
-        urls = await _resolve_urls_from_api(api, limit=50)
+        # 1) Try admin gallery persisted URLs (UUID-based api_service_id)
+        if list_doc_urls is not None:
+            try:
+                persisted = [d.get("url") for d in list_doc_urls() if d.get("api_service_id") == req.api_id and d.get("url")]
+                if persisted:
+                    urls = persisted[:50]
+            except Exception:
+                pass
+        # 2) Fallback to legacy crawler based on apis.json slugs
+        if not urls and _load_api is not None and _resolve_urls_from_api is not None:
+            api = _load_api(req.api_id)
+            if not api:
+                raise HTTPException(status_code=404, detail="api_id not found")
+            urls = await _resolve_urls_from_api(api, limit=50)
     if not urls:
         raise HTTPException(status_code=400, detail="must provide urls or api_id")
 

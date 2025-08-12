@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiJson } from "@/lib/api";
 
 // Floating pill navbar with subtle glow, Storybook style
-export function Navbar() {
+export function Navbar({ kiffName }: { kiffName?: string }) {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [open, setOpen] = React.useState(false);
@@ -95,11 +95,12 @@ export function Navbar() {
 
   return (
     <>
+      {/* Desktop Navbar */}
       <header className="hidden md:block fixed left-1/2 top-4 z-40 -translate-x-1/2">
         <div className="relative flex items-center rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 shadow-lg backdrop-blur">
 
           {/* Left / Logo */}
-          <div className="pl-1 pr-2">
+          <div className="pl-1 pr-2 flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -114,6 +115,12 @@ export function Navbar() {
             >
               Kiff
             </button>
+            {kiffName && (
+              <span className="flex items-center text-sm text-slate-500 select-none">
+                <span className="mx-1 text-slate-300">/</span>
+                <span className="truncate max-w-[22vw] font-medium text-slate-700" title={kiffName}>{kiffName}</span>
+              </span>
+            )}
           </div>
 
           {/* Right actions: Bag + profile. The expanding pill is in normal flow so the container grows together */}
@@ -208,6 +215,30 @@ export function Navbar() {
       </header>
       {/* Spacer to push page content below the floating nav - only on desktop */}
       <div aria-hidden className="hidden md:block h-[72px] w-full" />
+
+      {/* Mobile floating pill: KIFF name + Packs (no Account/Profile) */}
+      <div className="md:hidden fixed top-3 right-3 z-40 flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-2 shadow-lg backdrop-blur max-w-[85vw]">
+        <span className="text-sm text-slate-500 select-none">KIFF</span>
+        {kiffName && (
+          <span className="flex items-center text-sm text-slate-500 select-none">
+            <span className="mx-1 text-slate-300">/</span>
+            <span className="truncate max-w-[30vw] font-medium text-slate-700" title={kiffName}>{kiffName}</span>
+          </span>
+        )}
+        <button
+          className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
+          onClick={async () => {
+            if (!bagOpen) await refreshBag();
+            setBagOpen(true);
+          }}
+          aria-label="Kiff Packs"
+        >
+          <span>Packs</span>
+          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-1 text-xs text-white">
+            {bagLoading ? "\u2026" : bagCount}
+          </span>
+        </button>
+      </div>
 
       {/* Mobile FAB: Kiff Packs (only on small screens) */}
       <button

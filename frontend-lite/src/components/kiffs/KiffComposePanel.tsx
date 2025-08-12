@@ -30,6 +30,8 @@ export type KiffComposePanelProps = {
     model: string;
   }) => void;
   onOutput?: (content: string) => void | Promise<void>;
+  onKiffName?: (name: string) => void;
+  onKiffSaved?: (info: { id: string; name: string }) => void;
 };
 
 export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
@@ -43,6 +45,8 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   onEditBag,
   onSubmit,
   onOutput,
+  onKiffName,
+  onKiffSaved,
 }) => {
   // Core state
   // KBs fetched from backend (id + name). We store the selected value as the KB ID.
@@ -102,7 +106,10 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         model: model,
       };
       const resp = await apiJson<{ id: string }>("/api/kiffs", { method: "POST", body: body as any });
-      if (resp?.id) setSavedKiffId(resp.id);
+      if (resp?.id) {
+        setSavedKiffId(resp.id);
+        try { onKiffSaved && onKiffSaved({ id: resp.id, name }); } catch {}
+      }
     } catch (e) {
       // Non-fatal; keep composer usable even if save fails
       console.warn("Auto-save Kiff failed", e);
@@ -750,6 +757,8 @@ export default function App() {
                       const newSessionId = await createSession();
                       setSessionId(newSessionId);
                     }
+                    // Emit a tentative KIFF name immediately from the prompt
+                    try { onKiffName && onKiffName((prompt || "Untitled Kiff").slice(0, 60)); } catch {}
                     streaming ? sendStream() : sendNonStream();
                   }}
                   className="rounded-full bg-slate-900 px-3 py-1.5 text-xs text-white disabled:opacity-50"

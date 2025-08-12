@@ -6,8 +6,10 @@
     "is_visible": true,
     "status": "ready",
     "id": "219410f2-43da-472d-8643-5a02306a12e2",
-    "updated_at": "2025-08-11T12:51:22.154559Z",
-    "created_at": "2025-08-11T12:51:22.154559Z"
+    "updated_at": "2025-08-12T08:04:40.672457Z",
+    "created_at": "2025-08-11T12:51:22.154559Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:04:40.671364Z"
   },
   {
     "provider_id": "d19175d0-c0f6-4198-805e-29363b6728c5",
@@ -16,38 +18,46 @@
     "is_visible": true,
     "status": "ready",
     "id": "e24a46a7-1cbc-40e1-a9bc-99d9b85244a7",
-    "updated_at": "2025-08-11T12:51:22.158244Z",
-    "created_at": "2025-08-11T12:51:22.158244Z"
+    "updated_at": "2025-08-12T08:04:42.244679Z",
+    "created_at": "2025-08-11T12:51:22.158244Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:04:42.244051Z"
   },
   {
     "provider_id": "3d5cce47-e493-4548-a905-9a0f770fa45e",
     "name": "Google Gemini AI",
     "doc_base_url": "https://ai.google.dev/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "486408eb-904a-48ad-a5e6-532ec0338eb0",
-    "updated_at": "2025-08-11T12:51:22.162849Z",
-    "created_at": "2025-08-11T12:51:22.162849Z"
+    "updated_at": "2025-08-12T08:04:45.868761Z",
+    "created_at": "2025-08-11T12:51:22.162849Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:04:45.867396Z"
   },
   {
     "provider_id": "906ddc08-f72f-4e25-b530-640cd0081558",
     "name": "Groq",
     "doc_base_url": "https://console.groq.com/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "136bcb67-1cc2-45e9-9d07-6543bd325b1f",
-    "updated_at": "2025-08-11T12:51:22.166442Z",
-    "created_at": "2025-08-11T12:51:22.166442Z"
+    "updated_at": "2025-08-12T08:04:49.177521Z",
+    "created_at": "2025-08-11T12:51:22.166442Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:04:49.177060Z"
   },
   {
     "provider_id": "00321923-9202-4c65-9c6c-bf641d5ec8f3",
     "name": "Mistral AI",
     "doc_base_url": "https://docs.mistral.ai/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "aa59faee-aead-41a8-afcd-fc78a9f62216",
-    "updated_at": "2025-08-11T12:51:22.168361Z",
-    "created_at": "2025-08-11T12:51:22.168361Z"
+    "updated_at": "2025-08-12T08:04:50.128873Z",
+    "created_at": "2025-08-11T12:51:22.168361Z",
+    "url_count": 12,
+    "last_indexed_at": "2025-08-12T08:04:50.128183Z"
   },
   {
     "provider_id": "5685d416-6da0-49ab-a243-213b1e0c8342",
@@ -56,8 +66,10 @@
     "is_visible": true,
     "status": "ready",
     "id": "0b696476-c026-43f0-9b74-1cf5b69e5cdd",
-    "updated_at": "2025-08-11T12:51:22.169908Z",
-    "created_at": "2025-08-11T12:51:22.169908Z"
+    "updated_at": "2025-08-12T08:04:52.812394Z",
+    "created_at": "2025-08-11T12:51:22.169908Z",
+    "url_count": 132,
+    "last_indexed_at": "2025-08-12T08:04:52.811940Z"
   },
   {
     "provider_id": "6ddd8920-fdc7-4010-84dd-c1e2a6da1ce2",
@@ -66,18 +78,22 @@
     "is_visible": true,
     "status": "ready",
     "id": "bcc7bf12-b86b-403f-9373-156aafcf67d3",
-    "updated_at": "2025-08-11T12:51:22.173170Z",
-    "created_at": "2025-08-11T12:51:22.173170Z"
+    "updated_at": "2025-08-12T08:05:15.734533Z",
+    "created_at": "2025-08-11T12:51:22.173170Z",
+    "url_count": 174,
+    "last_indexed_at": "2025-08-12T08:05:15.732863Z"
   },
   {
     "provider_id": "2a58f395-dd86-4091-96bd-ac9aa973a92d",
     "name": "Hugging Face",
     "doc_base_url": "https://huggingface.co/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "97aedb01-8867-46b4-9797-ac462bd5ad8e",
-    "updated_at": "2025-08-11T12:51:22.176161Z",
-    "created_at": "2025-08-11T12:51:22.176161Z"
+    "updated_at": "2025-08-12T08:05:17.012193Z",
+    "created_at": "2025-08-11T12:51:22.176161Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:05:17.011527Z"
   },
   {
     "provider_id": "a66a41a6-cfe5-4027-b681-547f9069fa11",
@@ -86,38 +102,46 @@
     "is_visible": true,
     "status": "ready",
     "id": "adef5aee-3745-499a-be77-ea99cf8c1950",
-    "updated_at": "2025-08-11T12:51:22.178994Z",
-    "created_at": "2025-08-11T12:51:22.178994Z"
+    "updated_at": "2025-08-12T08:05:19.280658Z",
+    "created_at": "2025-08-11T12:51:22.178994Z",
+    "url_count": 119,
+    "last_indexed_at": "2025-08-12T08:05:19.280113Z"
   },
   {
     "provider_id": "99dc3282-d97b-4bbf-900a-7a1d191641e0",
     "name": "ElevenLabs",
     "doc_base_url": "https://docs.elevenlabs.io/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "d71c8225-1011-4de3-b315-cce222d89b6e",
-    "updated_at": "2025-08-11T12:51:22.182381Z",
-    "created_at": "2025-08-11T12:51:22.182381Z"
+    "updated_at": "2025-08-12T08:05:20.857045Z",
+    "created_at": "2025-08-11T12:51:22.182381Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:05:20.855188Z"
   },
   {
     "provider_id": "882b14d1-eddb-4474-ab4b-82256c3db20e",
     "name": "Play.ht",
     "doc_base_url": "https://docs.play.ht/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "6cdc2128-b4ef-43cf-bb56-74ab691f53dd",
-    "updated_at": "2025-08-11T12:51:22.185028Z",
-    "created_at": "2025-08-11T12:51:22.185028Z"
+    "updated_at": "2025-08-12T08:05:24.323530Z",
+    "created_at": "2025-08-11T12:51:22.185028Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:05:24.323071Z"
   },
   {
     "provider_id": "84dbc0b8-0888-4773-8eea-1007021e2f0b",
     "name": "AssemblyAI",
     "doc_base_url": "https://www.assemblyai.com/docs/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "16678fd8-3d25-4ced-8736-eeaf4a05553c",
-    "updated_at": "2025-08-11T12:51:22.189342Z",
-    "created_at": "2025-08-11T12:51:22.189342Z"
+    "updated_at": "2025-08-12T08:05:41.785191Z",
+    "created_at": "2025-08-11T12:51:22.189342Z",
+    "url_count": 98,
+    "last_indexed_at": "2025-08-12T08:05:41.784702Z"
   },
   {
     "provider_id": "05b7a341-9c99-43d0-9172-4c4211a8ec61",
@@ -126,18 +150,22 @@
     "is_visible": true,
     "status": "ready",
     "id": "ef415fbe-2791-4b13-8625-95fb8837b3f2",
-    "updated_at": "2025-08-11T12:51:22.194589Z",
-    "created_at": "2025-08-11T12:51:22.194589Z"
+    "updated_at": "2025-08-12T08:05:52.466433Z",
+    "created_at": "2025-08-11T12:51:22.194589Z",
+    "url_count": 240,
+    "last_indexed_at": "2025-08-12T08:05:52.465921Z"
   },
   {
     "provider_id": "f693bddc-85e9-4335-8026-a262b00b3b98",
     "name": "Speechmatics",
     "doc_base_url": "https://docs.speechmatics.com/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "4949ec3f-717d-4928-9c47-dc7ea1f242f9",
-    "updated_at": "2025-08-11T12:51:22.199107Z",
-    "created_at": "2025-08-11T12:51:22.199107Z"
+    "updated_at": "2025-08-12T08:05:53.437466Z",
+    "created_at": "2025-08-11T12:51:22.199107Z",
+    "url_count": 15,
+    "last_indexed_at": "2025-08-12T08:05:53.437069Z"
   },
   {
     "provider_id": "d6574c8d-acd2-4711-b8b7-6cb56c7df236",
@@ -146,48 +174,58 @@
     "is_visible": true,
     "status": "ready",
     "id": "897051c7-3ed3-4267-b15d-615f620c5f4f",
-    "updated_at": "2025-08-11T12:51:22.203501Z",
-    "created_at": "2025-08-11T12:51:22.203501Z"
+    "updated_at": "2025-08-12T08:05:57.946784Z",
+    "created_at": "2025-08-11T12:51:22.203501Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:05:57.946156Z"
   },
   {
     "provider_id": "2f92be1b-9259-4705-abce-ae6621f0d434",
     "name": "Stability AI",
     "doc_base_url": "https://platform.stability.ai/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "86742984-0248-4ebf-9d7f-a271b0922281",
-    "updated_at": "2025-08-11T12:51:22.205791Z",
-    "created_at": "2025-08-11T12:51:22.205791Z"
+    "updated_at": "2025-08-12T08:05:59.002887Z",
+    "created_at": "2025-08-11T12:51:22.205791Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:05:59.002341Z"
   },
   {
     "provider_id": "e06f08fb-f8d3-439f-b3ad-0cd98268d180",
     "name": "Leonardo.ai",
     "doc_base_url": "https://docs.leonardo.ai/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "bba88a51-9f34-40eb-97e1-72e9da47cb18",
-    "updated_at": "2025-08-11T12:51:22.208197Z",
-    "created_at": "2025-08-11T12:51:22.208197Z"
+    "updated_at": "2025-08-12T08:06:02.650234Z",
+    "created_at": "2025-08-11T12:51:22.208197Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:02.649130Z"
   },
   {
     "provider_id": "3e5abd25-260f-4510-a17c-17ce778b8db1",
     "name": "Ideogram",
     "doc_base_url": "https://ideogram.ai/developer",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "4ebeb4b6-52c2-4613-b5bc-d6d97fe769a9",
-    "updated_at": "2025-08-11T12:51:22.210664Z",
-    "created_at": "2025-08-11T12:51:22.210664Z"
+    "updated_at": "2025-08-12T08:06:03.305990Z",
+    "created_at": "2025-08-11T12:51:22.210664Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:03.305511Z"
   },
   {
     "provider_id": "9dcb3f92-77cf-49a1-8a9e-1fc54463273b",
     "name": "Runway",
     "doc_base_url": "https://docs.runwayml.com/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "71eae077-9a5e-4296-b49f-f051291698e8",
-    "updated_at": "2025-08-11T12:51:22.213511Z",
-    "created_at": "2025-08-11T12:51:22.213511Z"
+    "updated_at": "2025-08-12T08:06:04.798954Z",
+    "created_at": "2025-08-11T12:51:22.213511Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:04.798096Z"
   },
   {
     "provider_id": "861709f1-f910-47fa-ac94-8340701ec1f8",
@@ -196,28 +234,34 @@
     "is_visible": true,
     "status": "ready",
     "id": "abbe36a3-0344-43ec-a32a-899e93e9f802",
-    "updated_at": "2025-08-11T12:51:22.216276Z",
-    "created_at": "2025-08-11T12:51:22.216276Z"
+    "updated_at": "2025-08-12T08:06:06.012174Z",
+    "created_at": "2025-08-11T12:51:22.216276Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:06.011688Z"
   },
   {
     "provider_id": "f96a158e-e84f-4041-bb32-4b6244f8a54b",
     "name": "Freepik API",
     "doc_base_url": "https://developer.freepik.com/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "bdc06f82-35d1-44d4-b9c4-cb92d98fbeaa",
-    "updated_at": "2025-08-11T12:51:22.219290Z",
-    "created_at": "2025-08-11T12:51:22.219290Z"
+    "updated_at": "2025-08-12T08:06:06.161849Z",
+    "created_at": "2025-08-11T12:51:22.219290Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:06.161485Z"
   },
   {
     "provider_id": "df23e368-8fd9-45b5-ae73-22d237464d26",
     "name": "DeepAI",
     "doc_base_url": "https://deepai.org/machine-learning-model/text2img",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "de9ff454-f11a-4ca8-ba0a-af375099a315",
-    "updated_at": "2025-08-11T12:51:22.221801Z",
-    "created_at": "2025-08-11T12:51:22.221801Z"
+    "updated_at": "2025-08-12T08:06:07.636354Z",
+    "created_at": "2025-08-11T12:51:22.221801Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:07.635981Z"
   },
   {
     "provider_id": "ffd8bc4f-b427-451f-84cb-a6af8513d6ed",
@@ -226,38 +270,46 @@
     "is_visible": true,
     "status": "ready",
     "id": "46d8b5c0-2c47-44b5-ac86-3965f9e43fdd",
-    "updated_at": "2025-08-11T12:51:22.224408Z",
-    "created_at": "2025-08-11T12:51:22.224408Z"
+    "updated_at": "2025-08-12T08:06:11.875314Z",
+    "created_at": "2025-08-11T12:51:22.224408Z",
+    "url_count": 124,
+    "last_indexed_at": "2025-08-12T08:06:11.874692Z"
   },
   {
     "provider_id": "5c45f8ae-2178-4411-be5b-47d03907c825",
     "name": "Pictory",
     "doc_base_url": "https://pictory.ai/api-docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "93950dda-91e7-455f-be62-9ab8e507441a",
-    "updated_at": "2025-08-11T12:51:22.226989Z",
-    "created_at": "2025-08-11T12:51:22.226989Z"
+    "updated_at": "2025-08-12T08:06:13.967354Z",
+    "created_at": "2025-08-11T12:51:22.226989Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:13.966605Z"
   },
   {
     "provider_id": "15160377-13e1-41af-9f14-b5367c0274f1",
     "name": "HeyGen",
     "doc_base_url": "https://docs.heygen.com/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "d73f2d60-cee9-4e5d-ba05-dbda588e239b",
-    "updated_at": "2025-08-11T12:51:22.229952Z",
-    "created_at": "2025-08-11T12:51:22.229952Z"
+    "updated_at": "2025-08-12T08:06:15.050339Z",
+    "created_at": "2025-08-11T12:51:22.229952Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:15.049854Z"
   },
   {
     "provider_id": "aaa1b9c8-f7dc-4f23-8713-e6a48057b3fe",
     "name": "Fliki",
     "doc_base_url": "https://fliki.ai/api-docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "34eeb2db-275c-4afd-98f9-5036e9d907a8",
-    "updated_at": "2025-08-11T12:51:22.232550Z",
-    "created_at": "2025-08-11T12:51:22.232550Z"
+    "updated_at": "2025-08-12T08:06:16.865385Z",
+    "created_at": "2025-08-11T12:51:22.232550Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:16.864682Z"
   },
   {
     "provider_id": "65299def-a294-4ae3-b510-d7374b17d239",
@@ -266,58 +318,70 @@
     "is_visible": true,
     "status": "ready",
     "id": "ed1c42e8-8996-442f-ad1b-6f8050acb4e1",
-    "updated_at": "2025-08-11T12:51:22.235458Z",
-    "created_at": "2025-08-11T12:51:22.235458Z"
+    "updated_at": "2025-08-12T08:06:17.508361Z",
+    "created_at": "2025-08-11T12:51:22.235458Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:17.507633Z"
   },
   {
     "provider_id": "b519e01d-f5bf-447e-ab8b-c4b636bb9b44",
     "name": "Pinecone",
     "doc_base_url": "https://docs.pinecone.io/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "9a118cc3-59e8-4f31-82b5-c76efaaf6e5c",
-    "updated_at": "2025-08-11T12:51:22.240036Z",
-    "created_at": "2025-08-11T12:51:22.240036Z"
+    "updated_at": "2025-08-12T08:06:20.026094Z",
+    "created_at": "2025-08-11T12:51:22.240036Z",
+    "url_count": 368,
+    "last_indexed_at": "2025-08-12T08:06:20.025539Z"
   },
   {
     "provider_id": "8316a30e-e275-4dba-b5ef-e494bc352331",
     "name": "Weaviate",
     "doc_base_url": "https://weaviate.io/developers/weaviate",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "6fe310c2-024c-4627-8765-cbccd2b18d31",
-    "updated_at": "2025-08-11T12:51:22.243232Z",
-    "created_at": "2025-08-11T12:51:22.243232Z"
+    "updated_at": "2025-08-12T08:06:21.509920Z",
+    "created_at": "2025-08-11T12:51:22.243232Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:21.509428Z"
   },
   {
     "provider_id": "4ef39edf-ceef-49eb-a361-f92571993e8a",
     "name": "LangChain API",
     "doc_base_url": "https://api.python.langchain.com/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "2f3d80f0-12a1-46fd-a1b1-87c91d6e0643",
-    "updated_at": "2025-08-11T12:51:22.245895Z",
-    "created_at": "2025-08-11T12:51:22.245895Z"
+    "updated_at": "2025-08-12T08:06:24.330568Z",
+    "created_at": "2025-08-11T12:51:22.245895Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:24.329719Z"
   },
   {
     "provider_id": "d5f037f7-cdbd-4f0d-b8e0-d49873cb6505",
     "name": "Metaphor",
     "doc_base_url": "https://docs.metaphor.systems/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "af7063ca-c695-4906-85cf-db77180eabff",
-    "updated_at": "2025-08-11T12:51:22.248394Z",
-    "created_at": "2025-08-11T12:51:22.248394Z"
+    "updated_at": "2025-08-12T08:06:24.793598Z",
+    "created_at": "2025-08-11T12:51:22.248394Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:24.793011Z"
   },
   {
     "provider_id": "6c335378-368e-445b-b1b8-ea9b252f987a",
     "name": "Stripe",
     "doc_base_url": "https://stripe.com/docs/api",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "a69b5bf6-3dc7-430b-b289-33f8606d01b5",
-    "updated_at": "2025-08-11T12:51:22.251691Z",
-    "created_at": "2025-08-11T12:51:22.251691Z"
+    "updated_at": "2025-08-12T08:06:25.593055Z",
+    "created_at": "2025-08-11T12:51:22.251691Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:25.592621Z"
   },
   {
     "provider_id": "a4889a37-4b95-4c8f-85b3-6d5e88a7a8c8",
@@ -326,167 +390,201 @@
     "is_visible": true,
     "status": "ready",
     "id": "5c5aa203-80e4-43f0-a0bb-5f49817e826e",
-    "updated_at": "2025-08-11T12:51:22.254292Z",
-    "created_at": "2025-08-11T12:51:22.254292Z"
+    "updated_at": "2025-08-12T08:06:26.515727Z",
+    "created_at": "2025-08-11T12:51:22.254292Z",
+    "url_count": 1921,
+    "last_indexed_at": "2025-08-12T08:06:26.515294Z"
   },
   {
     "provider_id": "88a987b4-a703-431c-a4bc-eda8f3d09af3",
     "name": "E2B.dev",
     "doc_base_url": "https://e2b.dev/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "b05d10f2-b804-492c-b91a-05b4bf199d35",
-    "updated_at": "2025-08-11T12:51:22.258077Z",
-    "created_at": "2025-08-11T12:51:22.258077Z"
+    "updated_at": "2025-08-12T08:06:29.322359Z",
+    "created_at": "2025-08-11T12:51:22.258077Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:29.321914Z"
   },
   {
     "provider_id": "3d5457c1-64bc-4784-b883-918920723147",
     "name": "Agno",
     "doc_base_url": "https://docs.agno.com",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "77833fdb-c3bb-4de9-b965-a7cc0e9a4e57",
-    "updated_at": "2025-08-11T12:51:22.261912Z",
-    "created_at": "2025-08-11T12:51:22.261912Z"
+    "updated_at": "2025-08-12T08:06:31.607874Z",
+    "created_at": "2025-08-11T12:51:22.261912Z",
+    "url_count": 122,
+    "last_indexed_at": "2025-08-12T08:06:31.607427Z"
   },
   {
     "provider_id": "ee0d1202-f0ae-4512-8528-7305ac996891",
     "name": "Apify",
     "doc_base_url": "https://docs.apify.com/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "2d371f40-e017-4df0-a9f1-a5097360714e",
-    "updated_at": "2025-08-11T12:51:22.265570Z",
-    "created_at": "2025-08-11T12:51:22.265570Z"
+    "updated_at": "2025-08-12T08:06:34.176580Z",
+    "created_at": "2025-08-11T12:51:22.265570Z",
+    "url_count": 1405,
+    "last_indexed_at": "2025-08-12T08:06:34.176148Z"
   },
   {
     "provider_id": "ca04af65-64b5-480e-b0bc-a63df3f810d9",
     "name": "CrewAI",
     "doc_base_url": "https://crew.ai/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "5c63ddd5-876e-48bf-bcfb-898f73ebc015",
-    "updated_at": "2025-08-11T12:51:22.268340Z",
-    "created_at": "2025-08-11T12:51:22.268340Z"
+    "updated_at": "2025-08-12T08:06:59.110534Z",
+    "created_at": "2025-08-11T12:51:22.268340Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:59.107736Z"
   },
   {
     "provider_id": "be8df24e-6213-4046-8d0e-053e58d531a3",
     "name": "Relevance AI",
     "doc_base_url": "https://docs.relevance.ai/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "fdd62a6f-c1c7-4222-904a-1b350defdb43",
-    "updated_at": "2025-08-11T12:51:22.271304Z",
-    "created_at": "2025-08-11T12:51:22.271304Z"
+    "updated_at": "2025-08-12T08:06:59.696058Z",
+    "created_at": "2025-08-11T12:51:22.271304Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:06:59.695365Z"
   },
   {
     "provider_id": "fd732330-89e3-4e34-a93e-d35b25587e96",
     "name": "LangGraph",
     "doc_base_url": "https://langchain.com/langgraph/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "678c828f-4353-43f5-a34f-fee9df4e0b74",
-    "updated_at": "2025-08-11T12:51:22.274877Z",
-    "created_at": "2025-08-11T12:51:22.274877Z"
+    "updated_at": "2025-08-12T08:07:01.617231Z",
+    "created_at": "2025-08-11T12:51:22.274877Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:01.616099Z"
   },
   {
     "provider_id": "7a003510-6981-4e3f-bdb6-5934f168ab2a",
     "name": "AutoGen",
     "doc_base_url": "https://microsoft.github.io/autogen/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "a1afe3eb-bcac-47f2-aaea-9815b07a4426",
-    "updated_at": "2025-08-11T12:51:22.278514Z",
-    "created_at": "2025-08-11T12:51:22.278514Z"
+    "updated_at": "2025-08-12T08:07:02.903660Z",
+    "created_at": "2025-08-11T12:51:22.278514Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:02.902371Z"
   },
   {
     "provider_id": "61729437-0f23-404d-bc5e-f76d9c0df17d",
     "name": "MetaGPT",
     "doc_base_url": "https://meta-gpt.com/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "0de8e032-dded-4707-beea-a79dacdb7b1c",
-    "updated_at": "2025-08-11T12:51:22.281671Z",
-    "created_at": "2025-08-11T12:51:22.281671Z"
+    "updated_at": "2025-08-12T08:07:06.708295Z",
+    "created_at": "2025-08-11T12:51:22.281671Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:06.707570Z"
   },
   {
     "provider_id": "8dcf429d-88a4-4863-8a0b-0d8795a31122",
     "name": "SmolAgents",
     "doc_base_url": "https://huggingface.co/docs/smolagents",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "72d7e8a2-8615-4999-bca3-0ef6122a0e41",
-    "updated_at": "2025-08-11T12:51:22.284866Z",
-    "created_at": "2025-08-11T12:51:22.284866Z"
+    "updated_at": "2025-08-12T08:07:07.772351Z",
+    "created_at": "2025-08-11T12:51:22.284866Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:07.771600Z"
   },
   {
     "provider_id": "74b6acbc-0d21-40f8-8dd9-1e9b9a18b271",
     "name": "AgentLite",
     "doc_base_url": "https://github.com/SalesforceAIResearch/AgentLite",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "09e83684-7c7f-45ef-9fe8-0185e52bedf1",
-    "updated_at": "2025-08-11T12:51:22.289692Z",
-    "created_at": "2025-08-11T12:51:22.289692Z"
+    "updated_at": "2025-08-12T08:07:09.111040Z",
+    "created_at": "2025-08-11T12:51:22.289692Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:09.110327Z"
   },
   {
     "provider_id": "f618b9cc-05b6-43b4-92f5-ab6ef07a720a",
     "name": "AgentScope",
     "doc_base_url": "https://github.com/modelscope/agentscope",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "9d8797e8-7e90-4597-bef5-c321edc54fae",
-    "updated_at": "2025-08-11T12:51:22.293157Z",
-    "created_at": "2025-08-11T12:51:22.293157Z"
+    "updated_at": "2025-08-12T08:07:10.402789Z",
+    "created_at": "2025-08-11T12:51:22.293157Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:10.401801Z"
   },
   {
     "provider_id": "4eb36102-d574-4263-9e64-fe817e099894",
     "name": "Dify",
     "doc_base_url": "https://docs.dify.ai/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "bc196862-04dc-43c7-b3c2-4df60053301f",
-    "updated_at": "2025-08-11T12:51:22.349385Z",
-    "created_at": "2025-08-11T12:51:22.349385Z"
+    "updated_at": "2025-08-12T08:07:20.570522Z",
+    "created_at": "2025-08-11T12:51:22.349385Z",
+    "url_count": 140,
+    "last_indexed_at": "2025-08-12T08:07:20.569804Z"
   },
   {
     "provider_id": "ab755bfd-342a-4c03-8c14-24df9f680196",
     "name": "Composio",
     "doc_base_url": "https://composio.ai/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "81e4764b-3076-4c56-ba3f-0bb83e2fc9ab",
-    "updated_at": "2025-08-11T12:51:22.359684Z",
-    "created_at": "2025-08-11T12:51:22.359684Z"
+    "updated_at": "2025-08-12T08:07:21.171451Z",
+    "created_at": "2025-08-11T12:51:22.359684Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:21.170732Z"
   },
   {
     "provider_id": "a0138e62-550e-4c15-9a14-4c1c5c105e02",
     "name": "Toolhouse",
     "doc_base_url": "https://toolhouse.ai/docs",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "9aea4a7a-e9e1-4c66-9358-f36612369ec5",
-    "updated_at": "2025-08-11T12:51:22.364705Z",
-    "created_at": "2025-08-11T12:51:22.364705Z"
+    "updated_at": "2025-08-12T08:07:22.015135Z",
+    "created_at": "2025-08-11T12:51:22.364705Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:22.014642Z"
   },
   {
     "provider_id": "fb496af7-12d0-4e1b-a132-ae704b395b9c",
     "name": "Vercel AI SDK",
     "doc_base_url": "https://vercel.com/docs/concepts/ai",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "63e5fb4d-5885-4bc9-82b4-390d7c3d2150",
-    "updated_at": "2025-08-11T12:51:22.368764Z",
-    "created_at": "2025-08-11T12:51:22.368764Z"
+    "updated_at": "2025-08-12T08:07:25.076647Z",
+    "created_at": "2025-08-11T12:51:22.368764Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:25.075895Z"
   },
   {
     "provider_id": "8009bbd8-bd5c-4559-adda-d50705d6cd94",
     "name": "Gradio",
     "doc_base_url": "https://gradio.app/docs/",
-    "is_visible": true,
+    "is_visible": false,
     "status": "ready",
     "id": "18814569-315e-4d85-8dfc-f279d05a5363",
-    "updated_at": "2025-08-11T12:51:22.373034Z",
-    "created_at": "2025-08-11T12:51:22.373034Z"
+    "updated_at": "2025-08-12T08:07:25.527351Z",
+    "created_at": "2025-08-11T12:51:22.373034Z",
+    "url_count": 0,
+    "last_indexed_at": "2025-08-12T08:07:25.526932Z"
   }
 ]

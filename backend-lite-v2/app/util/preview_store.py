@@ -82,14 +82,18 @@ class PreviewStore:
             values[f":v{i}"] = v
             sets.append(f"#n{i} = :v{i}")
         # Always update last_seen
-        i = len(sets)
-        names[f"#n{i}"] = "last_seen"
-        values[f":v{i}"] = self._now()
-        sets.append(f"#n{i} = :v{i}")
+        # Avoid duplicating last_seen if caller already passed it
+        if "last_seen" not in fields:
+            i = len(sets)
+            names[f"#n{i}"] = "last_seen"
+            values[f":v{i}"] = self._now()
+            sets.append(f"#n{i} = :v{i}")
         expr = "SET " + ", ".join(sets)
         if self._mem is not None:
             current = self.get_session(tenant_id, session_id) or {}
-            merged = {**current, **{k: v for k, v in fields.items()}, "last_seen": self._now()}
+            # In-memory: ensure last_seen is refreshed once
+            merged = {**current, **{k: v for k, v in fields.items()}}
+            merged["last_seen"] = self._now()
             self.put_session(tenant_id, session_id, merged)
         else:
             self._table.update_item(

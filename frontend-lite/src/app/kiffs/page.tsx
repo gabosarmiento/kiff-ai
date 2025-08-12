@@ -9,6 +9,10 @@ import PageContainer from "@/components/ui/PageContainer";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Trash } from "lucide-react";
 
+// Icon wrapper to avoid JSX typing issues with lucide-react in this setup
+const TrashIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
+  React.createElement(Trash as any, props as any);
+
 interface KiffItem { id: string; name: string; created_at?: string; content_preview?: string }
 
 export default function KiffsIndexPage() {
@@ -123,7 +127,7 @@ export default function KiffsIndexPage() {
                             aria-label="Delete"
                             title="Delete"
                           >
-                            <Trash className="h-4 w-4" />
+                            <TrashIcon className="h-4 w-4" />
                           </button>
                         </div>
                       </div>

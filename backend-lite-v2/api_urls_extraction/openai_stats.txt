@@ -1,0 +1,5 @@
+OpenAI: 571 URLs extracted
+Base URL: https://platform.openai.com
+Doc prefixes: ["/docs"]
+Extraction time: $(date)
+Status: ✅ COMPLETED
