@@ -130,7 +130,14 @@ export default function KiffComposerPage() {
       <Sidebar />
       <main
         className="pane pane-with-sidebar"
-        style={{ padding: 16, maxWidth: 1200, paddingLeft: leftWidth + 24, margin: "0 auto", overflowX: "hidden", paddingBottom: 96 }}
+        style={{ 
+          padding: "16px", 
+          maxWidth: "1400px", 
+          paddingLeft: leftWidth + 24, 
+          margin: "0 auto", 
+          overflowX: "hidden", 
+          paddingBottom: 96 
+        }}
       >
         {/* Selected APIs chips */}
         <div className="card" style={{ marginBottom: 12 }}>
@@ -158,23 +165,29 @@ export default function KiffComposerPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div>
+        {/* Improved responsive layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Compose Panel - Takes 2/3 on large screens */}
+          <div className="lg:col-span-2">
             <KiffComposePanel onOutput={handleOutput} />
           </div>
-          <div className="space-y-4">
+          
+          {/* Preview & Status Panel - Takes 1/3 on large screens, full width on mobile */}
+          <div className="lg:col-span-1 space-y-4">
             <SandboxPreview
               previewUrl={previewUrl}
               status={status}
               onOpen={() => previewUrl && window.open(previewUrl, "_blank")}
             />
             <BuildProgress events={events} busy={busy} onRestart={() => sessionId && restartDevServer(sessionId)} />
-            {logs ? (
-              <div className="rounded border bg-white">
-                <div className="px-3 py-2 border-b text-sm font-medium">Logs</div>
-                <pre className="p-2 h-40 overflow-auto text-xs font-mono whitespace-pre-wrap">{logs}</pre>
+            {logs && (
+              <div className="card">
+                <div className="card-body" style={{ padding: 12 }}>
+                  <div className="label mb-2">Console Logs</div>
+                  <pre className="text-xs font-mono bg-gray-50 p-2 rounded h-32 overflow-auto whitespace-pre-wrap border">{logs}</pre>
+                </div>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
       </main>
