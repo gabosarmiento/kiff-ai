@@ -19,6 +19,9 @@ export type KiffComposePanelProps = {
   availableTools?: string[];
   availableMCPs?: string[];
   models?: string[];
+  selectedAPIs?: Array<{ api_service_id: string; api_name?: string; provider_name?: string }>;
+  bagLoading?: boolean;
+  onEditBag?: () => void;
   onSubmit?: (payload: {
     kb: string | null;
     prompt: string;
@@ -35,6 +38,9 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   availableTools = [],
   availableMCPs = [],
   models = [],
+  selectedAPIs = [],
+  bagLoading = false,
+  onEditBag,
   onSubmit,
   onOutput,
 }) => {
@@ -520,30 +526,39 @@ export default function App() {
         )}
 
         <div className="mt-4">
-          <label className="block text-xs text-slate-600">Kiff Packs</label>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {kbs.map((space) => (
+          <div className="flex items-center justify-between">
+            <label className="block text-xs text-slate-600">Kiff Packs</label>
+            {onEditBag && (
               <button
-                key={space.id}
-                onClick={() => setKb(space.id)}
-                className={[
-                  "rounded-full px-3 py-1.5 text-xs",
-                  kb === space.id
-                    ? "bg-slate-900 text-white"
-                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                ].join(" ")}
-                title={space.id}
+                onClick={onEditBag}
+                className="text-xs text-blue-600 hover:text-blue-700 underline"
               >
-                {space.name}
+                Edit Packs
               </button>
-            ))}
-            <a href="/kp" className="rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600">
-              + New
-            </a>
+            )}
           </div>
-          {kb && (
+          <div className="mt-1 flex flex-wrap gap-2">
+            {bagLoading ? (
+              <div className="text-xs text-slate-500">Loading packs...</div>
+            ) : selectedAPIs.length === 0 ? (
+              <div className="text-xs text-slate-500">
+                No APIs selected. Use the <a href="/api-gallery" className="text-blue-600 underline">API Gallery</a> to add some.
+              </div>
+            ) : (
+              selectedAPIs.map((api) => (
+                <div
+                  key={api.api_service_id}
+                  className="rounded-full px-3 py-1.5 text-xs bg-slate-100 text-slate-700 border border-slate-200"
+                  title={`${api.provider_name || 'Unknown'}: ${api.api_name || api.api_service_id}`}
+                >
+                  {api.api_name || api.api_service_id}
+                </div>
+              ))
+            )}
+          </div>
+          {selectedAPIs.length > 0 && (
             <div className="mt-2 text-xs text-slate-600">
-              Attached: {kbs.find((x) => x.id === kb)?.name || kb} (Vectors: {kbs.find((x) => x.id === kb)?.vectors ?? 0})
+              {selectedAPIs.length} API{selectedAPIs.length === 1 ? '' : 's'} selected for knowledge context
             </div>
           )}
         </div>
@@ -652,23 +667,11 @@ export default function App() {
                     R
                   </span>
                   <span className="font-medium">Supercharged by Knowledge</span>
-                  <span className="text-amber-800/80">{kb ? kb : "No KB selected"}</span>
+                  <span className="text-amber-800/80">
+                    {selectedAPIs.length > 0 ? `${selectedAPIs.length} API${selectedAPIs.length === 1 ? '' : 's'}` : "No APIs selected"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select
-                    className="rounded-full border border-amber-200 bg-white px-2 py-1 text-xs text-amber-900"
-                    value={kb ?? ""}
-                    onChange={(e) => setKb(e.target.value)}
-                  >
-                    <option value="" disabled>
-                      Select KB…
-                    </option>
-                    {availableKBs.map((k) => (
-                      <option key={k} value={k}>
-                        {k}
-                      </option>
-                    ))}
-                  </select>
                   <button
                     onClick={() => setRagOpen((v) => !v)}
                     className="rounded-full px-2 py-1 text-xs text-amber-900 hover:bg-amber-100"
@@ -756,22 +759,10 @@ export default function App() {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="mt-3">
               <div className="text-xs text-slate-600">
-                Session: {sessionId ? sessionId : "(none)"} • KB: {kb ?? "(none)"} • Indexed: {chunksIndexed}
+                Session: {sessionId ? sessionId : "(none)"} • APIs: {selectedAPIs.length} selected
               </div>
-              <label className="cursor-pointer text-xs text-slate-700">
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => handleAttach(e.target.files)}
-                  disabled={!sessionId || attaching}
-                />
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs hover:bg-slate-50">
-                  {attaching ? "Attaching…" : "Attach Knowledge"}
-                </span>
-              </label>
             </div>
 
             {output && (

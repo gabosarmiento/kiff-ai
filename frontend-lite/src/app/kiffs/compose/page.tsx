@@ -139,37 +139,17 @@ export default function KiffComposerPage() {
           paddingBottom: 96 
         }}
       >
-        {/* Selected APIs chips */}
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div className="card-body" style={{ padding: 12 }}>
-            <div className="row" style={{ alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <span className="label">Selected APIs</span>
-                <span className="pill pill-info">{bagLoading ? "Loading…" : `${bag.length}`}</span>
-              </div>
-              <div className="row" style={{ gap: 8 }}>
-                <button className="button" onClick={() => setEditOpen(true)}>Edit</button>
-              </div>
-            </div>
-            <div className="chips" style={{ marginTop: 8 }}>
-              {bag.length === 0 && !bagLoading ? (
-                <span className="muted">No APIs selected. Use the API Gallery to add some.</span>
-              ) : (
-                bag.map((it) => (
-                  <span key={it.api_service_id} className="chip">
-                    {it.api_name || it.api_service_id}
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Improved responsive layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Compose Panel - Takes 2/3 on large screens */}
           <div className="lg:col-span-2">
-            <KiffComposePanel onOutput={handleOutput} />
+            <KiffComposePanel 
+              onOutput={handleOutput} 
+              selectedAPIs={bag}
+              bagLoading={bagLoading}
+              onEditBag={() => setEditOpen(true)}
+            />
           </div>
           
           {/* Preview & Status Panel - Takes 1/3 on large screens, full width on mobile */}

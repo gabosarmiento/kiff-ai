@@ -221,6 +221,34 @@ function AdminApiGalleryEditorPageContent() {
     await loadAll();
   };
 
+  const indexFull = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const body: any = {
+        strategy: "semantic",
+        mode: "fast",
+        embedder: "sentence-transformers",
+        chunk_size: 4400,
+        chunk_overlap: 300,
+        create_kb_if_missing: true,
+      };
+      const res = await apiJson(`/backend/admin/api_gallery_editor/api/${id}/index_full`, {
+        method: "POST",
+        asJson: true,
+        body,
+      } as any);
+      console.log("Index full result:", res);
+      await loadAll();
+      alert("Indexing completed. KB is ready.");
+    } catch (e: any) {
+      console.error("Index full error:", e);
+      setError(`Index full failed: ${e?.message || "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const seedInitial = async () => {
     try {
       setLoading(true);
@@ -352,6 +380,7 @@ function AdminApiGalleryEditorPageContent() {
                                   </div>
                                   <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
                                     <button className="button" onClick={() => { setSelectedProviderId(p.id); resetApiForm(a); }}>Edit</button>
+                                    <button className="button" onClick={() => indexFull(a.id)} disabled={loading}>Index Full</button>
                                     <button className="button" onClick={() => reindexApi(a.id)}>Reindex</button>
                                     <button className="button" onClick={() => removeApi(a.id)}>Delete</button>
                                   </div>
