@@ -20,6 +20,9 @@ groq
 chonkie  # Required for semantic chunking in agno
 
 # CPU-only PyTorch for sentence transformers (much smaller than CUDA)
-torch==2.3.1  # CPU wheel from PyPI (no +cu suffix)
+torch==2.2.2  # CPU wheel from PyPI (no +cu suffix)
 transformers>=4.41.0
 sentence-transformers>=3.0.0
+ 
+# Email delivery
+resend>=0.7.0

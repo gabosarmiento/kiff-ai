@@ -27,6 +27,7 @@ import {
  
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { apiJson } from '@/lib/api';
 import { usePacks } from '@/contexts/PackContext';
@@ -187,6 +188,7 @@ export default function KiffPacksPage() {
 
   const PackCard = ({ pack }: { pack: KiffPack }) => {
     const { selectedPacks, addPack, removePack } = usePacks();
+    const [logoError, setLogoError] = useState(false);
     return (
     <Card className="hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="pb-3">
@@ -194,17 +196,16 @@ export default function KiffPacksPage() {
           <div className="flex-1">
             <div className="flex items-start gap-3">
               <div className="h-8 w-8 rounded bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden">
-                {pack.logo_url ? (
-                  <img
+                {pack.logo_url && !logoError ? (
+                  <Image
                     src={pack.logo_url}
                     alt={`${pack.display_name} logo`}
+                    width={32}
+                    height={32}
                     className="h-8 w-8 object-contain"
-                    onError={(e) => {
-                      const img = e.currentTarget as HTMLImageElement;
-                      img.style.display = 'none';
-                      const parent = img.parentElement as HTMLElement | null;
-                      if (parent) parent.textContent = '📦';
-                    }}
+                    loading="lazy"
+                    unoptimized
+                    onError={() => setLogoError(true)}
                   />
                 ) : (
                   <span title="No logo" style={{ fontSize: 16, lineHeight: 1 }}>📦</span>

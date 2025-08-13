@@ -24,6 +24,7 @@ from .routes import admin_url_extractor
 from .routes import admin_api_gallery_editor
 from .routes import admin_bulk_indexer
 from .routes import api_gallery_public
+from .routes import email
 
 
 def get_allowed_origins() -> list[str]:
@@ -83,6 +84,7 @@ app.include_router(api_gallery_public.router)
 app.include_router(launcher_chat.router)
 app.include_router(packs.router)
 app.include_router(launcher_project.router)
+app.include_router(email.router)
 
 
 @app.get("/")

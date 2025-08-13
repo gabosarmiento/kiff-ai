@@ -106,7 +106,7 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
         const allPacksResp: any = await apiJson(`/api/packs`, { method: 'GET', headers: baseHeaders });
         const list: any[] = Array.isArray(allPacksResp?.packs) ? allPacksResp.packs : (Array.isArray(allPacksResp) ? allPacksResp : []);
         fallbackMap = list.reduce((acc, p) => { acc[String(p.id)] = p; return acc; }, {} as Record<string, any>);
-        console.debug('[Navbar] Loaded packs list for fallback', { count: list.length });
+        
       } catch (e) {
         console.warn('[Navbar] Failed to load packs list fallback', e);
       }
@@ -120,7 +120,7 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
               method: 'GET',
               headers
             });
-            console.debug('[Navbar] Pack details fetched', { packId, pack });
+            
             // Normalize minimal fields we care about
             return {
               id: String(pack.id || packId),

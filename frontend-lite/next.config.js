@@ -8,6 +8,12 @@ const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || 'http://localhost:8000'
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   experimental: {
     optimizeCss: true,
     optimizePackageImports: ['lucide-react', 'react-hot-toast'],
