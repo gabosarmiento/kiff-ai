@@ -34,9 +34,9 @@ export function NextAuthLoginPage() {
             window.location.href = next
             return
           } else {
-            console.log('Non-admin trying to access admin route, redirecting to user area')
-            // Non-admin trying to access admin route, redirect to user area
-            window.location.href = '/kiffs/create'
+            console.log('Non-admin trying to access admin route, redirecting to launcher')
+            // Non-admin trying to access admin route, redirect to launcher
+            window.location.href = '/kiffs/launcher'
             return
           }
         } else {
@@ -51,8 +51,8 @@ export function NextAuthLoginPage() {
         console.log('Admin user, redirecting to admin area')
         window.location.href = '/admin/users'
       } else {
-        console.log('Regular user, redirecting to kiffs/create')
-        window.location.href = '/kiffs/create'
+        console.log('Regular user, redirecting to kiffs/launcher')
+        window.location.href = '/kiffs/launcher'
       }
     }
   }, [status, session])
@@ -93,7 +93,7 @@ export function NextAuthLoginPage() {
       setLoading(provider)
       const urlParams = new URLSearchParams(window.location.search)
       const next = urlParams.get('next') || urlParams.get('callbackUrl')
-      const callbackUrl = next || '/kiffs/create'
+      const callbackUrl = next || '/kiffs/launcher'
       
       await signIn(provider, { 
         callbackUrl,

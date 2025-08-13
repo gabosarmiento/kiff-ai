@@ -26,7 +26,7 @@ const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.R
   { id: "/", label: "Dashboard", href: "/", icon: <HomeIcon className={iconCls} /> },
   { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <PuzzleIcon className={iconCls} /> },
   { id: "/extractor", label: "Extractor", href: "/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
-  { id: "/kp", label: "Kiff Packs", href: "/kp", icon: <BookOpenIcon className={iconCls} /> },
+  { id: "/kiffs/packs", label: "Kiff Packs", href: "/kiffs/packs", icon: <BookOpenIcon className={iconCls} /> },
   { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <ZapIcon className={iconCls} /> },
 ];
 
@@ -74,7 +74,7 @@ function OldAppSidebar() {
           if (user?.role === "admin") {
             router.push("/admin/users");
           } else {
-            router.push("/kiffs/create");
+            router.push("/kiffs/launcher");
           }
           return;
         }

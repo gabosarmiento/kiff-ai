@@ -66,7 +66,7 @@ export default function KiffPacksPage() {
                     Open API Gallery
                   </a>
                   <a
-                    href="/kiffs/compose"
+                    href="/kiffs/launcher"
                     className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50"
                   >
                     Go to Compose

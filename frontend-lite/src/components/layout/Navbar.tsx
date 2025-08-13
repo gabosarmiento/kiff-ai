@@ -1,15 +1,20 @@
 "use client";
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiJson } from "@/lib/api";
+import toast from "react-hot-toast";
+import { getTenantId, withTenantHeaders } from "@/lib/tenant";
+import { usePacks } from "@/contexts/PackContext";
 
 // Floating pill navbar with subtle glow, Storybook style
 export function Navbar({ kiffName }: { kiffName?: string }) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, token } = useAuth();
+  const { selectedPacks, removePack, clearPacks } = usePacks();
   const [open, setOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -21,10 +26,25 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
     provider_name?: string;
     logo_url?: string | null;
   };
+  
+  // Pack details state
+  type PackDetail = {
+    id: string;
+    display_name: string;
+    category: string;
+    created_by_name: string;
+    logo_url?: string | null;
+    description?: string | null;
+    processing_status?: string | null;
+  };
+  
   const [bagOpen, setBagOpen] = React.useState(false);
   const [bagLoading, setBagLoading] = React.useState(false);
   const [bag, setBag] = React.useState<BagItem[]>([]);
+  const [packDetails, setPackDetails] = React.useState<PackDetail[]>([]);
   const bagCount = bag?.length || 0;
+  // Track which packs we already notified about in this session
+  const notifiedRef = React.useRef<Set<string>>(new Set());
 
   async function refreshBag() {
     try {
@@ -65,10 +85,166 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
     }
   }
 
+  async function fetchPackDetails() {
+    if (selectedPacks.length === 0) {
+      setPackDetails([]);
+      return;
+    }
+    
+    try {
+      setBagLoading(true);
+      // Build headers once
+      const tenantId = getTenantId();
+      const baseHeaders = withTenantHeaders({
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        'X-Tenant-ID': tenantId as any,
+      } as any);
+
+      // Fetch all packs to have a fallback source of metadata
+      let fallbackMap: Record<string, any> = {};
+      try {
+        const allPacksResp: any = await apiJson(`/api/packs`, { method: 'GET', headers: baseHeaders });
+        const list: any[] = Array.isArray(allPacksResp?.packs) ? allPacksResp.packs : (Array.isArray(allPacksResp) ? allPacksResp : []);
+        fallbackMap = list.reduce((acc, p) => { acc[String(p.id)] = p; return acc; }, {} as Record<string, any>);
+        console.debug('[Navbar] Loaded packs list for fallback', { count: list.length });
+      } catch (e) {
+        console.warn('[Navbar] Failed to load packs list fallback', e);
+      }
+
+      // Fetch details for each selected pack
+      const details = await Promise.all(
+        selectedPacks.map(async (packId) => {
+          try {
+            const headers = baseHeaders;
+            const pack: any = await apiJson(`/api/packs/${packId}` , {
+              method: 'GET',
+              headers
+            });
+            console.debug('[Navbar] Pack details fetched', { packId, pack });
+            // Normalize minimal fields we care about
+            return {
+              id: String(pack.id || packId),
+              display_name: pack.display_name || pack.name || `Pack ${packId}`,
+              category: pack.category || 'Unknown',
+              created_by_name: pack.created_by_name || pack.owner_name || 'Unknown',
+              logo_url: pack.logo_url || null,
+              description: pack.description || null,
+              processing_status: pack.processing_status || null,
+            } as PackDetail;
+          } catch (error) {
+            console.warn(`[Navbar] Failed to fetch pack ${packId}:`, error);
+            const f = fallbackMap[packId];
+            if (f) {
+              return {
+                id: String(f.id || packId),
+                display_name: f.display_name || f.name || `Pack ${packId}`,
+                category: f.category || 'Unknown',
+                created_by_name: f.created_by_name || f.owner_name || 'Unknown',
+                logo_url: f.logo_url || null,
+                description: f.description || null,
+                processing_status: f.processing_status || null,
+              } as PackDetail;
+            }
+            return {
+              id: packId,
+              display_name: `Pack ${packId}`,
+              category: 'Unknown',
+              created_by_name: 'Unknown',
+              logo_url: null,
+              description: null,
+              processing_status: null,
+            };
+          }
+        })
+      );
+      setPackDetails(details);
+    } catch (error) {
+      console.warn('Failed to fetch pack details:', error);
+      setPackDetails([]);
+    } finally {
+      setBagLoading(false);
+    }
+  }
+
   React.useEffect(() => {
     // Load initial bag count once
     refreshBag();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch pack details when selected packs change
+  React.useEffect(() => {
+    if (bagOpen) {
+      fetchPackDetails();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPacks, bagOpen]);
+
+  // Poll pending packs and notify on completion (ready or failed)
+  React.useEffect(() => {
+    let timer: any;
+    const key = 'pending_packs';
+
+    const readPending = (): Array<{ id: string; tenant: string; added_at?: number }> => {
+      try {
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const writePending = (items: Array<{ id: string; tenant: string; added_at?: number }>) => {
+      try { localStorage.setItem(key, JSON.stringify(items)); } catch {}
+    };
+
+    const check = async () => {
+      const pending = readPending();
+      if (!pending.length) return;
+      const tenant = getTenantId();
+      const stillPending: Array<{ id: string; tenant: string; added_at?: number }> = [];
+      for (const item of pending) {
+        if (!item || item.tenant !== tenant || !item.id) {
+          // skip items for other tenants
+          continue;
+        }
+        try {
+          const status = await apiJson<{ id: string; display_name: string; processing_status: string; processing_error?: string }>(`/api/packs/${item.id}/status`, { method: 'GET' });
+          if (status.processing_status === 'ready' || status.processing_status === 'failed') {
+            const keyId = `${tenant}:${item.id}:${status.processing_status}`;
+            if (!notifiedRef.current.has(keyId)) {
+              notifiedRef.current.add(keyId);
+              if (status.processing_status === 'ready') {
+                toast.success(`Pack "${status.display_name || status.id}" is ready`, {
+                  id: `pack-${item.id}-ready`,
+                });
+              } else {
+                toast.error(`Pack "${status.display_name || status.id}" failed to process`, {
+                  id: `pack-${item.id}-failed`,
+                });
+              }
+            }
+            // do not keep it pending
+          } else {
+            stillPending.push(item);
+          }
+        } catch (e) {
+          // If 404, drop it; otherwise keep pending and try later
+          const message = (e as Error)?.message || '';
+          if (message.includes('404')) {
+            // Remove from pending silently
+          } else {
+            stillPending.push(item);
+          }
+        }
+      }
+      if (stillPending.length !== pending.length) writePending(stillPending);
+    };
+
+    // Initial check soon after mount, then interval
+    check();
+    timer = setInterval(check, 8000);
+    return () => clearInterval(timer);
   }, []);
 
   // Close on click/tap outside or Escape
@@ -106,7 +282,7 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
               onClick={() => {
                 if (isAuthenticated) {
                   if (user?.role === "admin") router.push("/admin/users");
-                  else router.push("/kiffs/create");
+                  else router.push("/kiffs/launcher");
                 } else {
                   router.push("/login");
                 }
@@ -140,15 +316,12 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
             <div className="mr-2">
               <button
                 className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
-                onClick={async () => {
-                  if (!bagOpen) await refreshBag();
-                  setBagOpen(v => !v);
-                }}
+                onClick={() => setBagOpen(true)}
                 aria-label="Kiff Packs"
               >
-                <span>Packs</span>
-                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-1 text-xs text-white">
-                  {bagLoading ? "…" : bagCount}
+                <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-xs text-white">
+                  {selectedPacks.length}
                 </span>
               </button>
             </div>
@@ -227,15 +400,12 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
         )}
         <button
           className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
-          onClick={async () => {
-            if (!bagOpen) await refreshBag();
-            setBagOpen(true);
-          }}
+          onClick={() => setBagOpen(true)}
           aria-label="Kiff Packs"
         >
-          <span>Packs</span>
-          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-slate-900 px-1 text-xs text-white">
-            {bagLoading ? "\u2026" : bagCount}
+          <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
+          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-xs text-white">
+            {selectedPacks.length}
           </span>
         </button>
       </div>
@@ -243,15 +413,12 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
       {/* Mobile FAB: Kiff Packs (only on small screens) */}
       <button
         className="md:hidden fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-3 shadow-lg"
-        onClick={async () => {
-          if (!bagOpen) await refreshBag();
-          setBagOpen(true);
-        }}
+        onClick={() => setBagOpen(true)}
         aria-label="Open Kiff Packs"
       >
-        <span>Packs</span>
+        <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
         <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white/20 px-1 text-xs">
-          {bagLoading ? "…" : bagCount}
+          {selectedPacks.length}
         </span>
       </button>
 
@@ -289,30 +456,61 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
                 </svg>
               </button>
             </div>
+            <div className="px-3 pb-2">
+              <button
+                className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-slate-50 text-slate-600"
+                onClick={() => fetchPackDetails()}
+              >
+                Refresh
+              </button>
+            </div>
             <div className="px-3 pb-3">
               {bagLoading ? (
                 <div className="muted text-sm p-3">Loading…</div>
-              ) : bag.length === 0 ? (
+              ) : packDetails.length === 0 ? (
                 <div className="muted text-sm p-3">
-                  Your Kiff Pack is empty. Add APIs from the API Gallery using the &quot;+ Add&quot; button.
+                  No packs selected. Add packs from the <button 
+                    onClick={() => {
+                      setBagOpen(false);
+                      router.push('/kiffs/packs');
+                    }}
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >Packs Gallery</button>.
                 </div>
               ) : (
                 <ul className="divide-y divide-slate-200">
-                  {bag.map((it) => (
-                    <li key={it.api_service_id} className="flex items-center gap-3 p-3">
-                      <div className="h-6 w-6 rounded bg-white ring-1 ring-slate-200 text-xs flex items-center justify-center">
-                        {/* simple placeholder icon */}
-                        <span>🔌</span>
+                  {packDetails.map((pack) => (
+                    <li key={pack.id} className="flex items-center gap-3 p-3">
+                      <div className="h-6 w-6 rounded bg-white ring-1 ring-slate-200 text-xs flex items-center justify-center overflow-hidden">
+                        {pack.logo_url ? (
+                          <Image
+                            src={pack.logo_url}
+                            alt={`${pack.display_name} logo`}
+                            width={24}
+                            height={24}
+                            unoptimized
+                            className="h-6 w-6 object-contain"
+                            onError={(e) => {
+                              const img = e.currentTarget as any;
+                              if (img && img.style) img.style.display = 'none';
+                              const parent = (img?.parentElement as HTMLElement) || null;
+                              if (parent) parent.textContent = '📦';
+                            }}
+                          />
+                        ) : (
+                          <span>📦</span>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{it.api_name || it.api_service_id}</div>
-                        {it.provider_name ? (
-                          <div className="truncate text-xs text-slate-500">{it.provider_name}</div>
+                        <div className="truncate text-sm font-medium">{pack.display_name}</div>
+                        <div className="truncate text-xs text-slate-500">{pack.category} • by {pack.created_by_name}</div>
+                        {pack.description ? (
+                          <div className="truncate text-[11px] text-slate-500/90">{pack.description}</div>
                         ) : null}
                       </div>
                       <button
-                        className="button"
-                        onClick={() => removeFromBag(it.api_service_id)}
+                        className="text-xs px-2 py-1 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded"
+                        onClick={() => removePack(pack.id)}
                         aria-label="Remove"
                       >
                         Remove
@@ -323,16 +521,22 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
               )}
             </div>
             <div className="flex items-center justify-between gap-2 border-t border-slate-200 p-3">
-              <button className="button" onClick={clearBag} disabled={bag.length === 0}>Clear</button>
+              <button 
+                className="text-xs px-3 py-2 text-slate-600 hover:text-slate-800 border border-slate-200 rounded hover:bg-slate-50" 
+                onClick={clearPacks} 
+                disabled={selectedPacks.length === 0}
+              >
+                Clear All
+              </button>
               <button
-                className="button primary"
+                className="text-xs px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 onClick={() => {
                   setBagOpen(false);
-                  router.push("/kiffs/compose");
+                  router.push("/kiffs/launcher");
                 }}
-                disabled={bag.length === 0}
+                disabled={selectedPacks.length === 0}
               >
-                Go to Compose
+                Go to Launcher
               </button>
             </div>
           </div>

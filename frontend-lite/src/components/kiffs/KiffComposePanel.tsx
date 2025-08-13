@@ -1,8 +1,12 @@
 "use client";
 import React from "react";
 import { apiJson, apiFetch } from "@/lib/api";
+// HITL: do not auto-dispatch actions; gate via explicit approval
+// import { dispatchAgentAction } from "../compose/agentActions";
+import { ProposedActionCard, parseTags, type ProposedAction, type ActionStatus } from "@/components/compose/HITL";
 import { listKBs } from "@/lib/api";
 import { createPreviewSandbox, streamApplyFiles, restartDevServer, fetchPreviewLogs, type PreviewSandbox, type ApplyFile, type PreviewEvent } from "@/lib/preview";
+import { getTenantId } from "@/lib/tenant";
 
 function normalizeModelIds(input: any): string[] {
   if (!input) return [];
@@ -32,6 +36,7 @@ export type KiffComposePanelProps = {
   onOutput?: (content: string) => void | Promise<void>;
   onKiffName?: (name: string) => void;
   onKiffSaved?: (info: { id: string; name: string }) => void;
+  compact?: boolean;
 };
 
 export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
@@ -47,6 +52,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   onOutput,
   onKiffName,
   onKiffSaved,
+  compact = false,
 }) => {
   // Core state
   // KBs fetched from backend (id + name). We store the selected value as the KB ID.
@@ -77,6 +83,8 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   const [usedContext, setUsedContext] = React.useState<
     Array<{ space_id: string; chunk_id: string; summary: string }>
   >([]);
+  // HITL state: proposed actions and per-action status
+  const [actions, setActions] = React.useState<Array<{ action: ProposedAction; status: ActionStatus }>>([]);
 
   // UI state
   const [loading, setLoading] = React.useState<boolean>(false);
@@ -84,6 +92,17 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   const [attaching, setAttaching] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [savedKiffId, setSavedKiffId] = React.useState<string | null>(null);
+  // Chat transcript: persisted history + current turn
+  type ChatMsg = {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    thought?: string | null;
+    action_json?: string | null;
+    step?: number | null;
+    validator?: string | null;
+  };
+  const [chat, setChat] = React.useState<ChatMsg[]>([]);
 
   // Preview/E2B state
   const [previewSandbox, setPreviewSandbox] = React.useState<PreviewSandbox | null>(null);
@@ -95,17 +114,8 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
     if (savedKiffId) return; // prevent duplicate saves
     try {
       const name = (prompt || "Untitled Kiff").slice(0, 60);
-      if (!kb) {
-        console.warn("Auto-save skipped: no KB selected");
-        return;
-      }
-      // Backend expects: { name, kb_id, model, top_k? }
-      const body = {
-        name,
-        kb_id: kb,
-        model: model,
-      };
-      const resp = await apiJson<{ id: string }>("/api/kiffs", { method: "POST", body: body as any });
+      const body = { name, model_id: model } as any;
+      const resp = await apiJson<{ id: string }>("/api/kiffs", { method: "POST", body: body });
       if (resp?.id) {
         setSavedKiffId(resp.id);
         try { onKiffSaved && onKiffSaved({ id: resp.id, name }); } catch {}
@@ -114,6 +124,60 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
       // Non-fatal; keep composer usable even if save fails
       console.warn("Auto-save Kiff failed", e);
     }
+  }
+
+  // --- HITL Handlers ---
+  function updateActionStatus(id: string, state: ActionStatus["state"], patch?: Partial<ActionStatus>) {
+    setActions((prev) => prev.map((it) => it.action.id === id ? { ...it, status: { ...it.status, state, ...patch } } : it));
+  }
+
+  async function approveAction(action: ProposedAction, editedArgs?: string) {
+    // Block destructive commands (future): if action.command?.destructive
+    updateActionStatus(action.id, 'executing');
+    try {
+      const id = sessionId || await createSession();
+      if (!id) throw new Error("No session");
+      const args = editedArgs ?? action.raw?.args ?? '';
+      const approval = `User APPROVED action: ${action.raw?.name || action.title}(${args}). Execute and return exact file diffs, commands, and API calls as code blocks.`;
+      const res = await apiJson<{ message_id: string; content: string }>(
+        "/api/compose/message",
+        { method: "POST", body: { session_id: id, prompt: approval, model_id: model } as any }
+      );
+      // Append to chat and surface output
+      setChat((prev) => [
+        ...prev,
+        { id: `user_${Date.now()}`, role: 'user', content: approval },
+        { id: res.message_id, role: 'assistant', content: res.content }
+      ]);
+      setOutput((prev) => prev ? prev + "\n\n" + res.content : res.content);
+      updateActionStatus(action.id, 'succeeded');
+    } catch (e: any) {
+      updateActionStatus(action.id, 'failed', { error: e?.message || String(e) });
+    }
+  }
+
+  async function rejectAction(action: ProposedAction) {
+    const reason = window.prompt("Reason (optional):", "Not desired");
+    updateActionStatus(action.id, 'rejected');
+    try {
+      const id = sessionId || await createSession();
+      if (!id) return;
+      const rejection = `User REJECTED action: ${action.raw?.name || action.title}${action.raw?.args ? `(${action.raw.args})` : ''}. ${reason ? `Reason: ${reason}.` : ''} Propose an alternative plan.`;
+      await apiJson(
+        "/api/compose/message",
+        { method: "POST", body: { session_id: id, prompt: rejection, model_id: model } as any }
+      );
+    } catch {}
+  }
+
+  async function editAction(action: ProposedAction) {
+    const curr = action.raw?.args || '';
+    const edited = window.prompt("Edit parameters:", curr);
+    if (edited == null) return; // cancelled
+    updateActionStatus(action.id, 'draft');
+    // Immediately re-propose with new params (stays proposed for approval)
+    const updated: ProposedAction = { ...action, description: edited, raw: { name: action.raw?.name || action.title, args: edited } };
+    setActions((prev) => prev.map((it) => it.action.id === action.id ? { action: updated, status: { ...it.status, state: 'proposed' } } : it));
   }
 
   // Initial load of models and tools - parallel requests for better performance
@@ -214,6 +278,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         mcp_ids: mcps,
         knowledge_space_ids: kb ? [kb] : [],
         system_preamble: null,
+        kiff_id: savedKiffId || undefined,
       };
       const res = await apiJson<{
         session_id: string;
@@ -277,6 +342,8 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         id = await createSession();
         if (!id) throw new Error("Failed to create session");
       }
+      // Ensure we have a persisted kiff for linkage
+      await saveKiffAuto();
       const body = {
         session_id: id,
         prompt,
@@ -286,12 +353,31 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         knowledge_space_ids: kb ? [kb] : [],
         options: { stream: false },
       };
-      const res = await apiJson<{ message_id: string; content: string }>(
+      const res = await apiJson<{ message_id: string; content: string; step?: number; thought?: string; action?: any; validator?: string }>(
         "/api/compose/message",
         { method: "POST", body: body as any }
       );
       const text = res.content || "";
       setOutput(text);
+      // Update chat transcript locally
+      setChat((prev) => [
+        ...prev,
+        { id: `user_${Date.now()}`, role: 'user', content: prompt },
+        { id: res.message_id, role: 'assistant', content: text, thought: res.thought || null, step: res.step ?? null, validator: res.validator || null, action_json: res.action ? JSON.stringify(res.action) : null }
+      ]);
+      // HITL: if backend returned an action, propose it as a card (no auto-exec)
+      if (res.action && typeof res.action === 'object') {
+        const act: ProposedAction = {
+          id: `${res.message_id}:action`,
+          kind: 'plan',
+          title: res.action.name || 'proposed_action',
+          description: res.action.args || '',
+          safety: 'low',
+          created_at: new Date().toISOString(),
+          raw: { name: res.action.name, args: res.action.args }
+        };
+        setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'proposed' } }]);
+      }
       await saveKiffAuto(text);
       await fetchUsedContext(id);
       try { if (onOutput) await onOutput(text); } catch {}
@@ -335,6 +421,22 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
             await fetchUsedContext(id);
             await saveKiffAuto(output);
             try { if (buffer && onOutput) await onOutput(buffer); } catch {}
+            // After complete, attempt to parse tags for a provisional action
+            if (buffer) {
+              const parsed = parseTags(buffer);
+              if (parsed.action) {
+                const act: ProposedAction = {
+                  id: `${Date.now()}:stream_action`,
+                  kind: 'plan',
+                  title: parsed.action.name,
+                  description: parsed.action.args,
+                  safety: 'low',
+                  created_at: new Date().toISOString(),
+                  raw: parsed.action,
+                };
+                setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'proposed' } }]);
+              }
+            }
             setLoading(false);
             return;
           }
@@ -409,7 +511,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
 
 export default function App() {
   return (
-    <div className="p-4">
+    <div className="app-shell">
       <h1>Generated App</h1>
       <div>
         ${content.split('\n').map(line => `        <p>${line}</p>`).join('\n')}
@@ -423,11 +525,18 @@ export default function App() {
     }
     
     return files;
-  }
+}
 
   async function deployToPreview() {
     if (!output.trim()) {
       setError("No code output to deploy. Generate some code first.");
+      return;
+    }
+    // Guard: ensure tenant header will be present (recurring issue)
+    const tenantId = getTenantId();
+    if (!tenantId || tenantId === "null" || tenantId === "undefined") {
+      setError("Missing Tenant ID. Please set a valid tenant or sign in. (X-Tenant-ID)");
+      setDeployLogs((prev) => [...prev, "❌ Missing X-Tenant-ID. Set a tenant and try again."]);
       return;
     }
     
@@ -775,67 +884,129 @@ export default function App() {
             </div>
 
             {output && (
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-semibold text-slate-700">Output</div>
+              <div className="mt-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      className={`rounded-full px-3 py-1.5 text-xs border transition-colors ${
+                        !showPreview
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                      onClick={() => setShowPreview(false)}
+                    >
+                      Files
+                    </button>
+                    <button
+                      className={`rounded-full px-3 py-1.5 text-xs border transition-colors ${
+                        showPreview
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                      onClick={() => setShowPreview(true)}
+                      disabled={!previewSandbox?.preview_url}
+                      title={!previewSandbox?.preview_url ? 'Preview URL not ready yet' : 'Show Live Preview'}
+                    >
+                      Preview
+                    </button>
+                  </div>
                   <button
                     onClick={deployToPreview}
                     disabled={deploying || !output.trim()}
                     className="rounded-full bg-blue-600 px-3 py-1.5 text-xs text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
                   >
-                    {deploying ? "Deploying…" : "🚀 Deploy Live Preview"}
+                    {deploying ? 'Deploying…' : '🚀 Deploy Live Preview'}
                   </button>
                 </div>
-                <pre className="whitespace-pre-wrap text-[13px] text-slate-800">{output}</pre>
-              </div>
-            )}
 
-            {/* Live Preview Panel */}
-            {(deployLogs.length > 0 || previewSandbox) && (
-              <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/30 p-3 text-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-semibold text-blue-800">Live Preview</div>
-                  {previewSandbox?.preview_url && (
-                    <a
-                      href={previewSandbox.preview_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-full bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 transition-colors"
-                    >
-                      🌐 Open Live App
-                    </a>
-                  )}
-                </div>
-
-                {/* Deployment Logs */}
-                {deployLogs.length > 0 && (
-                  <div className="mb-3 rounded-lg bg-slate-900 p-3 font-mono text-xs text-green-400 max-h-32 overflow-y-auto">
-                    {deployLogs.map((log, i) => (
-                      <div key={i} className="mb-1">
-                        <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> {log}
+                {!showPreview && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm">
+                    <div className="text-xs font-semibold text-slate-700 mb-2">Output</div>
+                    <pre className="whitespace-pre-wrap text-[13px] text-slate-800">{output}</pre>
+                    {actions.length > 0 && (
+                      <div className="mt-4 space-y-3">
+                        <div className="text-xs font-semibold text-slate-700">Proposed Actions</div>
+                        {actions.map(({ action, status }) => (
+                          <ProposedActionCard
+                            key={action.id}
+                            action={action}
+                            status={status}
+                            onApprove={(a) => approveAction(a)}
+                            onReject={(a) => rejectAction(a)}
+                            onEdit={(a) => editAction(a)}
+                          />
+                        ))}
                       </div>
-                    ))}
+                    )}
+
+                    {/* Preview Status */}
+                    {previewSandbox && (
+                      <div className="mt-3 flex items-center justify-between text-xs text-blue-700">
+                        <div>
+                          <span className="font-medium">Status:</span>{' '}
+                          <span className={`px-2 py-0.5 rounded-full text-xs ${
+                            previewSandbox.status === 'ready'
+                              ? 'bg-green-100 text-green-800'
+                              : previewSandbox.status === 'error'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {previewSandbox.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {previewSandbox.preview_url && (
+                            <a
+                              href={previewSandbox.preview_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Open in new tab ↗
+                            </a>
+                          )}
+                          {previewSandbox.sandbox_id && (
+                            <div className="font-mono text-xs text-slate-500">
+                              Sandbox: {previewSandbox.sandbox_id.slice(0, 8)}...
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Preview Status */}
-                {previewSandbox && (
-                  <div className="flex items-center justify-between text-xs text-blue-700">
-                    <div>
-                      <span className="font-medium">Status:</span>{' '}
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${
-                        previewSandbox.status === 'ready' 
-                          ? 'bg-green-100 text-green-800' 
-                          : previewSandbox.status === 'error'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {previewSandbox.status}
-                      </span>
-                    </div>
-                    {previewSandbox.sandbox_id && (
-                      <div className="font-mono text-xs text-slate-500">
-                        Sandbox: {previewSandbox.sandbox_id.slice(0, 8)}...
+                {showPreview && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                    {!previewSandbox?.preview_url ? (
+                      <div className="p-6 text-center text-sm text-slate-600">Waiting for preview URL…</div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between px-2">
+                          <div className="text-xs text-slate-600 truncate">
+                            {previewSandbox.preview_url}
+                          </div>
+                          <a
+                            href={previewSandbox.preview_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Open ↗
+                          </a>
+                        </div>
+                        <iframe
+                          src={previewSandbox.preview_url}
+                          className="w-full h-[540px] rounded-lg border"
+                          sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts"
+                        />
+                        {deployLogs.length > 0 && (
+                          <div className="mt-2 max-h-40 overflow-y-auto rounded-md bg-slate-50 p-2 text-[12px] text-slate-700 border border-slate-200">
+                            {deployLogs.map((l, i) => (
+                              <div key={i}>{l}</div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

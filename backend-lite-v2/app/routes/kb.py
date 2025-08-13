@@ -5,6 +5,10 @@ import time
 from typing import Any, Dict, List, Optional, Literal
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from ..db_core import SessionLocal
+from ..models_kiffs import KnowledgePack as KnowledgePackModel
 
 router = APIRouter(prefix="/api/kb", tags=["kb"]) 
 
@@ -20,7 +24,7 @@ except Exception:  # pragma: no cover
     _HAS_LANCEDB = False
 
 
-# In-memory registry for KB metadata (MVP)
+# Legacy in-memory registry (will be phased out)
 _KB_META: Dict[str, Dict[str, Any]] = {}
 
 
@@ -76,54 +80,114 @@ async def create_kb(req: CreateKBRequest, x_tenant_id: Optional[str] = Header(No
             tbl = db.open_table(table_name)
             tbl.delete("text == '__init__'")
 
-    meta = {
-        "id": kb_id,
-        "name": req.name,
-        "vector_store": req.vector_store,
-        "table": table_name,
-        "tenant_id": tenant_id,
-        "retrieval_mode": req.retrieval_mode,
-        "embedder": req.embedder,
-        "created_at": int(time.time() * 1000),
-    }
-    _KB_META[kb_id] = meta
-    return KBMeta(**meta)
+    # Save to database instead of in-memory
+    db_session: Session = SessionLocal()
+    try:
+        kb = KnowledgePackModel(
+            id=kb_id,
+            name=req.name,
+            vector_store=req.vector_store,
+            table_name=table_name,
+            tenant_id=tenant_id,
+            retrieval_mode=req.retrieval_mode,
+            embedder=req.embedder
+        )
+        db_session.add(kb)
+        db_session.commit()
+        
+        return KBMeta(
+            id=kb.id,
+            name=kb.name,
+            vector_store=kb.vector_store,
+            table=kb.table_name,
+            tenant_id=kb.tenant_id,
+            retrieval_mode=kb.retrieval_mode,
+            embedder=kb.embedder,
+            created_at=int(kb.created_at.timestamp() * 1000)
+        )
+    except Exception as e:
+        db_session.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create knowledge pack: {e}")
+    finally:
+        db_session.close()
 
 
 @router.get("/{kb_id}", response_model=KBMeta)
 async def get_kb(kb_id: str, x_tenant_id: Optional[str] = Header(None, alias="X-Tenant-ID")):
     tenant_id = _require_tenant(x_tenant_id)
-    meta = _KB_META.get(kb_id)
-    if not meta:
-        raise HTTPException(status_code=404, detail="kb not found")
-    if meta.get("tenant_id") and meta["tenant_id"] != tenant_id:
-        raise HTTPException(status_code=403, detail="kb belongs to another tenant")
-    return KBMeta(**meta)
+    
+    db_session: Session = SessionLocal()
+    try:
+        kb = db_session.query(KnowledgePackModel).filter(
+            KnowledgePackModel.id == kb_id,
+            KnowledgePackModel.tenant_id == tenant_id
+        ).first()
+        
+        if not kb:
+            raise HTTPException(status_code=404, detail="kb not found")
+        
+        return KBMeta(
+            id=kb.id,
+            name=kb.name,
+            vector_store=kb.vector_store,
+            table=kb.table_name,
+            tenant_id=kb.tenant_id,
+            retrieval_mode=kb.retrieval_mode,
+            embedder=kb.embedder,
+            created_at=int(kb.created_at.timestamp() * 1000)
+        )
+    finally:
+        db_session.close()
 
 
 @router.get("", response_model=List[KBMeta])
 async def list_kbs(x_tenant_id: Optional[str] = Header(None, alias="X-Tenant-ID")):
     tenant_id = _require_tenant(x_tenant_id)
-    items = []
-    for meta in _KB_META.values():
-        if meta.get("tenant_id") == tenant_id:
-            items.append(KBMeta(**meta))
-    return items
+    
+    db_session: Session = SessionLocal()
+    try:
+        kbs = db_session.query(KnowledgePackModel).filter(
+            KnowledgePackModel.tenant_id == tenant_id
+        ).all()
+        
+        return [
+            KBMeta(
+                id=kb.id,
+                name=kb.name,
+                vector_store=kb.vector_store,
+                table=kb.table_name,
+                tenant_id=kb.tenant_id,
+                retrieval_mode=kb.retrieval_mode,
+                embedder=kb.embedder,
+                created_at=int(kb.created_at.timestamp() * 1000)
+            ) for kb in kbs
+        ]
+    finally:
+        db_session.close()
 
 
 @router.post("/{kb_id}/ingest")
 async def ingest(kb_id: str, req: IngestRequest, x_tenant_id: Optional[str] = Header(None, alias="X-Tenant-ID")):
     tenant_id = _require_tenant(x_tenant_id)
-    meta = _KB_META.get(kb_id)
-    if not meta:
-        raise HTTPException(status_code=404, detail="kb not found")
-    if meta.get("tenant_id") and meta["tenant_id"] != tenant_id:
-        raise HTTPException(status_code=403, detail="kb belongs to another tenant")
+    
+    # Get KB metadata from database
+    db_session: Session = SessionLocal()
+    try:
+        kb = db_session.query(KnowledgePackModel).filter(
+            KnowledgePackModel.id == kb_id,
+            KnowledgePackModel.tenant_id == tenant_id
+        ).first()
+        
+        if not kb:
+            raise HTTPException(status_code=404, detail="kb not found")
+    finally:
+        db_session.close()
+    
     if not _HAS_LANCEDB:
         raise HTTPException(status_code=400, detail="lancedb not installed on server")
 
     db: DB = lancedb.connect(LANCEDB_DIR)
-    tbl = db.open_table(meta["table"])  # type: ignore
+    tbl = db.open_table(kb.table_name)  # type: ignore
 
     rows = []
     for it in req.items:
@@ -193,11 +257,18 @@ async def index_into_kb(req: IndexRequest, x_tenant_id: Optional[str] = Header(N
     if fetch_text is None:
         raise HTTPException(status_code=500, detail="extract pipeline unavailable")
 
-    meta = _KB_META.get(req.kb_id)
-    if not meta:
-        raise HTTPException(status_code=404, detail="kb not found")
-    if meta.get("tenant_id") and meta["tenant_id"] != tenant_id:
-        raise HTTPException(status_code=403, detail="kb belongs to another tenant")
+    # Get KB metadata from database
+    db_session: Session = SessionLocal()
+    try:
+        kb = db_session.query(KnowledgePackModel).filter(
+            KnowledgePackModel.id == req.kb_id,
+            KnowledgePackModel.tenant_id == tenant_id
+        ).first()
+        
+        if not kb:
+            raise HTTPException(status_code=404, detail="kb not found")
+    finally:
+        db_session.close()
 
     # Resolve URLs
     urls: List[str] = []
@@ -225,7 +296,7 @@ async def index_into_kb(req: IndexRequest, x_tenant_id: Optional[str] = Header(N
     if not _HAS_LANCEDB:
         raise HTTPException(status_code=400, detail="lancedb not installed on server")
     db: DB = lancedb.connect(LANCEDB_DIR)
-    tbl = db.open_table(meta["table"])  # type: ignore
+    tbl = db.open_table(kb.table_name)  # type: ignore
 
     # Chunk + ingest
     logs: List[str] = []

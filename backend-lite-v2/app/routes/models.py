@@ -6,6 +6,10 @@ import os
 import asyncio
 import httpx
 import json
+from sqlalchemy.orm import Session
+
+from ..db_core import SessionLocal
+from ..models_kiffs import Model as ModelDB
 
 router = APIRouter(prefix="/api/models", tags=["models"]) 
 
@@ -75,16 +79,24 @@ class ModelItem(BaseModel):
 
 @router.get("/", response_model=List[ModelItem])
 async def list_models():
-    return _read_all()
+    db: Session = SessionLocal()
+    try:
+        models = db.query(ModelDB).filter(ModelDB.active == True).all()
+        return [_model_db_to_item(m) for m in models]
+    finally:
+        db.close()
 
 
 @router.get("/{model_id}", response_model=ModelItem)
 async def get_model(model_id: str):
-    items = _read_all()
-    for m in items:
-        if m.get("id") == model_id:
-            return m
-    raise HTTPException(status_code=404, detail="model not found")
+    db: Session = SessionLocal()
+    try:
+        model = db.query(ModelDB).filter(ModelDB.id == model_id).first()
+        if not model:
+            raise HTTPException(status_code=404, detail="model not found")
+        return _model_db_to_item(model)
+    finally:
+        db.close()
 
 
 def _derive_prices(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,6 +108,33 @@ def _derive_prices(item: Dict[str, Any]) -> Dict[str, Any]:
     if item.get("price_per_1k_output") is None and isinstance(pout, (int, float)):
         item["price_per_1k_output"] = float(pout) / 1_000.0
     return item
+
+
+def _model_db_to_item(model: ModelDB) -> ModelItem:
+    """Convert database model to API response"""
+    return ModelItem(
+        id=model.id,
+        name=model.name,
+        provider=model.provider,
+        object=model.object,
+        created=model.created,
+        owned_by=model.owned_by,
+        active=model.active,
+        public_apps=model.public_apps,
+        modality=model.modality,
+        family=model.family,
+        context_window=model.context_window,
+        max_output_tokens=model.max_output_tokens,
+        speed_tps=model.speed_tps,
+        price_per_million_input=model.price_per_million_input,
+        price_per_million_output=model.price_per_million_output,
+        price_per_1k_input=model.price_per_1k_input,
+        price_per_1k_output=model.price_per_1k_output,
+        status=model.status,
+        tags=model.tags or [],
+        notes=model.notes,
+        model_card_url=model.model_card_url
+    )
 
 
 def _guess_modality(model_id: str) -> Optional[str]:

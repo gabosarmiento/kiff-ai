@@ -28,7 +28,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
       const userRole = session.user.role?.toLowerCase()
       if (userRole !== 'admin' && userRole !== 'superadmin') {
         // Not an admin, redirect to user area
-        router.push('/kiffs/create')
+        router.push('/kiffs/launcher')
         return
       }
     }

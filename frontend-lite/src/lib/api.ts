@@ -4,8 +4,9 @@
 import { API_BASE_URL, USE_MOCKS } from './constants';
 import { getTenantId, withTenantHeaders } from './tenant';
 
-export type ApiInit = RequestInit & {
+export type ApiInit = Omit<RequestInit, 'body'> & {
   asJson?: boolean; // default true: auto set Content-Type and stringify body if object
+  body?: any; // Allow any object for JSON bodies
 };
 
 function normalizeInit(init: ApiInit = {}): RequestInit {
@@ -116,6 +117,40 @@ async function maybeMock(path: string): Promise<Response | null> {
       ]
     };
     return new Response(JSON.stringify(mockSitemap), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (path === '/api/packs') {
+    const mockPacks = [
+      {
+        id: 'stripe-pack',
+        name: 'stripe-payment-api',
+        display_name: 'Stripe Payment API',
+        description: 'Complete Stripe payment processing with webhooks and subscriptions',
+        category: 'payments',
+        api_url: 'https://api.stripe.com',
+        avg_rating: 4.8,
+        usage_count: 156,
+        total_users_used: 45,
+        is_verified: true,
+        created_at: '2024-01-15T10:30:00Z'
+      },
+      {
+        id: 'openai-pack',
+        name: 'openai-api',
+        display_name: 'OpenAI API',
+        description: 'ChatGPT, GPT-4, and other OpenAI models integration',
+        category: 'ai',
+        api_url: 'https://api.openai.com',
+        avg_rating: 4.9,
+        usage_count: 234,
+        total_users_used: 67,
+        is_verified: true,
+        created_at: '2024-01-20T14:15:00Z'
+      }
+    ];
+    return new Response(JSON.stringify({ packs: mockPacks, total: mockPacks.length }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

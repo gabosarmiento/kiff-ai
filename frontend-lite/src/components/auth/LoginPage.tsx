@@ -42,9 +42,9 @@ export function LoginPage() {
       }
       const raw = localStorage.getItem('kiff_user_data')
       const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
-      window.location.replace(role === 'admin' ? '/admin/users' : '/kiffs/create')
+      window.location.replace(role === 'admin' ? '/admin/users' : '/kiffs/launcher')
     } catch {
-      window.location.replace('/kiffs/create')
+      window.location.replace('/kiffs/launcher')
     }
   }, [isAuthenticated, isLoading])
 
@@ -72,9 +72,9 @@ export function LoginPage() {
         }
         const raw = localStorage.getItem('kiff_user_data')
         const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
-        window.location.href = role === 'admin' ? '/admin' : '/kiffs/create'
+        window.location.href = role === 'admin' ? '/admin' : '/kiffs/launcher'
       } catch {
-        window.location.href = '/kiffs/create'
+        window.location.href = '/kiffs/launcher'
       }
     } catch (err: any) {
       // Error toast is handled in AuthContext

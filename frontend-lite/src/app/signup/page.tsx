@@ -26,7 +26,7 @@ export default async function SignupRoute() {
       if (res.ok) {
         const me = (await res.json().catch(() => null)) as { role?: string } | null;
         if (me?.role === "admin") redirect("/admin/users");
-        redirect("/kiffs/create");
+        redirect("/kiffs/launcher");
       }
     } catch {
       // fall through to render signup

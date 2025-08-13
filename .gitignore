@@ -140,4 +140,4 @@ config/secrets/
 
 # Private local env files (prevent committing secrets)
 private/*.env
-private/aws.env
+private/aws.envbackend-lite-v2/.env.bak

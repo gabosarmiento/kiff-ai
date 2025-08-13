@@ -1,0 +1,50 @@
+# AWS App Runner Configuration - Optimized for Small Images & Fast Deployments
+# This configuration uses volume mounts for model caching to keep image size ~400MB
+
+version: 1.0
+runtime: docker
+
+build:
+  commands:
+    build:
+      # Use Docker buildkit for better caching
+      - echo "Building optimized image with external model cache..."
+      - docker build --platform linux/amd64 -t backend-lite-optimized .
+      
+  env:
+    # Build-time environment variables
+    - name: DOCKER_BUILDKIT
+      value: "1"
+
+run:
+  runtime-version: latest
+  
+  env:
+    # Runtime environment - models stored in persistent volume
+    - name: TRANSFORMERS_CACHE
+      value: "/models/hf"
+    - name: HF_HOME  
+      value: "/models/hf"
+    - name: SENTENCE_TRANSFORMERS_HOME
+      value: "/models/sentence_transformers"
+    - name: TOKENIZERS_PARALLELISM
+      value: "false"
+    
+  network:
+    port: 8000
+    
+  # Health check configuration
+  health_check:
+    protocol: HTTP
+    path: /health
+    interval: 30
+    timeout: 5
+    healthy_threshold: 2
+    unhealthy_threshold: 5
+
+# Volume configuration for persistent model storage
+# This keeps models outside the image, reducing size from ~7GB to ~400MB
+volumes:
+  - name: models-cache
+    mount_path: /models
+    size: 10GB  # EBS volume for model weights (~1-2GB needed for all models)

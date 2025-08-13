@@ -86,6 +86,29 @@ export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
   }
 )
 
+// Added to be API-compatible with shadcn/ui card exports
+export const CardTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn('text-xl font-semibold leading-none tracking-tight', className)}
+    {...props}
+  />
+))
+
+export const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn('text-sm text-gray-600 dark:text-slate-400', className)}
+    {...props}
+  />
+))
+
 export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
   ({ className, children, ...props }, ref) => {
     return (
@@ -120,5 +143,7 @@ export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(
 
 Card.displayName = 'Card'
 CardHeader.displayName = 'CardHeader'
+CardTitle.displayName = 'CardTitle'
+CardDescription.displayName = 'CardDescription'
 CardContent.displayName = 'CardContent'
 CardFooter.displayName = 'CardFooter'

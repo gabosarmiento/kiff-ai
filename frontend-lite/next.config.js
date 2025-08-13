@@ -43,6 +43,10 @@ const nextConfig = {
         source: '/api/compose/:path*',
         destination: `${BACKEND_ORIGIN}/api/compose/:path*`,
       },
+      {
+        source: '/api/packs/:path*',
+        destination: `${BACKEND_ORIGIN}/api/packs/:path*`,
+      },
     ]
   },
 }

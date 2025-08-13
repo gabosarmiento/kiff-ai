@@ -1,0 +1,1548 @@
+"use client";
+
+import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { Navbar } from "@/components/layout/Navbar";
+import { Sidebar } from "@/components/navigation/Sidebar";
+import { BottomNav } from "@/components/navigation/BottomNav";
+import { useLayoutState } from "@/components/layout/LayoutState";
+import dynamic from "next/dynamic";
+const ChatHistory = dynamic(() => import("./components/ChatHistory"), { ssr: false });
+const ChatInput = dynamic(() => import("./components/ChatInput"), { ssr: false });
+const PackSelector = dynamic(() => import("@/components/compose/PackSelector"), { ssr: false });
+import type { Attachment } from "./types";
+import { ChatMessage } from "./types";
+import { apiClient } from "./utils/api";
+
+function getTenantId(): string {
+  if (typeof window !== "undefined") {
+    const fromStorage = window.localStorage.getItem("tenant_id");
+    if (fromStorage && fromStorage !== "null" && fromStorage !== "undefined") return fromStorage;
+  }
+  return process.env.NEXT_PUBLIC_TENANT_ID || "4485db48-71b7-47b0-8128-c6dca5be352d";
+}
+import { Button } from "@/components/ui/button";
+import { Package, ChevronLeft, ChevronRight, Rocket, RotateCcw, Monitor, FileCode, MessageSquare, X, Plus, Minus, Trash2, Settings } from "lucide-react";
+import PageContainer from "@/components/ui/PageContainer";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+const FileExplorer = dynamic(() => import("./components/FileExplorer"), { ssr: false, loading: () => <div className="animate-pulse h-full bg-gray-100 rounded" /> });
+const FileEditor = dynamic(() => import("./components/FileEditor"), { ssr: false, loading: () => <div className="animate-pulse h-full bg-gray-100 rounded" /> });
+const PreviewPane = dynamic(() => import("./components/PreviewPane"), { ssr: false, loading: () => <div className="animate-pulse h-full bg-gray-100 rounded" /> });
+import toast from "react-hot-toast";
+import { usePacks } from "@/contexts/PackContext";
+
+import { Suspense } from "react";
+
+function LauncherPageContent() {
+  const { collapsed } = useLayoutState();
+  const leftWidth = collapsed ? 72 : 280;
+  const searchParams = useSearchParams();
+  const { selectedPacks: globalSelectedPacks, setSelectedPacks: setGlobalSelectedPacks, removePack: removePackGlobal } = usePacks();
+  const ideaInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  // Ephemeral attachments for this session only (not persisted)
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showPreviewOnly, setShowPreviewOnly] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasProject, setHasProject] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [kiffUpdate, setKiffUpdate] = useState<any | null>(null);
+  const [selectedPacks, setSelectedPacks] = useState<string[]>([]);
+  const [showPackSelector, setShowPackSelector] = useState(false);
+  const [showPackManager, setShowPackManager] = useState(false);
+  const [currentIdea, setCurrentIdea] = useState("");
+  const [ideaInput, setIdeaInput] = useState("");
+  const [kiffId, setKiffId] = useState<string | null>(null);
+  const [filePaths, setFilePaths] = useState<string[]>([]);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [deployLogs, setDeployLogs] = useState<string[]>([]);
+  const [showDeployLogs, setShowDeployLogs] = useState(false);
+  const logsRef = useRef<HTMLDivElement | null>(null);
+  const [installState, setInstallState] = useState<string>("");
+  const [previewScale, setPreviewScale] = useState<number>(1);
+  // Model selection (like compose)
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [model, setModel] = useState<string>("kimi-k2");
+
+  // Load models (from unified Next API route) and prefer Kimi models when available
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        console.log("🔄 Loading models from API...");
+        const res = await fetch(`/api/models`, { 
+          cache: "force-cache",
+          next: { revalidate: 300 } // Cache for 5 minutes
+        });
+        console.log("📡 Models API response status:", res.status, res.ok);
+        
+        if (!res.ok) {
+          console.warn("❌ Models API not OK, using fallback");
+          const fallbackModels = ["moonshotai/kimi-k2-instruct", "qwen/qwen3-32b", "deepseek-r1-distill-llama-70b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama3-70b-8192"];
+          setModelOptions(fallbackModels);
+          setModel(fallbackModels[0]);
+          return;
+        }
+        
+        const data = await res.json();
+        console.log("📊 Raw API data:", data);
+        
+        const arr = Array.isArray(data) ? data : (Array.isArray((data as any).models) ? (data as any).models : []);
+        console.log("🔍 Processed array:", arr);
+        
+        const ids: string[] = arr
+          .map((m: any) => (typeof m === "string" ? m : (m && (m.id || (m as any).name)) || null))
+          .filter(Boolean);
+        console.log("🎯 Extracted IDs:", ids);
+        
+        if (cancelled) return;
+        
+        // If no models from API, provide fallback models
+        const fallbackModels = ["moonshotai/kimi-k2-instruct", "qwen/qwen3-32b", "deepseek-r1-distill-llama-70b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama3-70b-8192"];
+        // If backend returns a very small set (e.g., 4), merge with fallback to ensure a robust default list
+        const availableIds = ids.length >= 5 ? ids : Array.from(new Set([...(ids || []), ...fallbackModels]));
+        console.log("📋 Available IDs (with fallback):", availableIds);
+        
+        const preferred = ["moonshotai/kimi-k2-instruct", "qwen/qwen3-32b", "deepseek-r1-distill-llama-70b"];
+        const set = new Set(availableIds);
+        const ordered: string[] = [];
+        for (const p of preferred) if (set.has(p)) ordered.push(p);
+        for (const id of availableIds) if (!ordered.includes(id)) ordered.push(id);
+        console.log("⚡ Final ordered models:", ordered);
+        
+        setModelOptions(ordered);
+        
+        // Only set model if current model is not in the list or if we don't have a model set
+        if (!model || !ordered.includes(model)) {
+          const selectedModel = ordered[0] || "kimi-k2";
+          console.log("🎯 Setting model to:", selectedModel);
+          setModel(selectedModel);
+        }
+      } catch (e) {
+        console.warn("❌ Models load failed:", e);
+        // Ensure we have fallback models even on error
+        const fallbackModels = ["moonshotai/kimi-k2-instruct", "qwen/qwen3-32b", "deepseek-r1-distill-llama-70b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama3-70b-8192"];
+        console.log("🔄 Using fallback models on error:", fallbackModels);
+        setModelOptions(fallbackModels);
+        setModel(fallbackModels[0]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [model]); // Remove model dependency to avoid loop
+
+  // Load persisted state
+  useEffect(() => {
+    try {
+      const persisted = localStorage.getItem("kiff_launcher_state");
+      if (persisted) {
+        const parsed = JSON.parse(persisted);
+        if (parsed?.hasProject) setHasProject(true);
+        if (parsed?.idea) setIdeaInput(parsed.idea);
+      }
+    } catch {}
+  }, []);
+
+  // Initialize selected packs from global context and auto-open selector if packs exist
+  useEffect(() => {
+    if (globalSelectedPacks.length > 0) {
+      setSelectedPacks(globalSelectedPacks);
+      // Auto-open pack selector when there are selected packs
+      setShowPackSelector(true);
+    }
+  }, [globalSelectedPacks]);
+
+  // Persist state
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "kiff_launcher_state",
+        JSON.stringify({ hasProject, idea: ideaInput })
+      );
+    } catch {}
+  }, [hasProject, ideaInput]);
+
+  // Check for pack parameter in URL
+  useEffect(() => {
+    const packId = searchParams.get('pack');
+    if (packId) {
+      setSelectedPacks([packId]);
+    }
+  }, [searchParams]);
+
+  // Handle opening a specific kiff from URL (?kiff=ID): flush current chat and load its history
+  useEffect(() => {
+    const kid = searchParams.get('kiff');
+    if (!kid || kid === kiffId) return;
+    setKiffId(kid);
+    setSessionId(null);
+    // Flush chat to empty immediately
+    setChatMessages([]);
+    // Load full session state for this Kiff: session_id, messages, files, preview, and packs (local)
+    (async () => {
+      try {
+        // 1) Load latest chat session for this kiff (returns session_id + messages)
+        const loadRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/chat/load-session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": getTenantId() },
+          body: JSON.stringify({ kiff_id: kid }),
+        });
+        if (loadRes.ok) {
+          const data = await loadRes.json();
+          if (data?.session_id) setSessionId(data.session_id as string);
+          if (Array.isArray(data?.messages)) {
+            const chatMsgs: ChatMessage[] = data.messages.map((m: any) => ({
+              role: m.role,
+              content: m.content,
+              timestamp: m.timestamp || new Date().toISOString(),
+            }));
+            setChatMessages(chatMsgs);
+          }
+          // Consider we now have a project to show
+          setHasProject(true);
+          // 2) Restore packs selected for this kiff from localStorage
+          try {
+            const packsKey = `kiff_packs_${kid}`;
+            const packsRaw = localStorage.getItem(packsKey);
+            if (packsRaw) {
+              const parsed = JSON.parse(packsRaw);
+              if (Array.isArray(parsed)) setSelectedPacks(parsed);
+            }
+          } catch {}
+          // 3) Restore preview and files via preview session
+          if (data?.session_id) {
+            try {
+              const { getPreviewUrl, getFileTree, getFile } = await import("./utils/preview");
+              // Preview URL (ensures sandbox/session is known on backend)
+              const url = await getPreviewUrl(data.session_id);
+              if (url) {
+                setPreviewUrl(url);
+                setShowPreviewOnly(true);
+              }
+              // File tree
+              const tree = await getFileTree(data.session_id);
+              setFilePaths(tree.files || []);
+              const firstTsx = (tree.files || []).find((p: string) => p.endsWith("app/page.tsx")) || (tree.files || [])[0] || null;
+              setSelectedPath(firstTsx);
+              if (firstTsx) {
+                const f = await getFile(data.session_id, firstTsx);
+                setFileContent(f.content || "");
+              }
+            } catch (e) {
+              console.warn("Failed to restore preview/files for kiff", e);
+            }
+          }
+        } else {
+          // Fallback: if load-session fails, at least get the kiff messages history
+          try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/kiffs/${kid}/messages`, {
+              headers: { "X-Tenant-ID": getTenantId() },
+            });
+            if (response.ok) {
+              const messages = await response.json();
+              if (Array.isArray(messages)) {
+                const chatMsgs: ChatMessage[] = messages.map((m: any) => ({
+                  role: m.role,
+                  content: m.content,
+                  timestamp: m.created_at || new Date().toISOString(),
+                }));
+                setChatMessages(chatMsgs);
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to load kiff messages (fallback)", e);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load session for kiff", e);
+      }
+    })();
+  }, [searchParams, kiffId]);
+
+  // Check for reset parameter in URL and reset state
+  useEffect(() => {
+    const shouldReset = searchParams.get('reset');
+    if (shouldReset === 'true') {
+      // Reset all state to initial values
+      setHasProject(false);
+      setIsGenerating(false);
+      setShowPreviewOnly(false);
+      setChatOpen(false);
+      setSessionId(null);
+      setKiffId(null);
+      setFilePaths([]);
+      setSelectedPath(null);
+      setFileContent("");
+      setPreviewUrl(null);
+      setInstallState("");
+      setSelectedPacks([]);
+      setShowPackSelector(false);
+      setCurrentIdea("");
+      setIdeaInput("");
+      setChatMessages([]);
+      setChatInput("");
+      setKiffUpdate(null);
+      
+      // Clear localStorage
+      try {
+        localStorage.removeItem("kiff_launcher_state");
+      } catch {}
+      
+      // Clear the URL parameter to avoid repeated resets
+      const url = new URL(window.location.href);
+      url.searchParams.delete('reset');
+      window.history.replaceState({}, '', url.pathname + url.search);
+      
+      toast.success("New Kiff ready!");
+    }
+  }, [searchParams]);
+
+  // Chat submit handler (defined before effects that depend on it)
+  const handleChatSubmit = useCallback(async () => {
+    const msg = chatInput.trim();
+    if (!msg) return;
+
+    // Update current idea context for pack suggestions
+    setCurrentIdea(msg);
+
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: msg,
+      timestamp: new Date().toISOString(),
+    };
+    // If starting a brand-new kiff via chat (no kiffId yet) and we still have old messages,
+    // flush chat to empty before adding the new user message.
+    setChatMessages((prev) => {
+      const needsFlush = !kiffId && prev.length > 1;
+      const base = needsFlush ? [] : prev;
+      return [...base, userMsg];
+    });
+    setChatInput("");
+    setIsGenerating(true);
+    // capture current attachments snapshot for this send and clear UI immediately (ephemeral)
+    const attSnapshot = [...attachments];
+    setAttachments([]);
+    // Create placeholder assistant message for streaming tokens
+    let assistantIndex = -1;
+    setChatMessages((prev) => {
+      assistantIndex = prev.length + 0; // index after adding userMsg
+      return [
+        ...prev,
+        {
+          role: "assistant",
+          content: "",
+          timestamp: new Date().toISOString(),
+        },
+      ];
+    });
+
+    try {
+      // Abort any previous stream
+      if (abortRef.current) abortRef.current.abort();
+      abortRef.current = new AbortController();
+
+      await apiClient.sendMessageStream(
+        {
+          message: msg,
+          chat_history: chatMessages,
+          session_id: sessionId || undefined,
+          kiff_id: kiffId || undefined,
+          selected_packs: selectedPacks.length > 0 ? selectedPacks : undefined,
+          model_id: model,
+          images: attSnapshot
+            .filter((a) => a.mime.startsWith("image/"))
+            .map((a) => ({ name: a.name, mime: a.mime, content_base64: a.content_base64 })),
+          files: attSnapshot
+            .filter((a) => !a.mime.startsWith("image/"))
+            .map((a) => ({ name: a.name, mime: a.mime, content_base64: a.content_base64 })),
+        },
+        {
+          signal: abortRef.current.signal,
+          onToken: (t) => {
+            setChatMessages((prev) => {
+              const next = [...prev];
+              const idx = assistantIndex >= 0 ? assistantIndex : next.findIndex((m, i) => i > 0 && next[i - 1] === userMsg && m.role === "assistant");
+              const target = idx >= 0 ? idx : next.length - 1;
+              next[target] = { ...next[target], content: (next[target]?.content || "") + t } as ChatMessage;
+              return next;
+            });
+          },
+          onDone: (final) => {
+            if (final?.session_id) setSessionId(final.session_id);
+            if (final?.tool_calls || final?.kiff_update) {
+              setChatMessages((prev) => {
+                const next = [...prev];
+                const idx = assistantIndex >= 0 ? assistantIndex : next.length - 1;
+                next[idx] = { ...next[idx], tool_calls: (final?.tool_calls as any) } as ChatMessage;
+                return next;
+              });
+              if (final?.kiff_update) setKiffUpdate(final.kiff_update);
+            }
+            setIsGenerating(false);
+            // If chat is closed, mark one unread reply
+            if (!chatOpen) setUnreadCount((n) => n + 1);
+            abortRef.current = null;
+          },
+          onError: (e) => {
+            console.error("stream error", e);
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: "There was an error processing your message. Please try again.",
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+            toast.error("Request failed");
+            setIsGenerating(false);
+            abortRef.current = null;
+          },
+        }
+      );
+    } catch (e) {
+      console.error("send-message error", e);
+      setIsGenerating(false);
+    }
+  }, [chatInput, chatMessages, sessionId, selectedPacks, model, attachments, kiffId, chatOpen]);
+
+  // Convert dropped/pasted files to in-memory base64 Attachments
+  const handleAddFiles = useCallback(async (files: File[]) => {
+    const toAtt = async (f: File): Promise<Attachment> => {
+      const buf = await f.arrayBuffer();
+      const b64 = typeof window !== "undefined" ? window.btoa(String.fromCharCode(...new Uint8Array(buf))) : "";
+      return {
+        name: f.name,
+        mime: f.type || "application/octet-stream",
+        size: f.size,
+        content_base64: b64,
+      };
+    };
+    const newOnes = await Promise.all(files.map(toAtt));
+    setAttachments((prev) => [...prev, ...newOnes]);
+  }, []);
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+  
+  
+
+  
+
+  const runIdeaToProject = useCallback(async () => {
+    const idea = ideaInput.trim();
+    if (!idea) return;
+    setIsGenerating(true);
+    toast.dismiss();
+    toast.loading("Scaffolding project…", { id: "gen" });
+    try {
+      // 1) Create or reuse sandbox (also returns preview skeleton)
+      const sid = sessionId || crypto.randomUUID();
+      setSessionId(sid);
+      try {
+        const { createSandbox } = await import("./utils/preview");
+        await createSandbox(sid); // Let the agent determine the appropriate runtime
+      } catch (e) {
+        console.warn("sandbox create failed (continuing without sandbox)", e);
+      }
+
+      // 2) Ask backend to generate initial files for this idea
+      const gen = await apiClient.generateProject({ idea, session_id: sid, selected_packs: selectedPacks, model_id: model });
+      setSessionId(gen.session_id);
+      setKiffId(gen.kiff_id);
+      // Immediately clear prior chat to avoid showing a previous kiff's conversation while we fetch this kiff's history.
+      setChatMessages([]);
+      toast.loading("Applying files…", { id: "gen" });
+
+      // 3) Apply files to preview session via SSE
+      await new Promise<void>((resolve, reject) => {
+        let stopFn: () => void = () => {};
+        (async () => {
+          const { applyFilesSSE } = await import("./utils/preview");
+          stopFn = applyFilesSSE(gen.session_id, gen.files, (evt) => {
+            if (evt?.type === "server" && evt?.preview_url) {
+              // Server started with dynamic preview URL
+              setPreviewUrl(evt.preview_url);
+              setShowPreviewOnly(true);
+            }
+            if (evt?.type === "complete") {
+              stopFn();
+              resolve();
+            }
+          });
+        })();
+        // fallback timeout
+        setTimeout(() => {
+          try { stopFn(); } catch {}
+          resolve();
+        }, 2000);
+      });
+
+      // Fallback: if we still don't have a preview URL, ask the backend for it
+      if (!previewUrl) {
+        try {
+          const { getPreviewUrl } = await import("./utils/preview");
+          const url = await getPreviewUrl(gen.session_id);
+          if (url) { setPreviewUrl(url); setShowPreviewOnly(true); }
+        } catch (e) {
+          console.warn("fallback getPreviewUrl failed", e);
+        }
+      }
+
+      // 4) Fetch tree and open a default file
+      const { getFileTree, getFile } = await import("./utils/preview");
+      const tree = await getFileTree(gen.session_id);
+      setFilePaths(tree.files || []);
+      const firstTsx = (tree.files || []).find((p) => p.endsWith("app/page.tsx")) || (tree.files || [])[0] || null;
+      setSelectedPath(firstTsx);
+      if (firstTsx) {
+        const f = await getFile(gen.session_id, firstTsx);
+        setFileContent(f.content || "");
+      }
+
+      // 5) Install dependencies if package.json exists
+      try {
+        const pkgPath = (tree.files || []).find((p) => p === "package.json");
+        if (pkgPath) {
+          const { getFile, installPackagesSSE } = await import("./utils/preview");
+          const pkg = await getFile(gen.session_id, pkgPath);
+          const json = JSON.parse(pkg.content || "{}");
+          const deps = Object.entries({ ...(json.dependencies || {}), ...(json.devDependencies || {}) })
+            .map(([name, ver]) => `${name}@${ver}`)
+            .filter(Boolean);
+          if (deps.length) {
+            setInstallState("Installing packages…");
+            await installPackagesSSE(gen.session_id, deps, (evt) => {
+              if (evt?.type === "progress") setInstallState(evt.message || "Installing…");
+              if (evt?.type === "complete") setInstallState("Completed");
+            });
+            // After install, if preview URL is still unknown, ask backend once
+            try {
+              if (!previewUrl) {
+                const { getPreviewUrl } = await import("./utils/preview");
+                const url = await getPreviewUrl(gen.session_id);
+                if (url) { setPreviewUrl(url); setShowPreviewOnly(true); }
+              }
+            } catch (e) {
+              console.warn("post-install getPreviewUrl failed", e);
+            }
+          }
+        }
+      } catch (e) {
+        // Non-fatal
+        console.warn("install step error", e);
+      }
+
+      // Preview URL is now set dynamically when server starts during file application
+      // No need to fetch it again here
+
+      // 7) Load the conversation history that was created during project generation
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/kiffs/${gen.kiff_id}/messages`, {
+          headers: {
+            "X-Tenant-ID": getTenantId(),
+          },
+        });
+        if (response.ok) {
+          const messages = await response.json();
+          if (Array.isArray(messages) && messages.length > 0) {
+            const chatMsgs: ChatMessage[] = messages.map(m => ({
+              role: m.role,
+              content: m.content,
+              timestamp: m.created_at || new Date().toISOString(),
+            }));
+            setChatMessages(chatMsgs);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load conversation history:", e);
+        // Keep default messages if loading fails
+      }
+
+      toast.success("Ready", { id: "gen" });
+    } catch (e) {
+      console.error("idea-to-project error", e);
+      toast.error("Generation failed", { id: "gen" });
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [ideaInput, selectedPacks, sessionId, model, previewUrl]);
+
+  // Ensure preview is available when toggled to preview-only view
+  useEffect(() => {
+    const ensurePreview = async () => {
+      if (!showPreviewOnly) return;
+      // Highest priority: explicit env override (useful in staging)
+      if (!previewUrl && process.env.NEXT_PUBLIC_PREVIEW_URL) {
+        setPreviewUrl(process.env.NEXT_PUBLIC_PREVIEW_URL);
+        return;
+      }
+      if (showPreviewOnly && sessionId && !previewUrl) {
+        try {
+          const tenant = getTenantId();
+          if (!tenant || tenant === "null" || tenant === "undefined") {
+            setDeployLogs(prev => [...prev, "❌ Missing X-Tenant-ID. Set a tenant and try again."]);
+            return;
+          }
+          setDeployLogs(prev => [...prev, "Ensuring sandbox and preview URL…"]);
+          const { createSandbox, restartDevServer } = await import("./utils/preview");
+          const info = await createSandbox(sessionId);
+          setShowPreviewOnly(true);
+          if (info?.preview_url) {
+            setPreviewUrl(info.preview_url);
+            setDeployLogs(prev => [...prev, "Restarting development server…"]);
+            try { await restartDevServer(sessionId); } catch {}
+            setDeployLogs(prev => [...prev, "✅ Preview ready"]);
+          }
+        } catch {}
+      }
+      // If we have no sessionId yet but user asked for preview, create one ad-hoc
+      if (showPreviewOnly && !sessionId && !previewUrl) {
+        try {
+          const sid = crypto.randomUUID();
+          setSessionId(sid);
+          const tenant = getTenantId();
+          if (!tenant || tenant === "null" || tenant === "undefined") {
+            setDeployLogs(prev => [...prev, "❌ Missing X-Tenant-ID. Set a tenant and try again."]);
+            return;
+          }
+          setDeployLogs(prev => [...prev, "Creating sandbox…"]);
+          const { createSandbox, restartDevServer } = await import("./utils/preview");
+          const { preview_url } = await createSandbox(sid);
+          setShowPreviewOnly(true);
+          if (preview_url) {
+            setPreviewUrl(preview_url);
+            setDeployLogs(prev => [...prev, "Restarting development server…"]);
+            try { await restartDevServer(sid); } catch {}
+            setDeployLogs(prev => [...prev, "✅ Preview ready"]);
+          }
+        } catch (e) {
+          console.warn("ensurePreview (no session) failed", e);
+        }
+      }
+    };
+    ensurePreview();
+  }, [showPreviewOnly, sessionId, previewUrl]);
+
+  // Self-heal preview even if not in preview-only mode
+  useEffect(() => {
+    const maybeRestore = async () => {
+      if (hasProject && sessionId && !previewUrl) {
+        try {
+          const tenant = getTenantId();
+          if (!tenant || tenant === "null" || tenant === "undefined") {
+            setDeployLogs(prev => [...prev, "❌ Missing X-Tenant-ID. Set a tenant and try again."]);
+            return;
+          }
+          setDeployLogs(prev => [...prev, "Preparing live preview…"]);
+          const { createSandbox, restartDevServer } = await import("./utils/preview");
+          const info = await createSandbox(sessionId);
+          setShowPreviewOnly(true);
+          if (info?.preview_url) {
+            setPreviewUrl(info.preview_url);
+            setDeployLogs(prev => [...prev, "Restarting development server…"]);
+            try { await restartDevServer(sessionId); } catch {}
+            setDeployLogs(prev => [...prev, "✅ Preview ready"]);
+          }
+        } catch {}
+      }
+      if (hasProject && !sessionId && !previewUrl) {
+        // Try env override first
+        if (process.env.NEXT_PUBLIC_PREVIEW_URL) {
+          setPreviewUrl(process.env.NEXT_PUBLIC_PREVIEW_URL);
+          setShowPreviewOnly(true);
+          return;
+        }
+        try {
+          const sid = crypto.randomUUID();
+          setSessionId(sid);
+          const tenant = getTenantId();
+          if (!tenant || tenant === "null" || tenant === "undefined") {
+            setDeployLogs(prev => [...prev, "❌ Missing X-Tenant-ID. Set a tenant and try again."]);
+            return;
+          }
+          setDeployLogs(prev => [...prev, "Creating sandbox…"]);
+          const { createSandbox, restartDevServer } = await import("./utils/preview");
+          const { preview_url } = await createSandbox(sid);
+          setShowPreviewOnly(true);
+          if (preview_url) {
+            setPreviewUrl(preview_url);
+            setDeployLogs(prev => [...prev, "Restarting development server…"]);
+            try { await restartDevServer(sid); } catch {}
+            setDeployLogs(prev => [...prev, "✅ Preview ready"]);
+          }
+        } catch {}
+      }
+    };
+    maybeRestore();
+  }, [hasProject, sessionId, previewUrl]);
+
+  // Persist selected packs per-kiff
+  useEffect(() => {
+    if (!kiffId) return;
+    try {
+      const packsKey = `kiff_packs_${kiffId}`;
+      localStorage.setItem(packsKey, JSON.stringify(selectedPacks || []));
+    } catch {}
+  }, [kiffId, selectedPacks]);
+
+  // Apply file updates coming from chat (kiff_update) and ensure preview refreshes
+  useEffect(() => {
+    (async () => {
+      const update: any = kiffUpdate as any;
+      if (!update || !sessionId) return;
+      try {
+        const files = Array.isArray(update.files) ? update.files : [];
+        const shouldInstall = !!update.install_deps;
+        if (!files.length && !shouldInstall) return;
+
+        toast.loading("Applying changes…", { id: "kiff_update" });
+
+        if (files.length) {
+          // Dynamically import to ensure symbols are available in this scope
+          const { applyFilesSSE, getFileTree, getFile, installPackagesSSE, getPreviewUrl } = await import("./utils/preview");
+          await new Promise<void>((resolve) => {
+            const stop = applyFilesSSE(sessionId, files as any, (evt) => {
+              if (evt?.type === "server" && evt?.preview_url) {
+                setPreviewUrl(evt.preview_url);
+                setShowPreviewOnly(true);
+              }
+              if (evt?.type === "complete") { stop(); resolve(); }
+            });
+            setTimeout(() => { try { stop(); } catch {} resolve(); }, 2000);
+          });
+
+          // Refresh tree (best effort) and currently opened file content
+          try {
+            const tree = await getFileTree(sessionId);
+            setFilePaths(tree.files || []);
+            if (selectedPath) {
+              const f = await getFile(sessionId, selectedPath);
+              setFileContent(f.content || "");
+            }
+          } catch {}
+        }
+
+        if (shouldInstall) {
+          try {
+            const { getFile, installPackagesSSE, getPreviewUrl } = await import("./utils/preview");
+            const pkg = await getFile(sessionId, "package.json");
+            const json = JSON.parse(pkg.content || "{}");
+            const deps = Object.entries({ ...(json.dependencies || {}), ...(json.devDependencies || {}) })
+              .map(([name, ver]) => `${name}@${ver}`)
+              .filter(Boolean);
+            if (deps.length) {
+              setInstallState(`Installing ${deps.length} packages…`);
+              await installPackagesSSE(sessionId, deps, (evt) => {
+                if (evt?.type === "complete") setInstallState("Install complete");
+              });
+            }
+          } catch {}
+          // Ensure preview URL is available
+          try {
+            if (!previewUrl) {
+              const { getPreviewUrl } = await import("./utils/preview");
+              const url = await getPreviewUrl(sessionId);
+              if (url) { setPreviewUrl(url); setShowPreviewOnly(true); }
+            }
+          } catch {}
+        }
+
+        toast.success("Ready", { id: "kiff_update" });
+      } catch (e) {
+        console.warn("Failed to apply kiff_update", e);
+        toast.error("Failed to apply changes", { id: "kiff_update" });
+      } finally {
+        setKiffUpdate(null);
+      }
+    })();
+  }, [kiffUpdate, sessionId, selectedPath, previewUrl]);
+
+  // When a preview URL becomes available, switch to Preview mode automatically
+  useEffect(() => {
+    if (previewUrl) {
+      setShowPreviewOnly(true);
+    }
+  }, [previewUrl]);
+
+  // Auto-scroll logs to bottom when new entries arrive
+  useEffect(() => {
+    try {
+      const el = logsRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    } catch {}
+  }, [deployLogs, showDeployLogs]);
+
+  // Prevent background scroll while logs modal is open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const prev = document.body.style.overflow;
+    if (showDeployLogs) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showDeployLogs]);
+
+  const runIdleGenerate = useCallback(async () => {
+    if (!ideaInput.trim()) {
+      ideaInputRef.current?.focus();
+      return;
+    }
+    setHasProject(true);
+    // small delay to show progress bar
+    await new Promise((r) => setTimeout(r, 350));
+    await runIdeaToProject();
+  }, [ideaInput, runIdeaToProject]);
+
+  // Retry a specific assistant message by resending the preceding user prompt
+  const handleRetryAssistant = useCallback(async (assistantIndex: number) => {
+    // Find the nearest previous user message before this assistant message
+    const prior = chatMessages.slice(0, assistantIndex);
+    const idxUserRev = prior.slice().reverse().findIndex((m) => m.role === "user");
+    const idxUser = idxUserRev >= 0 ? prior.length - 1 - idxUserRev : -1;
+    const lastUser = idxUser >= 0 ? chatMessages[idxUser] : chatMessages.slice().reverse().find((m) => m.role === "user");
+    if (!lastUser) {
+      toast.error("No prior user message to retry");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const res = await apiClient.sendMessage({
+        message: lastUser.content,
+        chat_history: idxUser >= 0 ? chatMessages.slice(0, idxUser) : [],
+        session_id: sessionId || undefined,
+        kiff_id: kiffId || undefined,
+        selected_packs: selectedPacks.length > 0 ? selectedPacks : undefined,
+        model_id: model,
+      });
+
+      setSessionId(res.session_id);
+
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content: res.content,
+        timestamp: new Date().toISOString(),
+        tool_calls: res.tool_calls as any,
+      };
+      setChatMessages((prev) => [...prev, assistantMsg]);
+      if (!chatOpen) setUnreadCount((n) => n + 1);
+
+      if (res.kiff_update) setKiffUpdate(res.kiff_update);
+    } catch (e) {
+      console.error("retry error", e);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Retry failed. Please try again.",
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      toast.error("Retry failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [chatMessages, model, selectedPacks, sessionId, kiffId, chatOpen]);
+
+  // Edit & resend: move content to input and focus
+  const handleEditLastUser = useCallback((content: string) => {
+    setChatInput(content);
+    setTimeout(() => {
+      try { chatInputRef.current?.focus(); } catch {}
+    }, 0);
+  }, []);
+
+  // Keyboard shortcuts: '/' focuses idea, Cmd/Ctrl+Enter generates
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Focus idea
+      if (e.key === '/' && !hasProject) {
+        const tag = (document.activeElement as HTMLElement | null)?.tagName?.toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') {
+          e.preventDefault();
+          ideaInputRef.current?.focus();
+        }
+      }
+      // Generate
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'enter') {
+        e.preventDefault();
+        if (!hasProject) runIdleGenerate(); else handleChatSubmit();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hasProject, handleChatSubmit, runIdleGenerate]);
+
+  const resetAll = useCallback(() => {
+    setHasProject(false);
+    setIsGenerating(false);
+    setSessionId(null);
+    setKiffId(null);
+    setFilePaths([]);
+    setSelectedPath(null);
+    setFileContent("");
+    setPreviewUrl(null);
+    setInstallState("");
+    toast("Reset to idle");
+  }, []);
+
+  const TopBar = (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Rocket className="w-5 h-5 text-blue-600" />
+        <h2 className="m-0 text-lg font-semibold">Launcher</h2>
+      </div>
+      <div className="flex items-center gap-2">
+        {/* Model selector */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-600">Model</label>
+          <select
+            className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowPackSelector(!showPackSelector)}
+          className="flex items-center gap-1"
+          aria-label="Toggle Packs"
+        >
+          <Package className="w-4 h-4" />
+          Packs
+          {selectedPacks.length > 0 && (
+            <span className="ml-1 text-xs rounded-full bg-blue-600 text-white px-1.5 py-0.5">
+              {selectedPacks.length}
+            </span>
+          )}
+          {showPackSelector ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </Button>
+        {selectedPacks.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPackManager(true)}
+            className="flex items-center gap-1"
+            aria-label="Manage Selected Packs"
+            title="Manage your selected packs"
+          >
+            <Settings className="w-4 h-4" />
+            Manage Packs
+          </Button>
+        )}
+        {hasProject && (
+          <Button variant="ghost" size="sm" onClick={resetAll} className="flex items-center gap-1" aria-label="Reset">
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </Button>
+        )}
+        {hasProject && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPreviewOnly((v) => !v)}
+              className="flex items-center gap-1"
+              aria-label="Toggle preview"
+              title="Toggle Live Preview"
+            >
+              {showPreviewOnly ? <FileCode className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+              {showPreviewOnly ? 'Files' : 'Preview'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1"
+              onClick={() => {
+                if (previewUrl) {
+                  window.open(previewUrl, '_blank', 'noopener');
+                } else {
+                  toast("Preview not ready yet");
+                }
+              }}
+              aria-label="Open Live Preview in new tab"
+            >
+              Open Preview
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // Inline top progress bar
+  const ProgressBar = isGenerating ? (
+    <div className="h-1 w-full bg-slate-200 rounded mt-3 overflow-hidden" aria-live="polite" aria-label="Generating">
+      <div className="h-full w-1/2 bg-blue-600 animate-[progress_1.2s_linear_infinite] rounded" />
+      <style jsx>{`
+        @keyframes progress { 0% { transform: translateX(-50%); } 100% { transform: translateX(150%); } }
+      `}</style>
+    </div>
+  ) : null;
+
+  const IdleHero = (
+    <div className="flex flex-col items-center justify-center text-center" style={{ minHeight: '60vh' }}>
+      <h1 className="text-4xl font-bold tracking-tight">Imagine. Build. Grow. Repeat</h1>
+      <p className="mt-3 text-slate-600 max-w-xl">Describe an idea. I’ll deliver a working project.</p>
+      <Card className="mt-6 w-full max-w-3xl">
+        <CardContent className="p-4">
+          <div className="flex gap-2 items-center">
+            <Textarea
+               ref={ideaInputRef}
+               placeholder="e.g., A Next.js dashboard showing Stripe revenue with charts"
+               value={ideaInput}
+               onChange={(e) => setIdeaInput(e.target.value)}
+               aria-label="Your idea"
+               rows={2}
+               className="w-full min-h-[44px] max-h-[288px] resize-none"
+               style={{overflowY: 'auto'}}
+             />
+            <Button onClick={runIdleGenerate} disabled={isGenerating} aria-label="Generate">
+              {isGenerating ? 'Generating…' : 'Generate'}
+            </Button>
+          </div>
+          <div className="mt-2 text-xs text-slate-500 text-left">
+            <span className="px-1.5 py-0.5 rounded bg-slate-100 border">/</span> focus • <span className="px-1.5 py-0.5 rounded bg-slate-100 border">⌘/Ctrl</span>+<span className="px-1.5 py-0.5 rounded bg-slate-100 border">Enter</span> generate
+          </div>
+        </CardContent>
+      </Card>
+      <button
+        className="mt-3 text-sm text-blue-600 hover:underline"
+        onClick={() => setShowPackSelector(true)}
+        aria-label="Show Packs"
+      >
+        Show Packs →
+      </button>
+    </div>
+  );
+
+  const Workspace = (
+    <>
+      {/* Columns */}
+      {showPreviewOnly ? (
+        <div className="mt-6 relative" style={{ height: 'calc(100vh - 260px)' }}>
+          {/* Zoom toolbar */}
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-2 rounded border bg-white/90 backdrop-blur px-2 py-1 shadow">
+            <button
+              className="p-1 rounded hover:bg-gray-100"
+              onClick={() => setPreviewScale((s) => Math.max(0.5, parseFloat((s - 0.1).toFixed(2))))}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <div className="text-xs w-12 text-center">{Math.round(previewScale * 100)}%</div>
+            <button
+              className="p-1 rounded hover:bg-gray-100"
+              onClick={() => setPreviewScale((s) => Math.min(1.25, parseFloat((s + 0.1).toFixed(2))))}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <button
+              className="p-1 rounded hover:bg-gray-100"
+              onClick={() => setPreviewScale(1)}
+              aria-label="Reset zoom"
+              title="Reset zoom"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+          {/* Scrollable scaled preview */}
+          <div className="h-full w-full overflow-auto flex items-start justify-center">
+            {previewUrl ? (
+              <div
+                className="relative"
+                style={{
+                  transform: `scale(${previewScale})`,
+                  transformOrigin: 'top center',
+                  width: `calc(100% / ${previewScale})`,
+                  height: `calc(100% / ${previewScale})`,
+                }}
+              >
+                <iframe
+                  src={previewUrl}
+                  className="border-0 block"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">Preview not ready yet</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-12 gap-4" style={{ height: 'calc(100vh - 260px)' }}>
+          {/* Right sheet-like Packs */}
+          {showPackSelector && (
+            <Card className="col-span-12 lg:col-span-3 overflow-hidden">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Packs</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 h-[calc(100%-48px)]">
+                <PackSelector
+                  selectedPacks={selectedPacks}
+                  onPacksChange={(p)=>{ setSelectedPacks(p); setCurrentIdea(ideaInput); }}
+                  context={ideaInput}
+                  className="h-full p-3 overflow-auto"
+                  maxSelections={3}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Files */}
+          <Card className={`${showPackSelector ? 'col-span-12 lg:col-span-3' : 'col-span-12 lg:col-span-3'} overflow-hidden`}>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">Files</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 h-[calc(100%-48px)]">
+              <FileExplorer
+                files={filePaths}
+                onSelect={async (p) => {
+                  setSelectedPath(p);
+                  if (sessionId) {
+                    const { getFile } = await import("./utils/preview");
+                    const f = await getFile(sessionId, p);
+                    setFileContent(f.content || "");
+                  }
+                }}
+                selectedPath={selectedPath}
+                className="h-full"
+              />
+            </CardContent>
+          </Card>
+
+          {/* Editor */}
+          <Card className={`${showPackSelector ? 'col-span-12 lg:col-span-6' : 'col-span-12 lg:col-span-9'} overflow-hidden`}>
+            <CardContent className="p-0 h-full">
+              <FileEditor
+                key={selectedPath || 'no-file'}
+                path={selectedPath}
+                content={fileContent}
+                onChange={setFileContent}
+                onSave={async () => {
+                  if (!sessionId || !selectedPath) return;
+                  await new Promise<void>(async (resolve) => {
+                    const { applyFilesSSE } = await import("./utils/preview");
+                    const stop = applyFilesSSE(
+                      sessionId,
+                      [{ path: selectedPath, content: fileContent } as any],
+                      (evt) => {
+                        if (evt?.type === "complete") {
+                          try { stop(); } catch {}
+                          resolve();
+                        }
+                      }
+                    );
+                    setTimeout(() => {
+                      try { stop(); } catch {}
+                      resolve();
+                    }, 1000);
+                  });
+                  toast.success("Saved");
+                }}
+                readOnly={false}
+                className="h-full"
+              />
+            </CardContent>
+          </Card>
+
+          {/* No preview column in Files mode */}
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="app-shell">
+      <Navbar />
+      <Sidebar />
+      <main className="pane pane-with-sidebar" style={{ paddingLeft: leftWidth + 24, overflow: 'hidden' }}>
+        <PageContainer padded>
+          {TopBar}
+          {ProgressBar}
+          {!hasProject ? IdleHero : Workspace}
+        </PageContainer>
+      </main>
+      <BottomNav />
+
+      {/* Floating Chat */}
+      {hasProject && (
+        <>
+          {!chatOpen ? (
+            <button
+              className="fixed bottom-6 right-6 z-40 rounded-full bg-white shadow border px-3 py-2 text-sm flex items-center gap-2 hover:bg-gray-50"
+              onClick={() => { setChatOpen(true); setUnreadCount(0); }}
+              aria-label="Open Kiff Agent"
+            >
+              <MessageSquare className="w-4 h-4" /> Kiff Agent
+              {unreadCount > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-blue-600 text-white text-xs font-medium">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          ) : (
+            <div
+              className="fixed bottom-6 right-6 z-50 w-[calc(100vw-2rem)] md:w-[75vw] max-w-[1400px] h-[80vh]"
+            >
+              <Card className="w-full h-full shadow-xl border">
+                <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
+                  <CardTitle className="m-0 text-base md:text-lg">Kiff Agent</CardTitle>
+                  <div className="flex items-center gap-2 ml-auto">
+                    {isGenerating && (
+                      <>
+                        <span className="text-xs text-gray-600 animate-pulse">Generating…</span>
+                        <button
+                          className="inline-flex items-center gap-1 md:gap-2 p-2 md:p-2.5 rounded-full bg-red-50 hover:bg-red-100 border text-red-700"
+                          onClick={() => { try { abortRef.current?.abort(); } catch {}; setIsGenerating(false); }}
+                          aria-label="Stop"
+                          title="Stop"
+                        >
+                          <X className="w-4 h-4" />
+                          <span className="hidden md:inline text-sm font-medium">Stop</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1 md:gap-2 p-2 md:p-2.5 rounded-full bg-gray-100 hover:bg-gray-200 border text-gray-700"
+                    onClick={() => setChatOpen(false)}
+                    aria-label="Close Kiff Agent"
+                    title="Close"
+                  >
+                    <X className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="hidden md:inline text-sm font-medium">Close</span>
+                  </button>
+                </CardHeader>
+                <CardContent className="p-0 flex flex-col h-[calc(100%-48px)]">
+                  <div className="flex-1 overflow-auto">
+                    <ChatHistory messages={chatMessages} onRetryAssistant={handleRetryAssistant} onEditLastUser={handleEditLastUser} />
+                  </div>
+                  <div className="border-t">
+                    <ChatInput
+                      value={chatInput}
+                      onChange={setChatInput}
+                      onSubmit={handleChatSubmit}
+                      isGenerating={isGenerating}
+                      autoFocus
+                      inputRef={chatInputRef}
+                      attachments={attachments}
+                      onAddFiles={handleAddFiles}
+                      onRemoveAttachment={handleRemoveAttachment}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Pack Manager Modal */}
+      {showPackManager && (
+        <PackManagerModal
+          open={showPackManager}
+          onClose={() => setShowPackManager(false)}
+          selectedPacks={selectedPacks}
+          onRemovePack={(packId) => {
+            // Remove from local state
+            setSelectedPacks(prev => prev.filter(id => id !== packId));
+            // Remove from global context
+            removePackGlobal(packId);
+            toast.success("Pack removed from your selection");
+          }}
+          onClearAll={() => {
+            setSelectedPacks([]);
+            setGlobalSelectedPacks([]);
+            toast.success("All packs removed");
+            setShowPackManager(false);
+          }}
+        />
+      )}
+
+      {/* Deploy Logs Toggle (top-right) */}
+      {hasProject && (
+        <button
+          className="fixed top-4 right-4 z-40 rounded-full bg-white shadow border px-3 py-2 text-sm flex items-center gap-2 hover:bg-gray-50"
+          onClick={() => setShowDeployLogs(true)}
+          aria-label="Open Deploy Logs"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Logs
+          {deployLogs.length > 0 && (
+            <span className="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-slate-800 text-white text-xs font-medium">
+              {deployLogs.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* Deploy Logs Modal (fills app, slides from top-right) */}
+      {showDeployLogs && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowDeployLogs(false)} />
+          <div className="absolute top-0 right-0 w-full md:w-[85vw] lg:w-[80vw] h-full">
+            <Card className="w-full h-full rounded-none shadow-2xl border-0">
+              <CardHeader className="py-3 px-4 flex flex-row items-center justify-between border-b">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4" />
+                  <CardTitle className="m-0 text-base md:text-lg">Deploy Logs</CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 hover:bg-gray-200 border text-gray-700 text-sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(deployLogs.join('\n'));
+                        toast.success('Logs copied');
+                      } catch {
+                        toast.error('Copy failed');
+                      }
+                    }}
+                    aria-label="Copy Logs"
+                    title="Copy"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 hover:bg-gray-200 border text-gray-700 text-sm"
+                    onClick={() => setDeployLogs([])}
+                    aria-label="Clear Logs"
+                    title="Clear"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-2 p-2 rounded-full bg-gray-100 hover:bg-gray-200 border text-gray-700"
+                    onClick={() => setShowDeployLogs(false)}
+                    aria-label="Close Deploy Logs"
+                    title="Close"
+                  >
+                    <X className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="hidden md:inline text-sm font-medium">Close</span>
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 h-[calc(100%-48px)] flex flex-col">
+                <div ref={logsRef} className="flex-1 overflow-auto overscroll-contain px-4 py-3 bg-black text-green-200 font-mono text-xs leading-relaxed select-text cursor-text">
+                  {deployLogs.length === 0 ? (
+                    <div className="text-gray-400">No logs yet…
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap break-words">
+{deployLogs.map((line, idx) => `${idx + 1}`.padStart(3, ' ') + ` | ${line}\n`).join("")}
+                    </pre>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Pack Manager Modal Component
+function PackManagerModal({
+  open,
+  onClose,
+  selectedPacks,
+  onRemovePack,
+  onClearAll
+}: {
+  open: boolean;
+  onClose: () => void;
+  selectedPacks: string[];
+  onRemovePack: (packId: string) => void;
+  onClearAll: () => void;
+}) {
+  const [packDetails, setPackDetails] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch pack details when modal opens
+  useEffect(() => {
+    if (!open || selectedPacks.length === 0) {
+      setPackDetails([]);
+      return;
+    }
+    
+    const fetchDetails = async () => {
+      try {
+        setLoading(true);
+        const details = await Promise.all(
+          selectedPacks.map(async (packId) => {
+            try {
+              const response = await fetch(`/api/packs/${packId}`);
+              if (response.ok) {
+                return await response.json();
+              }
+              return {
+                id: packId,
+                display_name: `Pack ${packId}`,
+                category: 'Unknown',
+                created_by_name: 'Unknown',
+                description: 'Pack details unavailable',
+                logo_url: null
+              };
+            } catch (error) {
+              console.warn(`Failed to fetch pack ${packId}:`, error);
+              return {
+                id: packId,
+                display_name: `Pack ${packId}`,
+                category: 'Unknown',
+                created_by_name: 'Unknown',
+                description: 'Pack details unavailable',
+                logo_url: null
+              };
+            }
+          })
+        );
+        setPackDetails(details);
+      } catch (error) {
+        console.error('Failed to fetch pack details:', error);
+        setPackDetails([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDetails();
+  }, [open, selectedPacks]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-2xl bg-white rounded-lg shadow-xl max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-gray-600" />
+            <h2 className="text-lg font-semibold">Manage Selected Packs</h2>
+          </div>
+          <button
+            className="p-2 hover:bg-gray-100 rounded-full"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : packDetails.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>No packs selected</p>
+              <p className="text-sm">Add packs from the gallery to get started</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {packDetails.map((pack) => (
+                <div key={pack.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {pack.logo_url ? (
+                      <img
+                        src={pack.logo_url}
+                        alt={`${pack.display_name} logo`}
+                        className="w-8 h-8 object-contain"
+                        onError={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          img.style.display = 'none';
+                          const parent = img.parentElement as HTMLElement | null;
+                          if (parent) {
+                            parent.innerHTML = '<svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7V10C2 16 6 20.5 12 22C18 20.5 22 16 22 10V7L12 2Z"/></svg>';
+                          }
+                        }}
+                      />
+                    ) : (
+                      <Package className="w-4 h-4 text-blue-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-gray-900 truncate">{pack.display_name}</h3>
+                    <p className="text-sm text-gray-600 truncate">{pack.category} • by {pack.created_by_name}</p>
+                    {pack.description && (
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{pack.description}</p>
+                    )}
+                  </div>
+                  <button
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-md transition-colors"
+                    onClick={() => onRemovePack(pack.id)}
+                    aria-label={`Remove ${pack.display_name}`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 p-4 border-t border-gray-200 bg-gray-50">
+          <span className="text-sm text-gray-600">
+            {packDetails.length} pack{packDetails.length !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onClearAll}
+              disabled={packDetails.length === 0}
+              className="flex items-center gap-1"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear All
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onClose}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function LauncherPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-slate-600">Loading…</div>}>
+      <LauncherPageContent />
+    </Suspense>
+  );
+}

@@ -2,7 +2,8 @@
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { Home, Puzzle, BookOpen, Zap, User, Plus } from "lucide-react";
+import { Home, User, Plus } from "lucide-react";
+import { UsersThree, Folders, ShareNetwork } from "@phosphor-icons/react";
 
 // Icon wrapper to avoid JSX typing issues
 const createIconWrapper = (C: any) => {
@@ -13,9 +14,9 @@ const createIconWrapper = (C: any) => {
 };
 
 const HomeIcon = createIconWrapper(Home);
-const PuzzleIcon = createIconWrapper(Puzzle);
-const BookOpenIcon = createIconWrapper(BookOpen);
-const ZapIcon = createIconWrapper(Zap);
+const ShareNetworkIcon = (props: any) => <ShareNetwork size={24} weight="duotone" {...props} />;
+const UsersThreeIcon = (props: any) => <UsersThree size={24} weight="duotone" {...props} />;
+const FoldersIcon = (props: any) => <Folders size={24} weight="duotone" {...props} />;
 const UserIcon = createIconWrapper(User);
 const PlusIcon = createIconWrapper(Plus);
 
@@ -31,19 +32,19 @@ const NAV_ITEMS: NavItem[] = [
     id: "gallery", 
     label: "Gallery", 
     href: "/api-gallery", 
-    icon: <PuzzleIcon className="h-6 w-6" /> 
+    icon: <ShareNetworkIcon className="h-6 w-6" /> 
   },
   { 
     id: "packs", 
     label: "Packs", 
-    href: "/kp", 
-    icon: <BookOpenIcon className="h-6 w-6" /> 
+    href: "/kiffs/packs", 
+    icon: <UsersThreeIcon className="h-6 w-6" /> 
   },
   { 
     id: "kiffs", 
     label: "Kiffs", 
     href: "/kiffs", 
-    icon: <ZapIcon className="h-6 w-6" /> 
+    icon: <FoldersIcon className="h-6 w-6" /> 
   },
   { 
     id: "account", 
@@ -61,7 +62,7 @@ export function BottomNav() {
   const isActive = (href: string) => {
     return pathname === href || (href !== "/" && pathname.startsWith(href));
   };
-  const hideCenter = pathname?.startsWith('/kiffs/compose');
+  const hideCenter = pathname?.startsWith('/kiffs/launcher');
   const leftPad = hideCenter ? '' : ' pr-10';
   const rightPad = hideCenter ? '' : ' pl-10';
   // Keep the center button position identical across pages
@@ -93,7 +94,7 @@ export function BottomNav() {
         {/* Center elevated button (hidden on compose) */}
         {!hideCenter && (
           <button
-            onClick={() => router.push('/kiffs/compose')}
+            onClick={() => router.push('/kiffs/launcher')}
             aria-label="New Kiff"
             title="New Kiff"
             className="absolute left-1/2 transform -translate-x-1/2 -translate-y-6 bg-blue-600 text-white rounded-full shadow-lg w-14 h-14 flex items-center justify-center transition-all hover:bg-blue-700 hover:scale-105"

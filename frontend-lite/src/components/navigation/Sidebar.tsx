@@ -2,7 +2,8 @@
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Home, Puzzle, FlaskConical, BookOpen, Zap, User, LogOut, Settings, Plus } from "lucide-react";
+import { Home, FlaskConical, User, LogOut, Settings, Plus } from "lucide-react";
+import { UsersThree, Folders, ShareNetwork } from "@phosphor-icons/react";
 import { LeftSidebarNav, type NavItem } from "./LeftSidebarNav";
 import { useLayoutState } from "../layout/LayoutState";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,10 +16,10 @@ function createIconWrapper(C: any) {
   return Wrapped;
 }
 const HomeIcon = createIconWrapper(Home);
-const PuzzleIcon = createIconWrapper(Puzzle);
+const ShareNetworkIcon = (props: any) => <ShareNetwork size={20} weight="duotone" {...props} />;
 const FlaskConicalIcon = createIconWrapper(FlaskConical);
-const BookOpenIcon = createIconWrapper(BookOpen);
-const ZapIcon = createIconWrapper(Zap);
+const UsersThreeIcon = (props: any) => <UsersThree size={20} weight="duotone" {...props} />;
+const FoldersIcon = (props: any) => <Folders size={20} weight="duotone" {...props} />;
 const UserIcon = createIconWrapper(User);
 const LogOutIcon = createIconWrapper(LogOut);
 const SettingsIcon = createIconWrapper(Settings);
@@ -39,10 +40,10 @@ const BluePlusCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 const iconCls = "h-5 w-5";
 
 const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
-  { id: "/kiffs/compose", label: "New Kiff", href: "/kiffs/compose", icon: <BluePlusCircleIcon className="h-5 w-5" /> },
-  { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <PuzzleIcon className={iconCls} /> },
-  { id: "/kp", label: "Kiff Packs", href: "/kp", icon: <BookOpenIcon className={iconCls} /> },
-  { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <ZapIcon className={iconCls} /> },
+  { id: "/kiffs/launcher", label: "New Kiff", href: "/kiffs/launcher?reset=true", icon: <BluePlusCircleIcon className="h-5 w-5" /> },
+  { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <ShareNetworkIcon className={iconCls} /> },
+  { id: "/kiffs/packs", label: "Kiff Packs", href: "/kiffs/packs", icon: <UsersThreeIcon className={iconCls} /> },
+  { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <FoldersIcon className={iconCls} /> },
 ];
 
 const ACCOUNT_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
@@ -58,13 +59,17 @@ export function Sidebar() {
   const mkChildren = (
     links: { id: string; label: string; href: string; icon?: React.ReactNode }[]
   ): NavItem[] =>
-    links.map((l) => ({
-      id: l.id,
-      label: l.label,
-      icon: l.icon,
-      onClick: () => router.push(l.href),
-      active: pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href)),
-    }));
+    links.map((l) => {
+      // Only one item should be active: the most specific match
+      const isExact = pathname === l.href;
+      const isPrefix = !isExact && l.href !== "/" && pathname.startsWith(l.href);
+      return {
+        id: l.id,
+        label: l.label,
+        icon: l.icon,
+        active: isExact || isPrefix,
+      };
+    });
 
   // Role-aware: if on /admin and user is admin, show only Users
   let items: NavItem[];
@@ -72,7 +77,7 @@ export function Sidebar() {
     const ADMIN_LINKS = [
       { id: "/admin/users", label: "Users", href: "/admin/users", icon: <UserIcon className={iconCls} /> },
       { id: "/admin/models", label: "Models", href: "/admin/models", icon: <SettingsIcon className={iconCls} /> },
-      { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <PuzzleIcon className={iconCls} /> },
+      { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <ShareNetworkIcon className={iconCls} /> },
       { id: "/admin/extractor", label: "Extractor", href: "/admin/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
     ];
     items = [
@@ -87,7 +92,7 @@ export function Sidebar() {
       const ADMIN_LINKS = [
         { id: "/admin/users", label: "Users", href: "/admin/users", icon: <UserIcon className={iconCls} /> },
         { id: "/admin/models", label: "Models", href: "/admin/models", icon: <SettingsIcon className={iconCls} /> },
-        { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <PuzzleIcon className={iconCls} /> },
+        { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <ShareNetworkIcon className={iconCls} /> },
         { id: "/admin/extractor", label: "Extractor", href: "/admin/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
       ];
       items.push({ id: "admin", label: "Admin", children: mkChildren(ADMIN_LINKS) });
@@ -102,7 +107,13 @@ export function Sidebar() {
       onToggleCollapsed={(next) => setCollapsed(next)}
       logo={<span className="font-semibold">Kiff</span>}
       onSelect={async (id) => {
-        router.push(id);
+        // Special handling for New Kiff button - always force navigation with reset
+        if (id === "/kiffs/launcher") {
+          const resetUrl = `/kiffs/launcher?reset=true&t=${Date.now()}`;
+          router.push(resetUrl);
+        } else {
+          router.push(id);
+        }
       }}
     />
   );

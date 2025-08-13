@@ -79,6 +79,9 @@ from typing import List, Optional, Dict, Any
 import time
 import uuid
 import asyncio
+from sqlalchemy.orm import Session
+from app.db_core import SessionLocal
+from app.models_kiffs import Kiff as KiffModel, ConversationMessage as MessageModel
 
 # Reuse the cached embedder builder from extract routes
 try:
@@ -213,6 +216,7 @@ class ComposeSessionRequest(BaseModel):
     tool_ids: List[str] = []
     mcp_ids: List[str] = []
     system_preamble: Optional[str] = None
+    kiff_id: Optional[str] = None
     session_id: Optional[str] = None
 
 
@@ -240,6 +244,11 @@ class ComposeMessageRequest(BaseModel):
 class ComposeMessageResponse(BaseModel):
     message_id: str
     content: str
+    # Parsed fields for UI action dispatching & chain-of-thought display
+    step: Optional[int] = None
+    thought: Optional[str] = None
+    action: Optional[Dict[str, Any]] = None
+    validator: Optional[str] = None
 
 
 class ToolsResponse(BaseModel):
@@ -258,6 +267,13 @@ def _require_tenant(x_tenant_id: Optional[str]):
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _slugify(name: str) -> str:
+    import random, string
+    base = "".join(ch.lower() if ch.isalnum() else "-" for ch in (name or "untitled")).strip("-")
+    suffix = "".join(random.choices(string.ascii_letters + string.digits, k=11))
+    return f"kiffs/{base}+{suffix}"
 
 
 def _get_or_build_agent(session_id: str, sess: Dict[str, Any]) -> Any:
@@ -306,6 +322,13 @@ def _get_or_build_agent(session_id: str, sess: Dict[str, Any]) -> Any:
     if kb is not None:
         agent_kwargs["knowledge"] = kb
         agent_kwargs["enable_agentic_knowledge_filters"] = True
+    # Apply system instructions if provided
+    if sess.get("system_preamble"):
+        agent_kwargs["instructions"] = sess.get("system_preamble")
+    # Identity/session for better memory scoping
+    agent_kwargs["session_id"] = session_id
+    agent_kwargs["name"] = "Kiff Compose"
+    agent_kwargs["agent_id"] = "kiff_compose"
     try:
         agent = AgnoAgent(**agent_kwargs)  # type: ignore
     except Exception as e:
@@ -327,6 +350,31 @@ async def create_compose_session(payload: ComposeSessionRequest, x_tenant_id: st
     requested_model = payload.model_id or "kimi-k2"
     resolved_model = _resolve_model_id(requested_model)
 
+    # Optionally create a kiff if not provided
+    kiff_id = payload.kiff_id
+    if not kiff_id:
+        db: Session = SessionLocal()
+        try:
+            import uuid as _uuid
+            kid = str(_uuid.uuid4())
+            slug = _slugify(payload.model_id or "compose")
+            row = KiffModel(
+                id=kid,
+                tenant_id=x_tenant_id,
+                user_id=None,
+                name=payload.model_id or "Compose Session",
+                slug=slug,
+                model_id=resolved_model,
+            )
+            db.add(row)
+            db.commit()
+            kiff_id = kid
+        except Exception:
+            db.rollback()
+            kiff_id = None
+        finally:
+            db.close()
+
     SESSIONS[session_id] = {
         "tenant_id": x_tenant_id,
         "model_id": resolved_model,
@@ -334,6 +382,7 @@ async def create_compose_session(payload: ComposeSessionRequest, x_tenant_id: st
         "tool_ids": payload.tool_ids or [],
         "mcp_ids": payload.mcp_ids or [],
         "system_preamble": payload.system_preamble,
+        "kiff_id": kiff_id or payload.kiff_id,
         "created_at": _now_ms(),
     }
     CONTEXT_USED[session_id] = []
@@ -373,6 +422,31 @@ async def compose_message(payload: ComposeMessageRequest, x_tenant_id: str = Hea
 
     # Try AGNO
     content: str
+    parsed_step: Optional[int] = None
+    parsed_thought: Optional[str] = None
+    parsed_action: Optional[Dict[str, Any]] = None
+    parsed_validator: Optional[str] = None
+    # Persist the user message first (if kiff available)
+    db_user_id = None
+    if sess.get("kiff_id"):
+        db: Session = SessionLocal()
+        try:
+            uid = f"msg_{uuid.uuid4().hex[:16]}"
+            db_user_id = uid
+            m = MessageModel(
+                id=uid,
+                kiff_id=sess["kiff_id"],
+                tenant_id=x_tenant_id,
+                user_id=None,
+                role="user",
+                content=prompt,
+            )
+            db.add(m)
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
     if AGNO_AVAILABLE:
         agent = _get_or_build_agent(payload.session_id, sess)
         if agent is None:
@@ -384,6 +458,36 @@ async def compose_message(payload: ComposeMessageRequest, x_tenant_id: str = Hea
                 # Prefer plain content if available
                 content_val = getattr(result, "content", None)
                 content = content_val if isinstance(content_val, str) else str(result)
+                # Parse contract: <Steps>n</Steps><Thought>..</Thought><Action>name(args)</Action><Validator>..</Validator>
+                try:
+                    import re
+                    # Extract tags greedily but safe
+                    steps_m = re.search(r"<\s*Steps\s*>\s*(.*?)\s*<\s*/\s*Steps\s*>", content, re.IGNORECASE | re.DOTALL)
+                    thought_m = re.search(r"<\s*Thought\s*>\s*(.*?)\s*<\s*/\s*Thought\s*>", content, re.IGNORECASE | re.DOTALL)
+                    action_m = re.search(r"<\s*Action\s*>\s*(.*?)\s*<\s*/\s*Action\s*>", content, re.IGNORECASE | re.DOTALL)
+                    validator_m = re.search(r"<\s*Validator\s*>\s*(.*?)\s*<\s*/\s*Validator\s*>", content, re.IGNORECASE | re.DOTALL)
+                    if steps_m:
+                        try:
+                            parsed_step = int(str(steps_m.group(1)).strip())
+                        except Exception:
+                            parsed_step = None
+                    if thought_m:
+                        parsed_thought = str(thought_m.group(1)).strip()
+                    if validator_m:
+                        parsed_validator = str(validator_m.group(1)).strip()
+                    if action_m:
+                        raw_action = str(action_m.group(1)).strip()
+                        # Expected format: name(args) where args may be comma-separated; keep raw if parse fails
+                        name_m = re.match(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)\s*$", raw_action)
+                        if name_m:
+                            act_name = name_m.group(1)
+                            act_args_raw = name_m.group(2).strip()
+                            parsed_action = {"name": act_name, "args": act_args_raw}
+                        else:
+                            parsed_action = {"name": "raw", "args": raw_action}
+                except Exception:
+                    # Non-fatal parse errors; keep content only
+                    pass
             except Exception as e:
                 # Fall back to echo if AGNO call fails
                 content = f"[AGNO error: {e}] Model={payload.model_id or sess['model_id']} echo: {prompt}"
@@ -396,8 +500,43 @@ async def compose_message(payload: ComposeMessageRequest, x_tenant_id: str = Hea
         for i, sid in enumerate(payload.knowledge_space_ids or sess.get("knowledge_space_ids") or [])
     ]
 
-    message_id = f"msg_{uuid.uuid4().hex[:12]}"
-    return ComposeMessageResponse(message_id=message_id, content=content)
+    # Persist the assistant message if kiff available
+    if sess.get("kiff_id"):
+        db: Session = SessionLocal()
+        try:
+            assistant_id = f"msg_{uuid.uuid4().hex[:16]}"
+            action_json = json.dumps(parsed_action) if parsed_action is not None else None
+            m = MessageModel(
+                id=assistant_id,
+                kiff_id=sess["kiff_id"],
+                tenant_id=x_tenant_id,
+                user_id=None,
+                role="assistant",
+                content=content,
+                thought=parsed_thought,
+                action_json=action_json,
+                validator=parsed_validator,
+                step=parsed_step,
+            )
+            db.add(m)
+            db.commit()
+            message_id = assistant_id
+        except Exception:
+            db.rollback()
+            message_id = f"msg_{uuid.uuid4().hex[:12]}"
+        finally:
+            db.close()
+    else:
+        message_id = f"msg_{uuid.uuid4().hex[:12]}"
+
+    return ComposeMessageResponse(
+        message_id=message_id,
+        content=content,
+        step=parsed_step,
+        thought=parsed_thought,
+        action=parsed_action,
+        validator=parsed_validator,
+    )
 
 
 @router.get("/context")

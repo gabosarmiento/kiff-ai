@@ -54,29 +54,16 @@ class E2BProvider:
         try:
             # Create sandbox; context manager returns object with id and APIs
             sbx = Sandbox()  # type: ignore
-            # Persist minimal scaffold for a Vite app and start server
-            self._ensure_scaffold(sbx)
-            # Start dev server in background
-            self._start_vite(sbx)
-            # Expose URL for VITE_PORT
-            host = None
-            for meth in ("get_hostname", "getHostname"):
-                try:
-                    if hasattr(sbx, meth):
-                        fn = getattr(sbx, meth)
-                        try:
-                            host = fn(VITE_PORT)
-                        except TypeError:
-                            host = fn()
-                        break
-                except Exception:
-                    continue
-            if not host:
-                raise RuntimeError("E2B SDK: could not obtain sandbox hostname")
-            preview_url = f"https://{host}"
+            # No hardcoded scaffold - let the agent determine project structure
+            # The runtime and server will be determined by the files applied later
+            # Get sandbox ID first
             sandbox_id = getattr(sbx, "id", None) or getattr(sbx, "sandbox_id", None) or None
-            return {"sandbox_id": sandbox_id, "preview_url": preview_url}
+            
+            # Don't set preview URL yet - it will be set dynamically based on the project type
+            # after files are applied and we know what port to use
+            return {"sandbox_id": sandbox_id, "preview_url": None}
         except Exception as e:
+            # Surface error up; caller will catch and keep request 200
             raise RuntimeError(f"Failed to create E2B sandbox: {e}\n{traceback.format_exc()}")
 
     def set_runtime(self, *, sandbox_id: str, runtime: Optional[str] = None, port: Optional[int] = None, entry: Optional[str] = None) -> None:
@@ -223,6 +210,59 @@ class E2BProvider:
         else:
             self._restart_vite(sbx)
 
+    def get_preview_url(self, *, sandbox_id: str, port: int) -> Optional[str]:
+        """Get the preview URL for a specific port after the server is running."""
+        if E2B_ENABLE_MOCK:
+            return f"https://{port}-{sandbox_id}.mock.e2b.app"
+        
+        try:
+            sbx = self._connect(sandbox_id)
+            # Try multiple methods to get hostname with port
+            host = None
+            for meth in ("get_hostname", "getHostname", "get_host", "getHost"):
+                try:
+                    if hasattr(sbx, meth):
+                        fn = getattr(sbx, meth)
+                        try:
+                            host = fn(port)
+                        except TypeError:
+                            # Some methods don't take port, try getting base host
+                            base_host = fn()
+                            if base_host and isinstance(base_host, str):
+                                # Try to construct URL with port
+                                if base_host.startswith("http"):
+                                    host = base_host
+                                else:
+                                    host = f"{port}-{base_host}"
+                        if host:
+                            break
+                except Exception:
+                    continue
+            
+            if not host:
+                # Try attributes
+                for attr in ("hostname", "host", "url", "endpoint"):
+                    try:
+                        if hasattr(sbx, attr):
+                            val = getattr(sbx, attr)
+                            if val:
+                                host = f"{port}-{val}" if not str(val).startswith("http") else val
+                                break
+                    except Exception:
+                        continue
+                        
+            # Normalize to proper URL
+            if host:
+                h = str(host)
+                if h.startswith("http://") or h.startswith("https://"):
+                    return h
+                else:
+                    return f"https://{h}"
+            return None
+        except Exception as e:
+            print(f"Error getting preview URL for sandbox {sandbox_id} on port {port}: {e}")
+            return None
+
     def tail_logs(self, *, sandbox_id: str, limit: int = 2000) -> str:
         if E2B_ENABLE_MOCK:
             return ""
@@ -252,29 +292,6 @@ class E2BProvider:
         except Exception as e:
             raise RuntimeError(f"Failed to connect to E2B sandbox {sandbox_id}: {e}")
 
-    def _ensure_scaffold(self, sbx: Any) -> None:
-        # Create minimal Vite React app scaffold
-        vite_conf = (
-            "import { defineConfig } from 'vite'\n"
-            "import react from '@vitejs/plugin-react'\n"
-            f"export default defineConfig({{ plugins: [react()], server: {{ host: '0.0.0.0', port: {VITE_PORT}, strictPort: true, hmr: false, allowedHosts: ['.e2b.app','localhost','127.0.0.1'] }} }})\n"
-        )
-        py = (
-            "import os, json, pathlib\n"
-            f"base = pathlib.Path({repr(APP_DIR)})\n"
-            "(base / 'src').mkdir(parents=True, exist_ok=True)\n"
-            "(base / 'src' / 'main.tsx').write_text('''import React from \"react\";import { createRoot } from \"react-dom/client\";const App=()=>React.createElement('div',null,'Hello from E2B');createRoot(document.getElementById('root')!).render(React.createElement(App));''')\n"
-            "(base / 'index.html').write_text('''<!doctype html><html><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><title>E2B Preview</title></head><body><div id=\"root\"></div><script type=\"module\" src=\"/src/main.tsx\"></script></body></html>''')\n"
-            "package_json = {\n"
-            "  'name': 'sandbox-app', 'version': '1.0.0', 'type': 'module',\n"
-            "  'scripts': { 'dev': 'vite --host', 'build': 'vite build', 'preview': 'vite preview' },\n"
-            "  'dependencies': { 'react': '^18.2.0', 'react-dom': '^18.2.0' },\n"
-            "  'devDependencies': { '@vitejs/plugin-react': '^4.0.0', 'vite': '^4.3.9', 'typescript': '^5.3.3' }\n"
-            "}\n"
-            "(base / 'package.json').write_text(json.dumps(package_json, indent=2))\n"
-            f"(base / 'vite.config.js').write_text({repr(vite_conf)})\n"
-        )
-        sbx.run_code(py)  # type: ignore
 
     # --- Node (non-Vite) app management ---
     def _restart_node(self, sbx: Any) -> None:
@@ -396,7 +413,21 @@ class E2BProvider:
             "    except Exception: pass\n"
             "    try: pid_file.unlink()\n"
             "    except Exception: pass\n"
-            "cmd = 'bash -lc ' + '\'' + 'cd ' + cwd + ' && ' + env_exports + ' ' + python + ' -m uvicorn ' + entry + ' --host 0.0.0.0 --port ' + str(port) + '\''\n"
+            "# Detect if it's a Flask app vs FastAPI/ASGI app\n"
+            "flask_files=[f for f in ['app.py','main.py','server.py'] if pathlib.Path(cwd, f).exists()]\n"
+            "is_flask=False\n"
+            "if flask_files:\n"
+            "    for flask_file in flask_files:\n"
+            "        try:\n"
+            "            content=pathlib.Path(cwd, flask_file).read_text()\n"
+            "            if 'from flask import' in content or 'import flask' in content:\n"
+            "                is_flask=True; entry=flask_file; break\n"
+            "        except Exception: pass\n"
+            "# Use appropriate server command\n"
+            "if is_flask:\n"
+            "    cmd = 'bash -lc ' + '\'' + 'cd ' + cwd + ' && ' + env_exports + ' ' + python + ' ' + entry + '\''\n"
+            "else:\n"
+            "    cmd = 'bash -lc ' + '\'' + 'cd ' + cwd + ' && ' + env_exports + ' ' + python + ' -m uvicorn ' + entry + ' --host 0.0.0.0 --port ' + str(port) + '\''\n"
             "proc = subprocess.Popen(cmd, shell=True, cwd=cwd, stdout=open(log_file,'a'), stderr=subprocess.STDOUT)\n"
             "pid_file.write_text(str(proc.pid))\n"
             "time.sleep(0.8)\n"

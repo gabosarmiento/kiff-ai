@@ -8,13 +8,17 @@ import json
 from dotenv import load_dotenv
 
 # Load environment variables from .env (for local/dev) BEFORE importing routes
-load_dotenv()
+import pathlib
+env_file = pathlib.Path(__file__).parent.parent / ".env"
+load_dotenv(env_file)
 
 from .middleware.tenant import TenantMiddleware
 from .routes import generate, status, preview, account
 from .routes import auth
-from .routes import providers, sitemap, extract, kb, kiffs, apis, models, users, tokens, compose
+from .routes import providers, sitemap, extract, kb, kiffs, apis, models, users, tokens, compose, packs
 from .routes import deps
+from .routes import launcher_chat
+from .routes import launcher_project
 from .routes import preview_live
 from .routes import admin_url_extractor
 from .routes import admin_api_gallery_editor
@@ -76,6 +80,9 @@ app.include_router(admin_url_extractor.router)
 app.include_router(admin_api_gallery_editor.router)
 app.include_router(admin_bulk_indexer.router)
 app.include_router(api_gallery_public.router)
+app.include_router(launcher_chat.router)
+app.include_router(packs.router)
+app.include_router(launcher_project.router)
 
 
 @app.get("/")
@@ -85,7 +92,43 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    """Health check endpoint with model cache status for deployment monitoring"""
+    try:
+        from .services.embedder_cache import get_cache_stats
+        from .services.vector_storage import VectorStorageService
+        
+        # Check basic health
+        health_data = {
+            "status": "healthy",
+            "service": "backend-lite-v2"
+        }
+        
+        # Add model cache status
+        try:
+            cache_stats = get_cache_stats()
+            health_data["model_cache"] = cache_stats
+        except Exception as e:
+            health_data["model_cache"] = {"error": str(e)}
+        
+        # Add vector storage status  
+        try:
+            vector_service = VectorStorageService()
+            vector_health = vector_service.health_check()
+            health_data["vector_storage"] = vector_health
+        except Exception as e:
+            health_data["vector_storage"] = {"error": str(e)}
+            
+        # Add deployment info
+        health_data["deployment"] = {
+            "image_optimized": True,
+            "model_cache_external": os.path.exists("/models"),
+            "cache_path": os.getenv("TRANSFORMERS_CACHE", "/models/hf")
+        }
+        
+        return health_data
+        
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
 
 
 # --- Startup seeding for models catalog ---

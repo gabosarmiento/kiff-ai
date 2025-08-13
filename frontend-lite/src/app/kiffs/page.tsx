@@ -87,7 +87,7 @@ export default function KiffsIndexPage() {
             kiffs.length === 0 ? (
               <div className="mt-10 flex min-h-[40vh] items-center justify-center">
                 <a
-                  href="/kiffs/compose"
+                  href="/kiffs/launcher"
                   className="flex h-80 w-80 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-6 text-slate-700 hover:bg-slate-50"
                 >
                   <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm">+ New Kiff</button>
@@ -116,7 +116,7 @@ export default function KiffsIndexPage() {
                         </div>
                         <div className="flex items-center gap-3 sm:pr-2">
                           <a
-                            href={`/kiffs/${k.id}`}
+                            href={`/kiffs/launcher?kiff=${k.id}`}
                             className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors text-center"
                           >
                             Open
@@ -137,7 +137,7 @@ export default function KiffsIndexPage() {
                   {/* Right: New Kiff Button - fixed square */}
                   <div className="flex justify-center lg:justify-start">
                     <a
-                      href="/kiffs/compose"
+                      href="/kiffs/launcher"
                       className="flex h-32 w-full max-w-xs lg:h-64 lg:w-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                     >
                       <button className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">+ New Kiff</button>

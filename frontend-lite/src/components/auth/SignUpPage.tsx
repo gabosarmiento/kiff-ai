@@ -35,9 +35,9 @@ export function SignUpPage() {
     try {
       const raw = localStorage.getItem('kiff_user_data')
       const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
-      window.location.replace(role === 'admin' ? '/admin/users' : '/kiffs/create')
+      window.location.replace(role === 'admin' ? '/admin/users' : '/kiffs/launcher')
     } catch {
-      window.location.replace('/kiffs/create')
+      window.location.replace('/kiffs/launcher')
     }
   }, [isAuthenticated, isLoading])
 
@@ -55,7 +55,7 @@ export function SignUpPage() {
         const raw = localStorage.getItem('kiff_user_data')
         const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
         if (role) {
-          window.location.href = role === 'admin' ? '/admin' : '/kiffs/create'
+          window.location.href = role === 'admin' ? '/admin' : '/kiffs/launcher'
         } else {
           window.location.href = '/login'
         }

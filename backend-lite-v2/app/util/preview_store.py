@@ -11,7 +11,7 @@ except Exception:  # pragma: no cover
     BotoCoreError = ClientError = Exception
 
 DEFAULT_TABLE = os.getenv("DYNAMO_TABLE_PREVIEW_SESSIONS") or os.getenv("PREVIEW_TABLE") or "preview_sessions"
-AWS_REGION = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+AWS_REGION = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
 
 
 class PreviewStore:
@@ -46,8 +46,13 @@ class PreviewStore:
     def get_session(self, tenant_id: str, session_id: str) -> Optional[Dict[str, Any]]:
         if self._mem is not None:
             return (self._mem.get(tenant_id, {}) or {}).get(session_id)
-        resp = self._table.get_item(Key={"tenant_id": tenant_id, "session_id": session_id})
-        return resp.get("Item")
+        try:
+            resp = self._table.get_item(Key={"tenant_id": tenant_id, "session_id": session_id})
+            return resp.get("Item")
+        except Exception:
+            # Fallback to in-memory on any AWS error
+            self._mem = self._mem or {}
+            return (self._mem.get(tenant_id, {}) or {}).get(session_id)
 
     def put_session(self, tenant_id: str, session_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         now = self._now()
@@ -61,8 +66,15 @@ class PreviewStore:
             by_tenant = self._mem.setdefault(tenant_id, {})
             by_tenant[session_id] = item
             return item
-        self._table.put_item(Item=item)
-        return item
+        try:
+            self._table.put_item(Item=item)
+            return item
+        except Exception:
+            # Fallback to in-memory on any AWS error
+            self._mem = self._mem or {}
+            by_tenant = self._mem.setdefault(tenant_id, {})
+            by_tenant[session_id] = item
+            return item
 
     def ensure_session(self, tenant_id: str, session_id: str, defaults: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         existing = self.get_session(tenant_id, session_id)
@@ -96,12 +108,21 @@ class PreviewStore:
             merged["last_seen"] = self._now()
             self.put_session(tenant_id, session_id, merged)
         else:
-            self._table.update_item(
-                Key={"tenant_id": tenant_id, "session_id": session_id},
-                UpdateExpression=expr,
-                ExpressionAttributeNames=names,
-                ExpressionAttributeValues=values,
-            )
+            try:
+                self._table.update_item(
+                    Key={"tenant_id": tenant_id, "session_id": session_id},
+                    UpdateExpression=expr,
+                    ExpressionAttributeNames=names,
+                    ExpressionAttributeValues=values,
+                )
+            except Exception:
+                # Fallback to in-memory on any AWS error
+                self._mem = self._mem or {}
+                current = (self._mem.get(tenant_id, {}) or {}).get(session_id) or {}
+                merged = {**current, **{k: v for k, v in fields.items()}}
+                merged["last_seen"] = self._now()
+                by_tenant = self._mem.setdefault(tenant_id, {})
+                by_tenant[session_id] = merged
         # Return merged view
         current = self.get_session(tenant_id, session_id) or {}
         return current

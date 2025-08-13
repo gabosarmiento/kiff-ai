@@ -7,6 +7,9 @@ import { Sidebar } from "../../../components/navigation/Sidebar";
 import { BottomNav } from "../../../components/navigation/BottomNav";
 import { useLayoutState } from "../../../components/layout/LayoutState";
 import { apiJson } from "../../../lib/api";
+import { getTenantId } from "../../../lib/tenant";
+
+import PreviewPane from "../launcher/components/PreviewPane";
 
 export default function KiffRunPage() {
   const params = useParams();
@@ -17,6 +20,36 @@ export default function KiffRunPage() {
   const [prompt, setPrompt] = React.useState("Explain how to create and charge a customer in Stripe.");
   const [running, setRunning] = React.useState(false);
   const [result, setResult] = React.useState<any>(null);
+
+  // Preview state
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+
+  // Handler to load preview
+  const loadPreview = async () => {
+    setLoadingPreview(true);
+    setPreviewError(null);
+    setPreviewUrl(null);
+    try {
+      // You may need to adjust this endpoint to match your backend
+      const resp = await apiJson(`/api/preview/sandbox`, {
+        method: "POST",
+        asJson: true,
+        body: { session_id: id }, // assumes backend expects session_id as kiff id
+        headers: { "X-Tenant-ID": getTenantId() },
+      } as any) as { preview_url?: string };
+      if (resp && resp.preview_url) {
+        setPreviewUrl(resp.preview_url);
+      } else {
+        setPreviewError("No preview URL returned.");
+      }
+    } catch (e: any) {
+      setPreviewError(e?.message || "Failed to load preview");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
 
   const run = async () => {
     if (!id) return;
@@ -77,6 +110,22 @@ export default function KiffRunPage() {
               </div>
             </div>
           )}
+        {/* --- Preview Sandbox Test --- */}
+        <div className="card" style={{ marginTop: 32 }}>
+          <div className="card-body">
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button className="button primary" onClick={loadPreview} disabled={loadingPreview}>
+                {loadingPreview ? "Loading Preview..." : "Load Preview Sandbox"}
+              </button>
+              {previewError && <span style={{ color: 'red', fontSize: 13 }}>{previewError}</span>}
+            </div>
+            {previewUrl && (
+              <div style={{ marginTop: 18 }}>
+                <PreviewPane previewUrl={previewUrl} />
+              </div>
+            )}
+          </div>
+        </div>
       </main>
       <BottomNav />
     </div>

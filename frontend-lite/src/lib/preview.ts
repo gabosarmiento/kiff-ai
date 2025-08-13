@@ -169,11 +169,47 @@ export async function fetchFileTree(session_id: string): Promise<{ files: Array<
   return res.json();
 }
 
-export async function fetchFileContent(session_id: string, path: string): Promise<{ path: string; content: string }>{
+export async function fetchFileContent(session_id: string, path: string): Promise<{ path: string; content: string }> {
   const url = new URL(`${API_BASE_URL}/api/preview/file`);
   url.searchParams.set('session_id', session_id);
   url.searchParams.set('path', path);
   const res = await fetch(url.toString(), { headers: withTenantHeaders(), credentials: 'include' });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export type ExecEvent = { type: string; [k: string]: any };
+
+export async function streamExecCommand(
+  session_id: string,
+  cmd: string,
+  onEvent: (e: ExecEvent) => void,
+  abort?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/preview/exec`, {
+    method: 'POST',
+    headers: withTenantHeaders(),
+    body: JSON.stringify({ session_id, cmd }),
+    credentials: 'include',
+    signal: abort,
+  });
+  if (!res.ok || !res.body) throw new Error(await res.text());
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    const frames = chunk.split('\n\n');
+    for (const frame of frames) {
+      const line = frame.trim();
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6);
+      try {
+        const obj = JSON.parse(payload);
+        onEvent(obj);
+      } catch (_) {}
+    }
+  }
 }

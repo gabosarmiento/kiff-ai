@@ -1,92 +1,136 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
-import os
+from typing import List, Optional
+import uuid
+import random
+import string
+import datetime as dt
+from sqlalchemy.orm import Session
+from app.db_core import SessionLocal
+from app.models_kiffs import Kiff as KiffModel, ConversationMessage as MessageModel
 
 router = APIRouter(prefix="/api/kiffs", tags=["kiffs"]) 
 
-# Minimal in-memory store
-_KIFFS: Dict[str, Dict[str, Any]] = {}
+
+def _require_tenant(x_tenant_id: Optional[str]):
+    if not x_tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant not specified")
+    return x_tenant_id
+
+
+def _slugify(name: str) -> str:
+    base = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
+    suffix = "".join(random.choices(string.ascii_letters + string.digits, k=11))
+    return f"kiffs/{base}+{suffix}"
 
 
 class CreateKiffRequest(BaseModel):
     name: str
-    kb_id: str
-    model: str = "mock"  # placeholder; later use real LLM via Agno
-    top_k: int = 5
+    model_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 class Kiff(BaseModel):
     id: str
     name: str
-    kb_id: str
-    model: str
-    top_k: int
+    slug: str
+    model_id: Optional[str] = None
+    created_at: dt.datetime
 
 
-class RunKiffRequest(BaseModel):
-    prompt: str
+class ConversationMessage(BaseModel):
+    id: str
+    role: str
+    content: str
+    step: Optional[int] = None
+    thought: Optional[str] = None
+    action_json: Optional[str] = None
+    validator: Optional[str] = None
+    created_at: str
 
 
 @router.get("", response_model=List[Kiff])
-async def list_kiffs():
-    """Return all kiffs in the minimal in-memory store.
-    Supports the frontend's preferred GET /api/kiffs listing.
-    """
-    return [Kiff(**k) for k in _KIFFS.values()]
-
-
-@router.post("/list", response_model=List[Kiff])
-async def list_kiffs_post():
-    """Alternate listing endpoint for backends that use POST /list.
-    Keeps frontend fallbacks working as well.
-    """
-    return [Kiff(**k) for k in _KIFFS.values()]
+async def list_kiffs(x_tenant_id: str = Header(None)):
+    _require_tenant(x_tenant_id)
+    db: Session = SessionLocal()
+    try:
+        rows = (
+            db.query(KiffModel)
+            .filter(KiffModel.tenant_id == x_tenant_id)
+            .order_by(KiffModel.created_at.desc())
+            .all()
+        )
+        return [Kiff(id=r.id, name=r.name, slug=r.slug, model_id=r.model_id, created_at=r.created_at) for r in rows]
+    finally:
+        db.close()
 
 
 @router.post("", response_model=Kiff)
-async def create_kiff(req: CreateKiffRequest):
-    import uuid
-    kid = str(uuid.uuid4())
-    k = {"id": kid, "name": req.name, "kb_id": req.kb_id, "model": req.model, "top_k": req.top_k}
-    _KIFFS[kid] = k
-    return Kiff(**k)
-
-
-@router.post("/{kiff_id}/run")
-async def run_kiff(kiff_id: str, req: RunKiffRequest):
-    k = _KIFFS.get(kiff_id)
-    if not k:
-        raise HTTPException(status_code=404, detail="kiff not found")
-
-    # MVP retrieval from LanceDB without embeddings: return first N rows for demo
+async def create_kiff(req: CreateKiffRequest, x_tenant_id: str = Header(None)):
+    _require_tenant(x_tenant_id)
+    db: Session = SessionLocal()
     try:
-        import lancedb  # type: ignore
-    except Exception:
-        return {
-            "kiff_id": kiff_id,
-            "model": k["model"],
-            "prompt": req.prompt,
-            "retrieved": [],
-            "output": f"[mock-model] You said: '{req.prompt}'. (LanceDB not installed)",
-        }
+        kid = str(uuid.uuid4())
+        slug = _slugify(req.name)
+        row = KiffModel(
+            id=kid,
+            tenant_id=x_tenant_id,
+            user_id=req.user_id,
+            name=req.name,
+            slug=slug,
+            model_id=req.model_id,
+        )
+        db.add(row)
+        db.commit()
+        return Kiff(id=row.id, name=row.name, slug=row.slug, model_id=row.model_id, created_at=row.created_at)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create kiff: {e}")
+    finally:
+        db.close()
 
-    LANCEDB_DIR = os.getenv("LANCEDB_DIR", os.path.abspath(os.path.join(os.getcwd(), "../../local_lancedb")))
-    db = lancedb.connect(LANCEDB_DIR)
 
-    # Table name stored in kb router meta registry via import
-    from .kb import _KB_META  # type: ignore
+@router.get("/{kiff_id}", response_model=Kiff)
+async def get_kiff(kiff_id: str, x_tenant_id: str = Header(None)):
+    _require_tenant(x_tenant_id)
+    db: Session = SessionLocal()
+    try:
+        row = db.query(KiffModel).filter(KiffModel.id == kiff_id, KiffModel.tenant_id == x_tenant_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="kiff not found")
+        return Kiff(id=row.id, name=row.name, slug=row.slug, model_id=row.model_id, created_at=row.created_at)
+    finally:
+        db.close()
 
-    kb = _KB_META.get(k["kb_id"])  # type: ignore
-    if not kb:
-        raise HTTPException(status_code=400, detail="kb not found")
 
-    tbl = db.open_table(kb["table"])  # type: ignore
-    # Naive retrieval: first top_k rows
-    rows = tbl.to_pandas().head(k["top_k"]).to_dict("records")
-
-    # Mock generation output combining retrieved snippets
-    context = "\n---\n".join(r.get("text", "")[:400] for r in rows)
-    output = f"[mock-model] Prompt: {req.prompt}\n\nContext:\n{context}\n\nAnswer: (Replace with real LLM call)"
-
-    return {"kiff_id": kiff_id, "model": k["model"], "retrieved": rows, "output": output}
+@router.get("/{kiff_id}/messages", response_model=List[ConversationMessage])
+async def list_kiff_messages(kiff_id: str, x_tenant_id: str = Header(None)):
+    _require_tenant(x_tenant_id)
+    db: Session = SessionLocal()
+    try:
+        k = db.query(KiffModel).filter(KiffModel.id == kiff_id, KiffModel.tenant_id == x_tenant_id).first()
+        if not k:
+            raise HTTPException(status_code=404, detail="kiff not found")
+        msgs = (
+            db.query(MessageModel)
+            .filter(MessageModel.kiff_id == kiff_id, MessageModel.tenant_id == x_tenant_id)
+            .order_by(MessageModel.created_at.asc())
+            .all()
+        )
+        out: List[ConversationMessage] = []
+        for m in msgs:
+            out.append(
+                ConversationMessage(
+                    id=m.id,
+                    role=m.role,
+                    content=m.content,
+                    step=m.step,
+                    thought=m.thought,
+                    action_json=m.action_json,
+                    validator=m.validator,
+                    created_at=m.created_at.isoformat(),
+                )
+            )
+        return out
+    finally:
+        db.close()

@@ -23,7 +23,7 @@ function KiffsCreatePageContent() {
 
   const handleCreate = React.useCallback(() => {
     // Placeholder: route to a future Kiff composer or show a toast
-    router.push("/kiffs/compose");
+    router.push("/kiffs/launcher");
   }, [router]);
 
   return (
