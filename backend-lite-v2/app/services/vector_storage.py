@@ -45,15 +45,111 @@ class VectorStorageService:
         
         return " ".join(filter(None, content_parts))
     
+    def _create_pack_documents(self, pack, tenant_id: str) -> List[Dict[str, Any]]:
+        """Create chunked documents from pack content for vector storage"""
+        documents = []
+        
+        # Basic pack info document
+        if pack.description:
+            documents.append({
+                "content": f"{pack.display_name}: {pack.description}",
+                "type": "overview",
+                "metadata": {"section": "description"}
+            })
+        
+        # API structure document
+        if pack.api_structure:
+            import json
+            api_content = json.dumps(pack.api_structure, indent=2)
+            documents.append({
+                "content": f"API Structure for {pack.display_name}:\n{api_content}",
+                "type": "api_structure", 
+                "metadata": {"section": "api_endpoints"}
+            })
+        
+        # Code examples documents
+        if pack.code_examples:
+            for lang, code in pack.code_examples.items():
+                if code and code.strip():
+                    documents.append({
+                        "content": f"{lang} code example for {pack.display_name}:\n{code}",
+                        "type": "code_example",
+                        "metadata": {"section": "code", "language": lang}
+                    })
+        
+        # Integration patterns documents
+        if pack.integration_patterns:
+            for i, pattern in enumerate(pack.integration_patterns):
+                if pattern and pattern.strip():
+                    documents.append({
+                        "content": f"Integration pattern for {pack.display_name}:\n{pattern}",
+                        "type": "integration_pattern",
+                        "metadata": {"section": "patterns", "pattern_index": i}
+                    })
+        
+        return documents
+    
     async def store_pack_vectors(self, pack, tenant_id: str) -> bool:
-        """Store pack vectors (simplified implementation)"""
+        """Store pack content as vectors in LanceDB for retrieval"""
         try:
-            print(f"✅ Storing vectors for pack {pack.id} (simplified)")
-            # Simplified implementation - just return success for now
+            table_name = f"tenant_{tenant_id}_kiff_packs"
+            
+            # Create chunked documents from pack content
+            documents = self._create_pack_documents(pack, tenant_id)
+            
+            if not documents:
+                print(f"⚠️ No documents to store for pack {pack.id}")
+                return True
+                
+            # Prepare data for LanceDB
+            vectors_data = []
+            for doc in documents:
+                embedding = self._embed_text(doc["content"])
+                vectors_data.append({
+                    "vector": embedding,
+                    "content": doc["content"],
+                    "pack_id": pack.id,
+                    "tenant_id": tenant_id,
+                    "pack_name": pack.name,
+                    "display_name": pack.display_name,
+                    "description": pack.description,
+                    "category": pack.category,
+                    "usage_count": pack.usage_count or 0,
+                    "avg_rating": pack.avg_rating or 0.0,
+                    "is_verified": pack.is_verified,
+                    "api_url": pack.api_url,
+                    "created_by": pack.created_by,
+                    "document_type": doc["type"],
+                    "metadata": doc["metadata"]
+                })
+            
+            # Create or get table
+            try:
+                table = self.db.open_table(table_name)
+                # Delete existing vectors for this pack to avoid duplicates
+                try:
+                    table.delete(f"pack_id = '{pack.id}'")
+                except Exception:
+                    pass  # Table might not exist yet
+            except Exception:
+                # Create new table if it doesn't exist
+                if vectors_data:
+                    table = self.db.create_table(table_name, vectors_data[:1])
+                    vectors_data = vectors_data[1:]  # Skip first record as it's used for schema
+                else:
+                    return True
+            
+            # Add vectors to table
+            if vectors_data:
+                table.add(vectors_data)
+            
+            print(f"✅ Stored {len(vectors_data) + 1} vector documents for pack {pack.id}")
             return True
             
         except Exception as e:
             print(f"❌ Error storing pack vectors: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def search_similar_packs(
