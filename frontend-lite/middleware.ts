@@ -4,7 +4,6 @@ import { getToken } from 'next-auth/jwt'
 // Public routes that do not require authentication
 const PUBLIC_PATHS = new Set<string>([
   '/login',
-  '/signup',
 ])
 
 function isPublicPath(pathname: string): boolean {
@@ -25,9 +24,12 @@ function isPublicPath(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
+  
+  console.log(`🔧 MIDDLEWARE RUNNING: ${pathname}`)
 
   // Skip middleware for public paths
   if (isPublicPath(pathname)) {
+    console.log(`🔧 SKIPPING PUBLIC PATH: ${pathname}`)
     return NextResponse.next()
   }
 
@@ -40,21 +42,29 @@ export async function middleware(req: NextRequest) {
   const isAuthenticated = !!token
   const userRole = token ? (token.role as string)?.toLowerCase() : null
 
-  console.log(`Middleware: ${pathname}, token:`, token ? `found (${token.email}, role: ${userRole})` : 'not found')
+  // Debug only for root path to avoid spam
+  if (pathname === '/') {
+    console.log(`[MIDDLEWARE] / - token:`, token ? `found (${token.email}, role: ${userRole})` : 'NOT FOUND')
+    console.log(`[MIDDLEWARE] / - cookies:`, req.cookies.getAll().map(c => c.name).join(', '))
+  }
 
   // Root: redirect based on authentication status
   if (pathname === '/') {
+    console.log(`[MIDDLEWARE] Root path detected, isAuthenticated: ${isAuthenticated}`)
     if (isAuthenticated) {
       const url = req.nextUrl.clone()
       if (userRole === 'admin' || userRole === 'superadmin') {
         url.pathname = '/admin/users'
+        console.log(`[MIDDLEWARE] Redirecting admin to: ${url.pathname}`)
       } else {
         url.pathname = '/kiffs/launcher'
+        console.log(`[MIDDLEWARE] Redirecting user to: ${url.pathname}`)
       }
       return NextResponse.redirect(url)
     } else {
       const url = req.nextUrl.clone()
       url.pathname = '/login'
+      console.log(`[MIDDLEWARE] Redirecting unauthenticated to: ${url.pathname}`)
       return NextResponse.redirect(url)
     }
   }
