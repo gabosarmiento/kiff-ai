@@ -172,7 +172,10 @@ export async function apiJson<T = unknown>(path: string, init: ApiInit = {}): Pr
   const res = await apiFetch(path, init);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`API ${res.status} ${res.statusText}: ${text}`);
+    // Attach status code to error for consistent 409 handling by callers
+    const err = new Error(`API ${res.status} ${res.statusText}: ${text}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
   return res.json() as Promise<T>;
 }

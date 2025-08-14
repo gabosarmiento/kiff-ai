@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>KITT Scanner Demo (Multi-color/size)</title>
+  <style>
+    body { background: #181818; color: #fff; font-family: sans-serif; }
+    .demo-row { display: flex; gap: 32px; margin-bottom: 32px; justify-content: center; align-items: flex-end; }
+    .demo-label { width: 90px; text-align: right; margin-right: 12px; opacity: 0.7; font-size: 15px; }
+    .scanner-track {
+      display: flex;
+      gap: 0;
+      align-items: center;
+      background: transparent;
+      border-radius: 8px;
+      padding: 2px 0;
+      margin: 0 0 0 0;
+    }
+    .scanner-led {
+      border-radius: 6px;
+      opacity: 0.09;
+      transition: opacity 0.12s linear;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center;margin:32px 0 16px 0;">KITT Scanner UI Examples</h2>
+  <div style="display:flex;flex-direction:column;gap:32px;max-width:480px;margin:0 auto;">
+    <!-- Navbar example -->
+    <nav style="background:#232b36;border-radius:8px;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-weight:600;font-size:16px;letter-spacing:1px;">MyApp</span>
+      <div id="navbar-kitt"></div>
+    </nav>
+    <!-- Interactive Button example -->
+    <div style="position:relative;display:inline-block;">
+      <button id="kitt-btn" style="background:#243146;border:none;border-radius:18px;padding:13px 26px;display:flex;align-items:center;gap:14px;cursor:pointer;font-size:16px;font-weight:600;color:#fff;box-shadow:0 2px 8px #0002;transition:background 0.15s;position:relative;z-index:1;">
+        <span id="btn-text">Launch</span>
+      </button>
+      <svg id="snake-svg" width="140" height="50" style="position:absolute;top:0;left:0;pointer-events:none;z-index:2;overflow:visible;"></svg>
+    </div>
+    <!-- Card example -->
+    <div style="background:#232b36;border-radius:10px;padding:22px 26px;box-shadow:0 2px 16px #0002;display:flex;flex-direction:column;align-items:flex-start;gap:10px;max-width:340px;">
+      <div style="font-size:15px;font-weight:500;opacity:0.8;margin-bottom:4px;">Status</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px;">Processing</div>
+      <div id="card-kitt"></div>
+    </div>
+  </div>
+  <script>
+    // Only keep compact and micro
+    const compact = { label: 'Compact', color: '#3895ff', leds: 16, beam: 6, ledSize: 7, height: 7, duration: 600 };
+    const micro = { label: 'Micro', color: '#3895ff', leds: 12, beam: 4, ledSize: 5, height: 4, duration: 520 };
+    const COMET_OPACITY = [1, 0.85, 0.66, 0.48, 0.32, 0.19, 0.11, 0.06, 0.03, 0.02, 0.01, 0.01];
+
+    function createScanner({color, leds, beam, ledSize, height, duration}) {
+      // Create container
+      const track = document.createElement('div');
+      track.className = 'scanner-track';
+      track.style.width = (leds * ledSize) + 'px';
+      track.style.height = height + 'px';
+      // Create LEDs
+      const ledArr = [];
+      for (let i = 0; i < leds; ++i) {
+        const led = document.createElement('div');
+        led.className = 'scanner-led';
+        led.style.width = ledSize + 'px';
+        led.style.height = '100%';
+        led.style.background = color;
+        track.appendChild(led);
+        ledArr.push(led);
+      }
+      // Animation
+      let t0 = performance.now();
+      function animate(now) {
+        const t = (now - t0) / duration;
+        let sweep = 1 - Math.abs((t % 2) - 1); // 0→1→0 continuous
+        let head = Math.round(sweep * (leds - 1));
+        // Clear
+        ledArr.forEach(led => led.style.opacity = 0);
+        // Light up beam
+        for (let i = 0; i < beam; ++i) {
+          let idx = head - i;
+          if (idx >= 0 && idx < leds) {
+            ledArr[idx].style.opacity = COMET_OPACITY[i] ?? 0.01;
+          }
+        }
+        requestAnimationFrame(animate);
+      }
+      animate(performance.now());
+      return track;
+    }
+
+    // Mount compact scanner in navbar
+    document.getElementById('navbar-kitt').appendChild(createScanner(compact));
+    // Mount micro scanner in card
+    document.getElementById('card-kitt').appendChild(createScanner(micro));
+
+    // --- SOLID SNAKE AROUND BUTTON ---
+    // --- SOLID SNAKE AROUND BUTTON ---
+    const snakeSvg = document.getElementById('snake-svg');
+    const btnElem = document.getElementById('kitt-btn');
+    // Wait for layout
+    setTimeout(() => {
+      // Get actual button size
+      const btnRect = btnElem.getBoundingClientRect();
+      const w = Math.round(btnRect.width);
+      const h = Math.round(btnRect.height);
+      const r = 14; // match border radius
+      // Make SVG match button
+      snakeSvg.setAttribute('width', w);
+      snakeSvg.setAttribute('height', h);
+      snakeSvg.style.width = w+'px';
+      snakeSvg.style.height = h+'px';
+      // Config: smaller pixels
+      const snakeCfg = { color: '#3895ff', leds: 0, beam: 10, ledSize: 5, duration: 1200 };
+      // Path
+      const pathStr = `M${r},0 H${w-r} Q${w},0 ${w},${r} V${h-r} Q${w},${h} ${w-r},${h} H${r} Q0,${h} 0,${h-r} V${r} Q0,0 ${r},0 Z`;
+      let path = snakeSvg.querySelector('path');
+      if (!path) {
+        path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        snakeSvg.appendChild(path);
+      }
+      path.setAttribute('d', pathStr);
+      path.setAttribute('fill','none');
+      path.setAttribute('stroke','none');
+      // LED elements (solid, touching)
+      // Remove old LEDs if any
+      while (snakeSvg.children.length > 1) snakeSvg.removeChild(snakeSvg.lastChild);
+      const totalLen = path.getTotalLength();
+      const ledSpacing = snakeCfg.ledSize;
+      const ledCount = Math.floor(totalLen / ledSpacing);
+      snakeCfg.leds = ledCount;
+      const ledEls = [];
+      for (let i = 0; i < ledCount; ++i) {
+        const led = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        led.setAttribute('width', snakeCfg.ledSize);
+        led.setAttribute('height', snakeCfg.ledSize);
+        led.setAttribute('rx', (snakeCfg.ledSize/2).toString());
+        led.setAttribute('fill', snakeCfg.color);
+        led.setAttribute('opacity','0');
+        led.setAttribute('style','pointer-events:none;');
+        snakeSvg.appendChild(led);
+        ledEls.push(led);
+      }
+      // Animate
+      let t0 = performance.now();
+      function animateSnake(now) {
+        const duration = snakeCfg.duration;
+        // Head moves forward, wraps around
+        const t = ((now - t0) / duration) % 1;
+        const headFrac = t;
+        // Beam covers a fraction of the path
+        const beamFrac = snakeCfg.beam / ledCount;
+        // Fade tail
+        for (let i = 0; i < ledCount; ++i) {
+          const ledFrac = (i / ledCount);
+          let dist = (ledFrac - headFrac + 1) % 1;
+          let op = 0; // fully transparent by default
+          if (dist < beamFrac) {
+            const fadeIdx = Math.floor(((beamFrac - dist) / beamFrac) * (COMET_OPACITY.length-1));
+            op = COMET_OPACITY[fadeIdx] ?? 0.01;
+          }
+          if (ledEls[i].getAttribute('opacity') !== op.toString()) {
+            ledEls[i].setAttribute('opacity', op.toString());
+          }
+          const pos = path.getPointAtLength(ledFrac * totalLen);
+          ledEls[i].setAttribute('x', (pos.x - snakeCfg.ledSize/2).toFixed(2));
+          ledEls[i].setAttribute('y', (pos.y - snakeCfg.ledSize/2).toFixed(2));
+        }
+        // Make sure the SVG path is never visible
+        path.setAttribute('stroke', 'none');
+        path.setAttribute('fill', 'none');
+        requestAnimationFrame(animateSnake);
+      }
+      animateSnake(performance.now());
+    }, 0);
+
+    // Button interactivity
+    const btn = document.getElementById('kitt-btn');
+    const btnText = document.getElementById('btn-text');
+    let toggled = false;
+    btn.addEventListener('click', () => {
+      toggled = !toggled;
+      btnText.innerText = toggled ? 'Launched!' : 'Launch';
+      btn.style.background = toggled ? '#1e8fff' : '#243146';
+    });
+  </script>
+</body>
+</html>

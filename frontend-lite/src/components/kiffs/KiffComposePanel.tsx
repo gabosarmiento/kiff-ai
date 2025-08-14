@@ -63,7 +63,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   );
   const [tools, setTools] = React.useState<string[]>([]);
   const [mcps, setMcps] = React.useState<string[]>([]);
-  const [model, setModel] = React.useState<string>(models[0] || "kimi-k2");
+  const [model, setModel] = React.useState<string>(models[0] || "moonshotai/kimi-k2-instruct");
   const [ragOpen, setRagOpen] = React.useState<boolean>(true);
   const [hoverDoc, setHoverDoc] = React.useState<string | null>(null);
 
@@ -184,7 +184,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   // Utility to choose default model with Kimi preference
   function chooseDefaultModel(ids: string[], current: string | undefined): string {
     if (current && ids.includes(current)) return current;
-    const preferred = ["kimi-k2", "moonshotai/kimi-k2-instruct"];
+    const preferred = ["moonshotai/kimi-k2-instruct"];
     for (const p of preferred) if (ids.includes(p)) return p;
     return ids[0] || "";
   }
@@ -223,7 +223,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
       if (modelsRes && !modelsRes.error) {
         const ids = normalizeModelIds(modelsRes);
         if (ids.length) {
-          const preferred = ["kimi-k2", "moonshotai/kimi-k2-instruct"];
+          const preferred = ["moonshotai/kimi-k2-instruct"];
           const ordered = reorderPreferred(ids, preferred);
           setModelOptions(ordered);
           const next = chooseDefaultModel(ordered, model);

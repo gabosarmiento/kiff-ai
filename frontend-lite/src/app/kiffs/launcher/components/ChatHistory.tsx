@@ -9,6 +9,8 @@ type Props = {
   messages: ChatMessage[];
   onRetryAssistant?: (assistantIndex: number) => void;
   onEditLastUser?: (content: string) => void;
+  onApproveProposal?: (proposalId: string) => void;
+  onRejectProposal?: (proposalId: string) => void;
 };
 
 // Simple code block with line numbers, copy button, language label.
@@ -72,7 +74,7 @@ function CodeBlock({ inline, className, children }: { inline?: boolean; classNam
   );
 }
 
-export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser }: Props) {
+export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser, onApproveProposal, onRejectProposal }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -124,11 +126,11 @@ export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser
   }, []);
 
   return (
-    <div className="relative flex-1">
+    <div className="relative flex-1 min-h-0 bg-white dark:bg-neutral-900">
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="overflow-y-auto p-4 space-y-3 h-full aria-live-polite"
+        className="overflow-y-auto p-4 space-y-3 h-full aria-live-polite bg-white dark:bg-neutral-900"
         aria-live="polite"
         aria-relevant="additions"
         role="log"
@@ -204,6 +206,61 @@ export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser
                     {m.content}
                   </ReactMarkdown>
                 </div>
+
+                {/* Inline HITL proposal cards */}
+                {!isUser && Array.isArray((m as any).metadata?.proposals) && (m as any).metadata!.proposals.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {(m as any).metadata!.proposals.map((p: any, idx: number) => {
+                      const pid = p?.id || p?.proposal_id || `proposal-${idx}`;
+                      const title = p?.title || "Proposed file changes";
+                      const changes = Array.isArray(p?.changes) ? p.changes : [];
+                      const status = p?.status; // optional: 'approved' | 'rejected'
+                      return (
+                        <div key={pid} className="border rounded bg-white text-gray-900 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-medium">{title}</div>
+                            {status ? (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${status === 'approved' ? 'bg-green-100 text-green-700' : status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                                {status}
+                              </span>
+                            ) : null}
+                          </div>
+                          {changes.length > 0 ? (
+                            <ul className="mt-1 space-y-1">
+                              {changes.slice(0, 5).map((c: any, ci: number) => (
+                                <li key={ci} className="text-[11px] flex items-center gap-1">
+                                  <span className="inline-block w-12 text-gray-500">{String(c?.action || c?.op || 'edit')}</span>
+                                  <span className="truncate flex-1">{String(c?.path || c?.file || '')}</span>
+                                </li>
+                              ))}
+                              {changes.length > 5 ? (
+                                <li className="text-[11px] text-gray-500">+{changes.length - 5} more…</li>
+                              ) : null}
+                            </ul>
+                          ) : null}
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              className="text-[11px] px-2 py-1 rounded bg-green-600 text-white disabled:opacity-50"
+                              onClick={() => pid && onApproveProposal && onApproveProposal(pid)}
+                              disabled={!onApproveProposal || status === 'approved'}
+                              aria-label="Approve proposed changes"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="text-[11px] px-2 py-1 rounded bg-red-600 text-white disabled:opacity-50"
+                              onClick={() => pid && onRejectProposal && onRejectProposal(pid)}
+                              disabled={!onRejectProposal || status === 'rejected'}
+                              aria-label="Reject proposed changes"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <div className="text-[10px] opacity-60 mt-1">
                   {m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : ""}
                 </div>

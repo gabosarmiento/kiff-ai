@@ -256,7 +256,15 @@ async def sync_groq_models():
 
     new_list = list(by_id.values())
     _write_all(new_list)
-    return {"ok": True, "created": created, "updated": updated, "total": len(new_list)}
+    # Also sync pricing table from models.json
+    try:
+        from ..db_core import SessionLocal as _SL
+        from ..observability.pricing_sync import sync_model_pricing_from_models_json
+        with _SL() as _db:
+            synced = sync_model_pricing_from_models_json(_db)
+    except Exception:
+        synced = 0
+    return {"ok": True, "created": created, "updated": updated, "total": len(new_list), "pricing_upserts": synced}
 
 
 @router.post("/", response_model=ModelItem)

@@ -27,6 +27,26 @@ except Exception:
     SqliteStorage = None  # type: ignore
     tool = None  # type: ignore
 
+# Module-level tenant context for tool functions
+# These tools are created at __init__ time and don't receive tenant_id directly.
+# We set this before each run() and reset after to ensure correct partitioning in PreviewStore.
+_CURRENT_TENANT_ID: str = "default"
+_REQUIRE_APPROVAL: bool = False
+
+def _get_current_tenant_id() -> str:
+    tid = _CURRENT_TENANT_ID or "default"
+    return tid
+
+# Observability & budgeting
+try:
+    from ..observability import SessionContext, call_llm_and_track
+    from ..observability.pricing import get_latest_model_price, compute_cost_usd
+    from ..services.budget_guard import evaluate_budget, send_budget_alert
+    from ..db_core import SessionLocal
+    _HAS_OBS = True
+except Exception:
+    _HAS_OBS = False
+
 
 @dataclass
 class AgentRunResult:
@@ -60,7 +80,8 @@ def create_project_tools(session_id: str):
             store = PreviewStore(table_name=table, region_name=region)
             
             # Get session data and find the file
-            sess = store.get_session("default", session_id) or {}
+            tenant_id = _get_current_tenant_id()
+            sess = store.get_session(tenant_id, session_id) or {}
             files = sess.get("files") or []
             
             for f in files:
@@ -88,39 +109,74 @@ def create_project_tools(session_id: str):
             from ..util.sandbox_e2b import E2BProvider, E2BUnavailable
             from ..util.preview_store import PreviewStore
             import os
+            import json
+            import uuid as _uuid
+            import difflib
             
             # Get the sandbox ID from session
             table = os.getenv("DYNAMO_TABLE_PREVIEW_SESSIONS") or "preview_sessions"
             region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
             store = PreviewStore(table_name=table, region_name=region)
-            sess = store.get_session("default", session_id) or {}
+            tenant_id = _get_current_tenant_id()
+            sess = store.get_session(tenant_id, session_id) or {}
             sandbox_id = sess.get("sandbox_id")
             
             if not sandbox_id:
                 return f"Error: No sandbox found for session {session_id}"
             
-            # Apply the file to E2B
-            try:
-                provider = E2BProvider()
-                provider.apply_files(sandbox_id=sandbox_id, files=[{"path": file_path, "content": content}])
-            except E2BUnavailable:
-                # Mock mode - just update the store
-                pass
-            
-            # Update the preview store
+            # Load existing file content to compute diff
             files = sess.get("files") or []
             updated = False
+            old_content = ""
             for i, f in enumerate(files):
                 if isinstance(f, dict) and f.get("path") == file_path:
-                    files[i] = {"path": file_path, "content": content, "language": f.get("language")}
+                    old_content = f.get("content", "")
+                    # In approval mode, don't mutate yet
+                    if not _REQUIRE_APPROVAL:
+                        files[i] = {"path": file_path, "content": content, "language": f.get("language")}
                     updated = True
                     break
             
             if not updated:
-                files.append({"path": file_path, "content": content})
+                # new file
+                if not _REQUIRE_APPROVAL:
+                    files.append({"path": file_path, "content": content})
             
-            store.update_session_fields("default", session_id, {"files": files})
-            return f"Successfully updated {file_path}"
+            if _REQUIRE_APPROVAL:
+                # Build proposal with diff and new content
+                diff_lines = list(
+                    difflib.unified_diff(
+                        old_content.splitlines(keepends=True),
+                        content.splitlines(keepends=True),
+                        fromfile=file_path,
+                        tofile=file_path,
+                    )
+                )
+                proposal_id = str(_uuid.uuid4())
+                change = {
+                    "path": file_path,
+                    "diff": "".join(diff_lines),
+                    "new_content": content,
+                }
+                proposals = sess.get("pending_proposals") or []
+                proposals.append({"id": proposal_id, "changes": [change]})
+                sess["pending_proposals"] = proposals
+                store.update_session_fields(tenant_id, session_id, {"pending_proposals": proposals})
+                return "PROPOSAL:" + json.dumps({"proposal_id": proposal_id, "changes": [change]})
+            else:
+                # Apply the file to E2B immediately
+                try:
+                    provider = E2BProvider()
+                    provider.apply_files(sandbox_id=sandbox_id, files=[{"path": file_path, "content": content}])
+                except E2BUnavailable:
+                    # Mock mode - just update the store
+                    pass
+                # Update the preview store now
+                if not updated:
+                    files.append({"path": file_path, "content": content})
+                sess["files"] = files
+                store.update_session_fields(tenant_id, session_id, {"files": files})
+                return f"Successfully updated {file_path}"
         except Exception as e:
             return f"Error writing {file_path}: {str(e)}"
 
@@ -139,7 +195,8 @@ def create_project_tools(session_id: str):
             region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
             store = PreviewStore(table_name=table, region_name=region)
             
-            sess = store.get_session("default", session_id) or {}
+            tenant_id = _get_current_tenant_id()
+            sess = store.get_session(tenant_id, session_id) or {}
             files = sess.get("files") or []
             paths = [f.get("path") for f in files if isinstance(f, dict) and f.get("path")]
             
@@ -292,8 +349,8 @@ def create_todo_tools(session_id: str):
     return [todo_plan, todo_start_task, todo_complete_task, todo_status, todo_log]
 
 class LauncherAgent:
-    def __init__(self, session_id: Optional[str] = None) -> None:
-        self.model_id = os.getenv("LAUNCHER_MODEL_ID", "moonshotai/kimi-k2-instruct")
+    def __init__(self, session_id: Optional[str] = None, model_id: Optional[str] = None) -> None:
+        self.model_id = model_id or os.getenv("LAUNCHER_MODEL_ID", "moonshotai/kimi-k2-instruct")
         self.lancedb_dir = os.getenv("LANCEDB_DIR", os.path.abspath(os.path.join(os.getcwd(), "../../local_lancedb")))
         self.kb_table = os.getenv("LAUNCHER_KB_TABLE", "kiff_packs")
         self.agent_sessions_table = os.getenv("LAUNCHER_AGENT_SESSIONS_TABLE", "agent_sessions")
@@ -509,19 +566,83 @@ class LauncherAgent:
                 f"Chat so far:\n{context_text}\n\nUser: {message}"
             )
 
-            # Expose current scoping context for tools (e.g., search_pack_knowledge)
+            # Expose current scoping context for tools (e.g., search_pack_knowledge and file tools)
             try:
                 setattr(self, "_current_tenant_id", tenant_id)
                 setattr(self, "_current_pack_ids", selected_packs or [])
+                # Also set module-level tenant for file tools defined in this module
+                global _CURRENT_TENANT_ID
+                _CURRENT_TENANT_ID = tenant_id
             except Exception:
                 pass
 
-            resp = await self.agent.arun(prompt, stream=False)  # type: ignore
+            # Observability + budget guard
+            if _HAS_OBS:
+                # Budget pre-check (estimate: chars/4 + 500)
+                try:
+                    _provider = (self.model_id.split("/", 1)[0] if "/" in self.model_id else "groq").lower()
+                    with SessionLocal() as _db:
+                        price = get_latest_model_price(_db, provider=_provider, model=self.model_id)
+                        est_in = max(1, len(prompt) // 4)
+                        est_out = 500
+                        projected = compute_cost_usd(price, est_in, est_out) if price else None
+                        decision = evaluate_budget(_db, tenant_id, projected or 0)  # type: ignore[arg-type]
+                        if decision.notify:
+                            send_budget_alert(tenant_id, decision)
+                        if decision.should_block:
+                            return AgentRunResult(content=f"[budget] {decision.message}")
+                except Exception:
+                    pass
+
+                # Build session context
+                import uuid as _uuid
+                run_id = f"run_{_uuid.uuid4().hex[:12]}"
+                step_id = f"step_{_uuid.uuid4().hex[:12]}"
+                session_ctx = SessionContext(
+                    tenant_id=tenant_id,
+                    user_id=None,
+                    workspace_id=None,
+                    session_id=self.session_id or f"sess_{_uuid.uuid4().hex[:10]}",
+                    run_id=run_id,
+                    step_id=step_id,
+                    parent_step_id=None,
+                    agent_name="Kiff Launcher",
+                    tool_name=None,
+                )
+
+                messages = [{"role": "user", "content": prompt}]
+
+                async def _delegate(*, messages, stream=False):  # type: ignore
+                    out = await self.agent.arun(prompt, stream=stream)  # type: ignore
+                    text = getattr(out, "content", "") or str(out)
+                    return {"content": text}
+
+                try:
+                    wrapped = await call_llm_and_track(
+                        provider=_provider,
+                        model=self.model_id,
+                        model_version=None,
+                        messages=messages,
+                        session_ctx=session_ctx,
+                        tool_name=None,
+                        stream=False,
+                        attempt_n=1,
+                        cache_hit=False,
+                        llm_callable=_delegate,
+                    )
+                    text = wrapped.get("content") if isinstance(wrapped, dict) else str(wrapped)
+                except Exception as _e:
+                    text = f"[launcher] error: {_e}"
+                resp = type("_R", (), {"content": text, "tool_calls": None})()
+            else:
+                resp = await self.agent.arun(prompt, stream=False)  # type: ignore
 
             # Cleanup per-call context
             try:
                 setattr(self, "_current_tenant_id", None)
                 setattr(self, "_current_pack_ids", None)
+                # Reset module tenant to default after run
+                _CURRENT_TENANT_ID = "default"
             except Exception:
                 pass
             text = getattr(resp, "content", "") or str(resp)
@@ -534,7 +655,7 @@ class LauncherAgent:
         )
 
 
-def get_launcher_agent(session_id: Optional[str] = None) -> LauncherAgent:
+def get_launcher_agent(session_id: Optional[str] = None, model_id: Optional[str] = None) -> LauncherAgent:
     # Singleton-ish simple provider
     # In production we might keep it global; for now create per-request is fine
-    return LauncherAgent(session_id=session_id)
+    return LauncherAgent(session_id=session_id, model_id=model_id)

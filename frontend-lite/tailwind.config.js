@@ -14,9 +14,32 @@ module.exports = {
       padding: '1rem',
     },
     extend: {
+      // Motion tokens
+      transitionTimingFunction: {
+        live: 'cubic-bezier(.22,.61,.36,1)', // snappy ease
+      },
+      transitionDuration: {
+        fast: '150ms',
+        base: '220ms',
+      },
+      keyframes: {
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        pop: {
+          '0%': { opacity: '0', transform: 'scale(.98)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+      },
       animation: {
-        'spin': 'spin 1s linear infinite',
-      }
+        spin: 'spin 1s linear infinite',
+        'fade-up': 'fade-up .38s var(--ease-live, cubic-bezier(.22,.61,.36,1)) both',
+        pop: 'pop .18s ease-out both',
+      },
+      boxShadow: {
+        lift: '0 12px 32px -12px rgb(0 0 0 / 0.18)',
+      },
     }
   },
   plugins: [

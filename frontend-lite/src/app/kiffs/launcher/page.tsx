@@ -13,6 +13,9 @@ const PackSelector = dynamic(() => import("@/components/compose/PackSelector"), 
 import type { Attachment } from "./types";
 import { ChatMessage } from "./types";
 import { apiClient } from "./utils/api";
+import { apiJson } from "@/lib/api";
+import FeatureIntroModal from "@/components/FeatureIntroModal";
+import Image from "next/image";
 
 function getTenantId(): string {
   if (typeof window !== "undefined") {
@@ -57,6 +60,7 @@ function LauncherPageContent() {
   const [selectedPacks, setSelectedPacks] = useState<string[]>([]);
   const [showPackSelector, setShowPackSelector] = useState(false);
   const [showPackManager, setShowPackManager] = useState(false);
+  const [packConflict, setPackConflict] = useState<string | null>(null);
   const [currentIdea, setCurrentIdea] = useState("");
   const [ideaInput, setIdeaInput] = useState("");
   const [kiffId, setKiffId] = useState<string | null>(null);
@@ -71,7 +75,9 @@ function LauncherPageContent() {
   const [previewScale, setPreviewScale] = useState<number>(1);
   // Model selection (like compose)
   const [modelOptions, setModelOptions] = useState<string[]>([]);
-  const [model, setModel] = useState<string>("kimi-k2");
+  const [model, setModel] = useState<string>("moonshotai/kimi-k2-instruct");
+  // Holds the active SSE stopper for file-apply, to allow cleanup on reset/navigation
+  const sseStopRef = useRef<(() => void) | null>(null);
 
   // Load models (from unified Next API route) and prefer Kimi models when available
   useEffect(() => {
@@ -123,7 +129,7 @@ function LauncherPageContent() {
         
         // Only set model if current model is not in the list or if we don't have a model set
         if (!model || !ordered.includes(model)) {
-          const selectedModel = ordered[0] || "kimi-k2";
+          const selectedModel = ordered[0] || "moonshotai/kimi-k2-instruct";
           console.log("🎯 Setting model to:", selectedModel);
           setModel(selectedModel);
         }
@@ -177,6 +183,58 @@ function LauncherPageContent() {
       setSelectedPacks([packId]);
     }
   }, [searchParams]);
+
+  // Force reset to idle state when navigating via sidebar "New Kiff" (adds ?t=...)
+  // Only do this when there is NO explicit kiff to load
+  useEffect(() => {
+    const t = searchParams.get('t');
+    const kid = searchParams.get('kiff');
+    if (t && !kid) {
+      // Clear persisted launcher state
+      try { localStorage.removeItem('kiff_launcher_state'); } catch {}
+      // Remove any stored packs for previous kiffs
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('kiff_packs_')) keysToRemove.push(k);
+        }
+        for (const k of keysToRemove) localStorage.removeItem(k);
+      } catch {}
+      // Reset local state to show idle/new view
+      setHasProject(false);
+      setSessionId(null);
+      setKiffId(null);
+      setChatMessages([]);
+      setChatOpen(false);
+      setIsGenerating(false);
+      setPreviewUrl(null);
+      setFilePaths([]);
+      setSelectedPath(null);
+      setFileContent("");
+      setAttachments([]);
+      setCurrentIdea("");
+      setIdeaInput("");
+      setShowPreviewOnly(false);
+      setDeployLogs([]);
+      setShowDeployLogs(false);
+      setUnreadCount(0);
+      setKiffUpdate(null);
+      setShowPackSelector(false);
+      setShowPackManager(false);
+      setPackConflict(null);
+      setPreviewScale(1);
+      // Clear selected packs (local + global context)
+      setSelectedPacks([]);
+      setGlobalSelectedPacks([]);
+      // Abort any in-flight generation/requests
+      try { if (abortRef.current) abortRef.current.abort(); } catch {}
+      abortRef.current = null;
+      // Stop any ongoing file-apply SSE
+      try { sseStopRef.current && sseStopRef.current(); } catch {}
+      sseStopRef.current = null;
+    }
+  }, [searchParams, setGlobalSelectedPacks]);
 
   // Handle opening a specific kiff from URL (?kiff=ID): flush current chat and load its history
   useEffect(() => {
@@ -305,6 +363,51 @@ function LauncherPageContent() {
     }
   }, [searchParams]);
 
+  // Refresh files from sandbox (e2b) for current session and keep selection when possible
+  const refreshFiles = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const { getFileTree, getFile } = await import("./utils/preview");
+      const tree = await getFileTree(sessionId);
+      const files: string[] = tree?.files || [];
+      setFilePaths(files);
+      // keep previous selection if it still exists
+      setSelectedPath((prev) => {
+        if (prev && files.includes(prev)) return prev;
+        const fallback = files.find((p) => p.endsWith("app/page.tsx")) || files[0] || null;
+        return fallback || null;
+      });
+      const pathToLoad = (prev => {
+        if (prev && files.includes(prev)) return prev;
+        const fallback = files.find((p) => p.endsWith("app/page.tsx")) || files[0] || null;
+        return fallback;
+      })(selectedPath);
+      if (pathToLoad) {
+        const f = await getFile(sessionId, pathToLoad);
+        setFileContent(f?.content || "");
+      } else {
+        setFileContent("");
+      }
+    } catch (e) {
+      console.warn("refreshFiles failed", e);
+    }
+  }, [sessionId, selectedPath]);
+
+  // Only auto-sync with sandbox when Live Preview is active
+  useEffect(() => {
+    if (!kiffUpdate) return;
+    if (!(showPreviewOnly && sessionId)) return;
+    (async () => {
+      try { await refreshFiles(); } catch (e) { console.warn("refreshFiles (preview) failed", e); }
+      try {
+        const { restartDevServer } = await import("./utils/preview");
+        await restartDevServer(sessionId!);
+      } catch (e) {
+        console.warn("restartDevServer failed", e);
+      }
+    })();
+  }, [kiffUpdate, showPreviewOnly, sessionId, refreshFiles]);
+
   // Chat submit handler (defined before effects that depend on it)
   const handleChatSubmit = useCallback(async () => {
     const msg = chatInput.trim();
@@ -375,6 +478,40 @@ function LauncherPageContent() {
               return next;
             });
           },
+          onEvent: (evt: any) => {
+            // Attach proposal metadata to the current assistant message
+            try {
+              if (!evt) return;
+              // Normalize: detect proposal-like payloads
+              const looksProposal = evt.type === 'ProposedFileChanges' || evt.proposal_id || evt.changes;
+              if (!looksProposal) return;
+              setChatMessages((prev) => {
+                const next = [...prev];
+                // Find the assistant message we are streaming into
+                const idx = assistantIndex >= 0 ? assistantIndex : next.findIndex((m, i) => i > 0 && next[i - 1].role === 'user' && m.role === 'assistant');
+                const target = idx >= 0 ? idx : next.length - 1;
+                const m = next[target] || { role: 'assistant', content: '' };
+                const meta = { ...(m as any).metadata };
+                const proposals = Array.isArray(meta.proposals) ? [...meta.proposals] : [];
+                // Build a compact proposal object for UI
+                const proposal = {
+                  id: evt.proposal_id || evt.id || undefined,
+                  title: evt.title || 'Proposed file changes',
+                  changes: Array.isArray(evt.changes) ? evt.changes : (Array.isArray(evt.files) ? evt.files : []),
+                  status: evt.status,
+                };
+                // Avoid duplicates by id if present
+                const existingIdx = proposal.id ? proposals.findIndex((p: any) => p?.id === proposal.id) : -1;
+                if (existingIdx >= 0) proposals[existingIdx] = { ...proposals[existingIdx], ...proposal };
+                else proposals.push(proposal);
+                meta.proposals = proposals;
+                next[target] = { ...(m as any), metadata: meta } as ChatMessage;
+                return next;
+              });
+            } catch (e) {
+              console.warn('onEvent proposal handling failed', e);
+            }
+          },
           onDone: (final) => {
             if (final?.session_id) setSessionId(final.session_id);
             if (final?.tool_calls || final?.kiff_update) {
@@ -412,6 +549,53 @@ function LauncherPageContent() {
       setIsGenerating(false);
     }
   }, [chatInput, chatMessages, sessionId, selectedPacks, model, attachments, kiffId, chatOpen]);
+
+  // Approve/Reject proposal handlers
+  const handleApproveProposal = useCallback(async (proposalId: string) => {
+    if (!sessionId) return;
+    try {
+      await apiClient.approveProposal({ session_id: sessionId, proposal_id: proposalId });
+      // Mark proposal as approved in chat metadata
+      setChatMessages((prev) => prev.map((m) => {
+        const meta: any = (m as any).metadata;
+        if (!meta?.proposals) return m;
+        const proposals = meta.proposals.map((p: any) => p?.id === proposalId ? { ...p, status: 'approved' } : p);
+        return { ...m, metadata: { ...meta, proposals } } as ChatMessage;
+      }));
+      // Refresh file tree and selected file content
+      const { getFileTree, getFile } = await import('./utils/preview');
+      const tree = await getFileTree(sessionId);
+      setFilePaths(tree.files || []);
+      if (selectedPath) {
+        try {
+          const f = await getFile(sessionId, selectedPath);
+          setFileContent(f.content || '');
+        } catch {}
+      }
+      toast.success('Proposal approved');
+    } catch (e) {
+      console.error('approveProposal failed', e);
+      toast.error('Failed to approve');
+    }
+  }, [sessionId, selectedPath]);
+
+  const handleRejectProposal = useCallback(async (proposalId: string) => {
+    if (!sessionId) return;
+    try {
+      await apiClient.rejectProposal({ session_id: sessionId, proposal_id: proposalId });
+      // Mark proposal as rejected in chat metadata
+      setChatMessages((prev) => prev.map((m) => {
+        const meta: any = (m as any).metadata;
+        if (!meta?.proposals) return m;
+        const proposals = meta.proposals.map((p: any) => p?.id === proposalId ? { ...p, status: 'rejected' } : p);
+        return { ...m, metadata: { ...meta, proposals } } as ChatMessage;
+      }));
+      toast.success('Proposal rejected');
+    } catch (e) {
+      console.error('rejectProposal failed', e);
+      toast.error('Failed to reject');
+    }
+  }, [sessionId]);
 
   // Convert dropped/pasted files to in-memory base64 Attachments
   const handleAddFiles = useCallback(async (files: File[]) => {
@@ -478,10 +662,13 @@ function LauncherPageContent() {
               resolve();
             }
           });
+          // store active stopper
+          sseStopRef.current = stopFn;
         })();
         // fallback timeout
         setTimeout(() => {
           try { stopFn(); } catch {}
+          sseStopRef.current = null;
           resolve();
         }, 2000);
       });
@@ -1097,9 +1284,45 @@ function LauncherPageContent() {
                 <CardTitle className="text-sm">Packs</CardTitle>
               </CardHeader>
               <CardContent className="p-0 h-[calc(100%-48px)]">
+                {packConflict && (
+                  <div className="px-3 pt-3">
+                    <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-xs p-2 flex items-start justify-between gap-2">
+                      <span>{packConflict}</span>
+                      <button
+                        className="text-amber-900/70 hover:text-amber-900 underline"
+                        onClick={() => setPackConflict(null)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <PackSelector
                   selectedPacks={selectedPacks}
-                  onPacksChange={(p)=>{ setSelectedPacks(p); setCurrentIdea(ideaInput); }}
+                  onPacksChange={async (p)=>{
+                    // Lock after chat starts
+                    if (hasProject) {
+                      setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
+                      toast.error("Can't change packs during an active chat");
+                      return;
+                    }
+                    const prev = selectedPacks;
+                    setSelectedPacks(p);
+                    setCurrentIdea(ideaInput);
+                    // Sync to backend session if available (pre-chat)
+                    try {
+                      if (sessionId) {
+                        const res = await apiClient.updateSessionPacks(sessionId, p);
+                        if (res.status === 409) {
+                          setSelectedPacks(prev);
+                          setPackConflict("Another process locked packs for this session. Start a new chat to change packs.");
+                          toast.error("Pack change conflicted (409)");
+                        }
+                      }
+                    } catch (e) {
+                      console.warn("updateSessionPacks failed", e);
+                    }
+                  }}
                   context={ideaInput}
                   className="h-full p-3 overflow-auto"
                   maxSelections={3}
@@ -1204,7 +1427,7 @@ function LauncherPageContent() {
             <div
               className="fixed bottom-6 right-6 z-50 w-[calc(100vw-2rem)] md:w-[75vw] max-w-[1400px] h-[80vh]"
             >
-              <Card className="w-full h-full shadow-xl border">
+              <Card className="w-full h-full shadow-xl border bg-white dark:bg-neutral-900">
                 <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
                   <CardTitle className="m-0 text-base md:text-lg">Kiff Agent</CardTitle>
                   <div className="flex items-center gap-2 ml-auto">
@@ -1233,9 +1456,15 @@ function LauncherPageContent() {
                     <span className="hidden md:inline text-sm font-medium">Close</span>
                   </button>
                 </CardHeader>
-                <CardContent className="p-0 flex flex-col h-[calc(100%-48px)]">
+                <CardContent className="p-0 flex flex-col h-[calc(100%-48px)] bg-white dark:bg-neutral-900">
                   <div className="flex-1 overflow-auto">
-                    <ChatHistory messages={chatMessages} onRetryAssistant={handleRetryAssistant} onEditLastUser={handleEditLastUser} />
+                    <ChatHistory
+                      messages={chatMessages}
+                      onRetryAssistant={handleRetryAssistant}
+                      onEditLastUser={handleEditLastUser}
+                      onApproveProposal={handleApproveProposal}
+                      onRejectProposal={handleRejectProposal}
+                    />
                   </div>
                   <div className="border-t">
                     <ChatInput
@@ -1263,18 +1492,60 @@ function LauncherPageContent() {
           open={showPackManager}
           onClose={() => setShowPackManager(false)}
           selectedPacks={selectedPacks}
-          onRemovePack={(packId) => {
-            // Remove from local state
-            setSelectedPacks(prev => prev.filter(id => id !== packId));
-            // Remove from global context
+          onRemovePack={async (packId) => {
+            if (hasProject) {
+              setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
+              toast.error("Can't change packs during an active chat");
+              return;
+            }
+            const next = selectedPacks.filter(id => id !== packId);
+            const prev = selectedPacks;
+            setSelectedPacks(next);
             removePackGlobal(packId);
-            toast.success("Pack removed from your selection");
+            try {
+              if (sessionId) {
+                const res = await apiClient.updateSessionPacks(sessionId, next);
+                if (res.status === 409) {
+                  setSelectedPacks(prev);
+                  setPackConflict("Another process locked packs for this session. Start a new chat to change packs.");
+                  toast.error("Pack change conflicted (409)");
+                } else {
+                  toast.success("Pack removed from your selection");
+                }
+              } else {
+                toast.success("Pack removed from your selection");
+              }
+            } catch (e) {
+              console.warn("onRemovePack updateSessionPacks failed", e);
+            }
           }}
-          onClearAll={() => {
+          onClearAll={async () => {
+            if (hasProject) {
+              setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
+              toast.error("Can't change packs during an active chat");
+              return;
+            }
+            const prev = selectedPacks;
             setSelectedPacks([]);
             setGlobalSelectedPacks([]);
-            toast.success("All packs removed");
-            setShowPackManager(false);
+            try {
+              if (sessionId) {
+                const res = await apiClient.updateSessionPacks(sessionId, []);
+                if (res.status === 409) {
+                  setSelectedPacks(prev);
+                  setPackConflict("Another process locked packs for this session. Start a new chat to change packs.");
+                  toast.error("Pack change conflicted (409)");
+                } else {
+                  toast.success("All packs removed");
+                  setShowPackManager(false);
+                }
+              } else {
+                toast.success("All packs removed");
+                setShowPackManager(false);
+              }
+            } catch (e) {
+              console.warn("onClearAll updateSessionPacks failed", e);
+            }
           }}
         />
       )}
@@ -1378,6 +1649,7 @@ function PackManagerModal({
 }) {
   const [packDetails, setPackDetails] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
 
   // Fetch pack details when modal opens
   useEffect(() => {
@@ -1392,18 +1664,8 @@ function PackManagerModal({
         const details = await Promise.all(
           selectedPacks.map(async (packId) => {
             try {
-              const response = await fetch(`/api/packs/${packId}`);
-              if (response.ok) {
-                return await response.json();
-              }
-              return {
-                id: packId,
-                display_name: `Pack ${packId}`,
-                category: 'Unknown',
-                created_by_name: 'Unknown',
-                description: 'Pack details unavailable',
-                logo_url: null
-              };
+              const pack = await apiJson(`/api/packs/${packId}`, { method: 'GET' });
+              return pack;
             } catch (error) {
               console.warn(`Failed to fetch pack ${packId}:`, error);
               return {
@@ -1425,7 +1687,6 @@ function PackManagerModal({
         setLoading(false);
       }
     };
-
     fetchDetails();
   }, [open, selectedPacks]);
 
@@ -1471,19 +1732,15 @@ function PackManagerModal({
               {packDetails.map((pack) => (
                 <div key={pack.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {pack.logo_url ? (
-                      <img
+                    {pack.logo_url && !failedLogos[pack.id] ? (
+                      <Image
                         src={pack.logo_url}
                         alt={`${pack.display_name} logo`}
+                        width={32}
+                        height={32}
                         className="w-8 h-8 object-contain"
-                        onError={(e) => {
-                          const img = e.currentTarget as HTMLImageElement;
-                          img.style.display = 'none';
-                          const parent = img.parentElement as HTMLElement | null;
-                          if (parent) {
-                            parent.innerHTML = '<svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7V10C2 16 6 20.5 12 22C18 20.5 22 16 22 10V7L12 2Z"/></svg>';
-                          }
-                        }}
+                        unoptimized
+                        onError={() => setFailedLogos((prev) => ({ ...prev, [pack.id]: true }))}
                       />
                     ) : (
                       <Package className="w-4 h-4 text-blue-600" />
@@ -1541,8 +1798,45 @@ function PackManagerModal({
 
 export default function LauncherPage() {
   return (
-    <Suspense fallback={<div className="p-4 text-sm text-slate-600">Loading…</div>}>
-      <LauncherPageContent />
-    </Suspense>
+    <>
+      <Suspense fallback={<div className="p-4 text-sm text-slate-600">Loading…</div>}>
+        <LauncherPageContent />
+      </Suspense>
+      <Suspense fallback={null}>
+        <IntroModalGate />
+      </Suspense>
+    </>
   );
+}
+
+// A small client component responsible solely for controlling the intro modal.
+// It uses useSearchParams and is rendered within a Suspense boundary to satisfy Next.js requirements.
+function IntroModalGate() {
+  const [open, setOpen] = useState(false);
+  const searchParamsTop = useSearchParams();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const k = "seen_intro_modal_v1";
+    const introParam = searchParamsTop?.get("intro");
+    if (introParam === "reset") {
+      try { window.localStorage.removeItem(k); } catch {}
+    }
+    if (introParam === "welcome") {
+      setOpen(true);
+    } else if (!window.localStorage.getItem(k)) {
+      setOpen(true);
+    }
+  }, [searchParamsTop]);
+
+  const onClose = useCallback(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("seen_intro_modal_v1", "1");
+      }
+    } catch {}
+    setOpen(false);
+  }, []);
+
+  return <FeatureIntroModal open={open} onClose={onClose} />;
 }

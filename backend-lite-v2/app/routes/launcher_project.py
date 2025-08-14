@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db_core import SessionLocal
-from ..models_kiffs import Kiff
+from ..models_kiffs import Kiff, KiffChatSession, ConversationMessage
 
 # Optional imports for AGNO
 try:
@@ -45,6 +45,10 @@ class GenerateResponse(BaseModel):
     session_id: str
     files: List[FileSpec]
     kiff_id: str
+
+
+class UpdateSessionPacksRequest(BaseModel):
+    selected_packs: List[str]
 
 
 # --- Dependencies ---
@@ -371,3 +375,50 @@ async def generate_project(req: GenerateRequest, request: Request, db: Session =
     # Return files for the frontend to apply via /api/preview/files SSE
     out_files = [FileSpec(**f) for f in files]
     return GenerateResponse(session_id=session_id, files=out_files, kiff_id=kiff_id)
+
+
+@router.post("/session/{session_id}/packs")
+async def update_session_packs(session_id: str, req: UpdateSessionPacksRequest, request: Request, db: Session = Depends(get_db)):
+    """Update the session's selected_packs before chat starts.
+
+    Rules:
+    - Allowed only if the session is not active (no chat started yet).
+    - Determined by `agent_state.chat_active` flag; if true -> 409.
+    - Enforces tenant ownership via X-Tenant-ID.
+    """
+    tenant_id = _tenant_id_from_request(request)
+
+    sess = db.query(KiffChatSession).filter(
+        KiffChatSession.id == session_id,
+        KiffChatSession.tenant_id == tenant_id,
+    ).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Parse/normalize agent_state
+    import json as _json
+    state: Dict[str, Any]
+    try:
+        raw = sess.agent_state or {}
+        if isinstance(raw, str):
+            state = _json.loads(raw) if raw else {}
+        elif isinstance(raw, dict):
+            state = raw
+        else:
+            state = {}
+    except Exception:
+        state = {}
+
+    # If chat_active flag is set, block mutation (chat actually started)
+    if bool(state.get("chat_active")):
+        raise HTTPException(status_code=409, detail="Cannot modify packs after chat has started.")
+
+    # Update selected_packs (cap at 5 to keep prompt size small)
+    packs = [str(p) for p in (req.selected_packs or [])][:5]
+    state["selected_packs"] = packs
+    sess.agent_state = state
+    sess.updated_at = dt.datetime.utcnow()
+    db.add(sess)
+    db.commit()
+
+    return {"session_id": sess.id, "selected_packs": packs}

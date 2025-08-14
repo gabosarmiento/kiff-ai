@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
@@ -65,6 +65,35 @@ async def list_kiffs(x_tenant_id: str = Header(None)):
         db.close()
 
 
+@router.get("/paged")
+async def list_kiffs_paged(
+    x_tenant_id: str = Header(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
+):
+    """Paginated list of kiffs for the tenant.
+    Returns { items: Kiff[], total: int, offset: int, limit: int }.
+    """
+    _require_tenant(x_tenant_id)
+    db: Session = SessionLocal()
+    try:
+        base_q = db.query(KiffModel).filter(KiffModel.tenant_id == x_tenant_id)
+        total = base_q.count()
+        rows = (
+            base_q.order_by(KiffModel.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        items = [
+            Kiff(id=r.id, name=r.name, slug=r.slug, model_id=r.model_id, created_at=r.created_at)
+            for r in rows
+        ]
+        return {"items": items, "total": total, "offset": offset, "limit": limit}
+    finally:
+        db.close()
+
+
 @router.post("", response_model=Kiff)
 async def create_kiff(req: CreateKiffRequest, x_tenant_id: str = Header(None)):
     _require_tenant(x_tenant_id)
@@ -99,6 +128,29 @@ async def get_kiff(kiff_id: str, x_tenant_id: str = Header(None)):
         if not row:
             raise HTTPException(status_code=404, detail="kiff not found")
         return Kiff(id=row.id, name=row.name, slug=row.slug, model_id=row.model_id, created_at=row.created_at)
+    finally:
+        db.close()
+
+
+@router.delete("/{kiff_id}")
+async def delete_kiff(kiff_id: str, x_tenant_id: str = Header(None)):
+    _require_tenant(x_tenant_id)
+    db: Session = SessionLocal()
+    try:
+        row = (
+            db.query(KiffModel)
+            .filter(KiffModel.id == kiff_id, KiffModel.tenant_id == x_tenant_id)
+            .first()
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="kiff not found")
+        # Deleting the Kiff row will cascade to messages/sessions due to model relationships
+        db.delete(row)
+        db.commit()
+        return {"ok": True, "deleted_id": kiff_id}
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 

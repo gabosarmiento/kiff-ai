@@ -11,8 +11,11 @@ import asyncio
 from typing import List, Dict, Any, Optional
 import json
 from datetime import datetime
+import uuid
 
 from app.services.embedder_cache import get_embedder
+from app.services.embedder_cache import EMBEDDING_MODEL_NAME
+from app.observability.llm_wrapper import embed_and_track, SessionContext
 
 class VectorStorageService:
     """Manage vector storage for Kiff Packs"""
@@ -25,12 +28,50 @@ class VectorStorageService:
         self.embedder = get_embedder()
     
     def _embed_text(self, text: str) -> List[float]:
-        """Generate embeddings for text using Agno's embedder"""
+        """Generate embeddings for text using Agno's embedder (sync fallback)."""
         if self.embedder:
             return self.embedder.get_embedding(text)
         else:
             # Fallback: use simple hash-based embedding
             return [float(hash(text) % 100) / 100.0 for _ in range(384)]
+
+    async def _embed_text_tracked(self, text: str, tenant_id: Optional[str], *, tool_name: str) -> List[float]:
+        """Generate embeddings via embed_and_track for observability and budgeting."""
+        provider = "sentence-transformers"
+        model = EMBEDDING_MODEL_NAME
+        # Build minimal session context
+        ctx = SessionContext(
+            tenant_id=tenant_id,
+            user_id=None,
+            workspace_id=None,
+            session_id=str(uuid.uuid4()),
+            run_id=str(uuid.uuid4()),
+            step_id=str(uuid.uuid4()),
+            agent_name="vector_storage",
+            tool_name=tool_name,
+        )
+
+        # Define async callable that returns embedding and optional usage
+        async def _call(text: str):
+            # Run sync embedder in a thread to avoid blocking
+            if self.embedder:
+                vec = await asyncio.to_thread(self.embedder.get_embedding, text)
+            else:
+                vec = [float(hash(text) % 100) / 100.0 for _ in range(384)]
+            return {"embedding": vec}
+
+        result = await embed_and_track(
+            provider=provider,
+            model=model,
+            model_version=None,
+            text=text,
+            session_ctx=ctx,
+            tool_name=tool_name,
+            attempt_n=1,
+            cache_hit=False,
+            embed_callable=_call,
+        )
+        return result.get("embedding") if isinstance(result, dict) else result
     
     def _combine_pack_content_for_embedding(self, pack) -> str:
         """Combine pack content into searchable text"""
@@ -104,7 +145,7 @@ class VectorStorageService:
             # Prepare data for LanceDB
             vectors_data = []
             for doc in documents:
-                embedding = self._embed_text(doc["content"])
+                embedding = await self._embed_text_tracked(doc["content"], tenant_id, tool_name="store_pack_vectors")
                 vectors_data.append({
                     "vector": embedding,
                     "content": doc["content"],
@@ -162,8 +203,8 @@ class VectorStorageService:
         try:
             table_name = f"tenant_{tenant_id}_kiff_packs"
             
-            # Generate query embedding
-            query_embedding = self._embed_text(query)
+            # Generate query embedding (tracked)
+            query_embedding = await self._embed_text_tracked(query, tenant_id, tool_name="search_similar_packs")
             
             # Search in LanceDB
             table = self.db.open_table(table_name)

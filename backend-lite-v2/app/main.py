@@ -25,6 +25,10 @@ from .routes import admin_api_gallery_editor
 from .routes import admin_bulk_indexer
 from .routes import api_gallery_public
 from .routes import email
+from .telemetry.otel import init_otel
+from .observability.refresh import refresh_materialized_views, periodic_refresh_task
+from .observability.pricing_sync import sync_model_pricing_from_models_json
+from .observability.bootstrap import ensure_observability_schema
 
 
 def get_allowed_origins() -> list[str]:
@@ -176,3 +180,35 @@ def _seed_models_catalog_if_missing():
 async def _on_startup_seed_models():
     # Seed catalog entries when only non-provider ids exist
     _seed_models_catalog_if_missing()
+    # Initialize OpenTelemetry (no-op if disabled)
+    try:
+        init_otel("kiff-backend-lite-v2")
+    except Exception:
+        pass
+    # Ensure observability tables exist in local MySQL (no-op on Postgres where migrations are required)
+    try:
+        ensure_observability_schema()
+    except Exception:
+        pass
+    # Best-effort: sync model_pricing from models.json if table exists
+    try:
+        from .db_core import SessionLocal as _SL
+        with _SL() as _db:
+            sync_model_pricing_from_models_json(_db)
+    except Exception:
+        pass
+    # One-time refresh of materialized views (best-effort)
+    try:
+        refresh_materialized_views()
+    except Exception:
+        pass
+    # Optionally start periodic refresh task if enabled
+    try:
+        import os as _os
+        enable = (_os.getenv("OBS_REFRESH_ENABLED", "false").lower() in ("1", "true", "yes"))
+        interval = int(_os.getenv("OBS_REFRESH_INTERVAL_SEC", "300"))
+        if enable:
+            import asyncio as _asyncio
+            _asyncio.create_task(periodic_refresh_task(interval_seconds=interval))
+    except Exception:
+        pass

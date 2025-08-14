@@ -89,6 +89,14 @@ class SyncBody(BaseModel):
     role: Optional[str] = "admin"
 
 
+class SocialSyncBody(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    provider: str  # 'google' or 'github'
+    provider_id: str
+    tenant_id: Optional[str] = None
+
+
 def _verify_bridge_signature(req: Request, email: str, role: str) -> bool:
     import hmac, hashlib
     sig = req.headers.get("X-Bridge-Signature") or ""
@@ -117,6 +125,36 @@ async def sync_backend_session(req: Request, res: Response, body: SyncBody):
     cookie = make_cookie(token, secure=SECURE_COOKIES)
     res.set_cookie(**cookie)
     return Profile(email=str(body.email).lower(), role=(body.role or "admin"), tenant_id=tenant_id, has_password=True)
+
+
+@router.post("/social-sync")
+async def social_sync(req: Request, body: SocialSyncBody):
+    """
+    Sync social login user with backend - called by NextAuth signIn callback
+    Creates or updates user from social login providers (Google/GitHub)
+    """
+    tenant_id = body.tenant_id or getattr(req.state, "tenant_id", None) or os.getenv("DEFAULT_TENANT_ID", "4485db48-71b7-47b0-8128-c6dca5be352d")
+    
+    # Check if user exists, create if not
+    user = get_user(body.email)
+    if not user:
+        # Create new social user (no password for social login)
+        user = create_user(
+            email=body.email,
+            password="",  # Empty password for social login
+            role="user"   # Default role for social users
+        )
+    
+    # Update user info from social provider if needed
+    if body.name and hasattr(user, 'name'):
+        user.name = body.name
+    
+    return {
+        "role": user.role,
+        "tenant_id": tenant_id,
+        "email": user.email,
+        "provider": body.provider
+    }
 
 
 class PasswordChangeBody(BaseModel):

@@ -12,7 +12,8 @@ import os
 logger = logging.getLogger(__name__)
 
 # Local embedder setup using proven caching patterns
-EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# Allow backend-only override via env while keeping simple default
+EMBEDDING_MODEL_NAME = os.getenv("KIFF_ST_EMBEDDER_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 # Global caches - single instance for entire application
 _embed_model_cache: Optional = None

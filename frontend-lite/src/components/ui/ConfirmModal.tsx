@@ -15,6 +15,10 @@ type Props = {
 
 export function ConfirmModal({ open, title = "Are you sure?", message, confirmText = "Confirm", cancelText = "Cancel", onConfirm, onCancel, confirmMatch, confirmPlaceholder, }: Props) {
   const [value, setValue] = React.useState("");
+  // Reset input whenever modal opens or the required match text changes
+  React.useEffect(() => {
+    if (open) setValue("");
+  }, [open, confirmMatch]);
   const matchOk = confirmMatch ? value === confirmMatch : true;
   if (!open) return null;
   return (
@@ -31,6 +35,7 @@ export function ConfirmModal({ open, title = "Are you sure?", message, confirmTe
                 placeholder={confirmPlaceholder || confirmMatch}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
+                autoComplete="off"
               />
             </div>
           ) : null}

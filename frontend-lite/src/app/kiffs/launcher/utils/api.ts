@@ -19,6 +19,55 @@ export function getBackendUrl(): string {
 }
 
 export const apiClient = {
+  async updateSessionPacks(session_id: string, selected_packs: string[]): Promise<{ status: number }> {
+    const res = await fetch(`${getBackendUrl()}/api/launcher/session/${encodeURIComponent(session_id)}/packs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": getTenantId(),
+      },
+      body: JSON.stringify({ selected_packs }),
+    });
+    return { status: res.status };
+  },
+  async approveProposal(payload: { session_id: string; proposal_id: string }): Promise<{ status: string }> {
+    const res = await fetch(`${getBackendUrl()}/api/chat/proposals/approve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": getTenantId(),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`approveProposal failed: ${res.status}`);
+    return res.json();
+  },
+
+  async rejectProposal(payload: { session_id: string; proposal_id: string }): Promise<{ status: string }> {
+    const res = await fetch(`${getBackendUrl()}/api/chat/proposals/reject`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": getTenantId(),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`rejectProposal failed: ${res.status}`);
+    return res.json();
+  },
+
+  async setHitlMode(payload: { session_id: string; require_approval: boolean }): Promise<{ status: string; require_approval: boolean }> {
+    const res = await fetch(`${getBackendUrl()}/api/chat/hitl/toggle`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": getTenantId(),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`toggle HITL failed: ${res.status}`);
+    return res.json();
+  },
   // Streaming helper: tries stream endpoint; falls back to non-streaming
   async sendMessageStream(
     payload: Omit<SendMessageRequest, "chat_history"> & { chat_history: ChatMessage[] },
@@ -26,6 +75,7 @@ export const apiClient = {
       onToken: (text: string) => void;
       onDone: (final: SendMessageResponse | null) => void;
       onError: (err: any) => void;
+      onEvent?: (evt: any) => void; // receives structured SSE events like ProposedFileChanges
       signal?: AbortSignal;
     }
   ) {
@@ -73,6 +123,8 @@ export const apiClient = {
                   const parsed = JSON.parse(data);
                   if (typeof parsed?.token === "string") handlers.onToken(parsed.token);
                   if (parsed?.content) handlers.onToken(String(parsed.content));
+                  // forward structured events when present
+                  if (parsed?.type && handlers.onEvent) handlers.onEvent(parsed);
                 } catch {
                   handlers.onToken(data);
                 }

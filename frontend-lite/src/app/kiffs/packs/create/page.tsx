@@ -207,7 +207,18 @@ export default function CreatePackPage() {
         }
       });
 
-      setProcessingStage('Pack created! Processing API documentation...');
+      setProcessingStage('Pack created! Starting processing…');
+
+      // Immediately trigger a reprocess to ensure fresh indexing
+      try {
+        await apiJson(`/api/packs/${result.pack_id}/reprocess`, {
+          method: 'POST'
+        });
+        setProcessingStage('Processing API documentation…');
+      } catch (e) {
+        // Even if reprocess fails here, continue to redirect; the pack page will show status
+        console.warn('Reprocess request failed, proceeding to redirect', e);
+      }
 
       // Add to pending packs in localStorage so Navbar can notify when done
       try {

@@ -40,7 +40,7 @@ const BluePlusCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 const iconCls = "h-5 w-5";
 
 const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
-  { id: "/kiffs/launcher", label: "New Kiff", href: "/kiffs/launcher?reset=true", icon: <BluePlusCircleIcon className="h-5 w-5" /> },
+  { id: "/kiffs/launcher", label: "New Kiff", href: "/kiffs/launcher", icon: <BluePlusCircleIcon className="h-5 w-5" /> },
   { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <ShareNetworkIcon className={iconCls} /> },
   { id: "/kiffs/packs", label: "Kiff Packs", href: "/kiffs/packs", icon: <UsersThreeIcon className={iconCls} /> },
   { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <FoldersIcon className={iconCls} /> },
@@ -107,10 +107,9 @@ export function Sidebar() {
       onToggleCollapsed={(next) => setCollapsed(next)}
       logo={<span className="font-semibold">Kiff</span>}
       onSelect={async (id) => {
-        // Special handling for New Kiff button - always force navigation with reset
+        // Special handling for New Kiff button - always include a timestamp param to force a fresh session
         if (id === "/kiffs/launcher") {
-          const resetUrl = `/kiffs/launcher?reset=true&t=${Date.now()}`;
-          router.push(resetUrl);
+          router.push(`/kiffs/launcher?t=${Date.now()}`);
         } else {
           router.push(id);
         }

@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Sidebar } from "@/components/navigation/Sidebar";
 import { BottomNav } from "@/components/navigation/BottomNav";
@@ -16,56 +17,84 @@ const TrashIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
 interface KiffItem { id: string; name: string; created_at?: string; content_preview?: string }
 
 export default function KiffsIndexPage() {
+  const router = useRouter();
   const { collapsed } = useLayoutState();
   const leftWidth = collapsed ? 72 : 280;
 
   const [kiffs, setKiffs] = React.useState<KiffItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [total, setTotal] = React.useState<number | null>(null);
+  const [offset, setOffset] = React.useState(0);
+  const [limit] = React.useState(20);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   // Delete confirmation modal state
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [targetKiff, setTargetKiff] = React.useState<KiffItem | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
+  // Initial load: prefer paged API, fallback to legacy
   React.useEffect(() => {
     (async () => {
       setLoading(true);
       setError(null);
-      async function tryList(): Promise<KiffItem[] | null> {
-        // 1) Preferred: GET /api/kiffs
+      try {
+        // Preferred: /api/kiffs/paged
+        const paged = await apiJson<{ items: KiffItem[]; total: number; offset: number; limit: number }>(
+          `/api/kiffs/paged?offset=0&limit=${limit}`,
+          { method: "GET" }
+        );
+        setKiffs(Array.isArray(paged.items) ? paged.items : []);
+        setTotal(typeof paged.total === 'number' ? paged.total : null);
+        setOffset((paged.offset || 0) + (paged.items?.length || 0));
+      } catch (err: any) {
+        // Fallback to legacy list
         try {
           const list = await apiJson<KiffItem[]>("/api/kiffs", { method: "GET" });
-          return Array.isArray(list) ? list : [];
-        } catch (err: any) {
-          if (!String(err?.message || "").includes("405")) throw err;
+          setKiffs(Array.isArray(list) ? list : []);
+          setTotal(Array.isArray(list) ? list.length : 0);
+          setOffset(Array.isArray(list) ? list.length : 0);
+        } catch (err2: any) {
+          try {
+            const list = await apiJson<KiffItem[]>("/api/kiffs/", { method: "GET" });
+            setKiffs(Array.isArray(list) ? list : []);
+            setTotal(Array.isArray(list) ? list.length : 0);
+            setOffset(Array.isArray(list) ? list.length : 0);
+          } catch (err3: any) {
+            try {
+              const list = await apiJson<KiffItem[]>("/api/kiffs/list", { method: "POST", body: {} as any });
+              setKiffs(Array.isArray(list) ? list : []);
+              setTotal(Array.isArray(list) ? list.length : 0);
+              setOffset(Array.isArray(list) ? list.length : 0);
+            } catch (err4: any) {
+              setError(err4?.message || "Failed to load kiffs");
+            }
+          }
         }
-        // 2) Alternate trailing slash variant
-        try {
-          const list = await apiJson<KiffItem[]>("/api/kiffs/", { method: "GET" });
-          return Array.isArray(list) ? list : [];
-        } catch (err: any) {
-          if (!String(err?.message || "").includes("405")) throw err;
-        }
-        // 3) Some backends use a list/search route
-        try {
-          const list = await apiJson<KiffItem[]>("/api/kiffs/list", { method: "POST", body: {} as any });
-          return Array.isArray(list) ? list : [];
-        } catch (err: any) {
-          // fallthrough
-        }
-        return null;
-      }
-      try {
-        const result = await tryList();
-        if (result) setKiffs(result);
-        else setError("Listing endpoint not found. Backend may not expose GET /api/kiffs.\nTry adding GET /api/kiffs or POST /api/kiffs/list.");
-      } catch (e: any) {
-        setError(e?.message || "Failed to load kiffs");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [limit]);
+
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const paged = await apiJson<{ items: KiffItem[]; total: number; offset: number; limit: number }>(
+        `/api/kiffs/paged?offset=${offset}&limit=${limit}`,
+        { method: "GET" }
+      );
+      const newItems = Array.isArray(paged.items) ? paged.items : [];
+      setKiffs((prev) => [...prev, ...newItems]);
+      setTotal(typeof paged.total === 'number' ? paged.total : (total ?? 0));
+      setOffset(offset + newItems.length);
+    } catch (e) {
+      // If paged endpoint fails mid-session, stop pagination silently
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -88,6 +117,7 @@ export default function KiffsIndexPage() {
               <div className="mt-10 flex min-h-[40vh] items-center justify-center">
                 <a
                   href="/kiffs/launcher"
+                  onClick={(e) => { e.preventDefault(); router.push(`/kiffs/launcher?t=${Date.now()}`); }}
                   className="flex h-80 w-80 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-6 text-slate-700 hover:bg-slate-50"
                 >
                   <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm">+ New Kiff</button>
@@ -97,12 +127,14 @@ export default function KiffsIndexPage() {
             ) : (
               <div className="mt-4">
                 <div className="mb-4">
-                  <h3 className="text-sm font-medium text-slate-900">All Kiffs</h3>
+                  {total !== null && (
+                    <div className="text-xs text-slate-600">Displaying {kiffs.length} out of {total}</div>
+                  )}
                 </div>
                 <div className="grid gap-6 lg:grid-cols-[1fr,16rem]">
                   {/* Left: Kiffs List */}
                   <div className="space-y-4">
-                    <div className="text-xs text-slate-500">{kiffs.length} total</div>
+                    
                     {kiffs.map((k) => (
                       <div key={k.id} className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 pt-8 pr-24 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors gap-4 sm:gap-6">
                         <span className="absolute top-3 right-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Active</span>
@@ -138,6 +170,7 @@ export default function KiffsIndexPage() {
                   <div className="flex justify-center lg:justify-start">
                     <a
                       href="/kiffs/launcher"
+                      onClick={(e) => { e.preventDefault(); router.push(`/kiffs/launcher?t=${Date.now()}`); }}
                       className="flex h-32 w-full max-w-xs lg:h-64 lg:w-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                     >
                       <button className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">+ New Kiff</button>
@@ -149,6 +182,19 @@ export default function KiffsIndexPage() {
             )
           )}
         </PageContainer>
+        {/* Load More (pagination) */}
+        {!loading && !error && total !== null && offset < total && (
+          <div className="mx-auto my-6 flex w-full max-w-4xl justify-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          </div>
+        )}
+
         {/* Protected Delete Modal */}
         <ConfirmModal
           open={deleteOpen}
@@ -169,6 +215,7 @@ export default function KiffsIndexPage() {
               }
               // Optimistically remove from list
               setKiffs((prev) => prev.filter((x) => x.id !== targetKiff.id));
+              setTotal((prev) => (typeof prev === 'number' ? Math.max(prev - 1, 0) : prev));
               setDeleteOpen(false);
               setTargetKiff(null);
             } catch (e: any) {

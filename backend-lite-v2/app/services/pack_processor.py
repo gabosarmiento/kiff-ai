@@ -13,6 +13,7 @@ from datetime import datetime
 import requests
 from urllib.parse import urljoin, urlparse
 import os
+from contextlib import contextmanager
 
 from agno.agent import Agent
 from agno.models.groq import Groq
@@ -26,6 +27,22 @@ from agno.knowledge.pdf import PDFReader
 from app.db_core import SessionLocal
 from app.models.kiff_packs import KiffPack
 from app.services.vector_storage import VectorStorageService
+
+# --- Observability: OpenTelemetry tracer (safe import) ---
+try:  # pragma: no cover - optional dependency
+    from opentelemetry import trace as _otel_trace  # type: ignore
+    _TRACER = _otel_trace.get_tracer(__name__)
+except Exception:  # pragma: no cover
+    _otel_trace = None  # type: ignore
+    _TRACER = None  # type: ignore
+
+@contextmanager
+def _maybe_span(name: str):
+    if _TRACER is None:
+        yield None
+        return
+    with _TRACER.start_as_current_span(name) as span:  # type: ignore
+        yield span
 
 """
 Configurable crawl limits for pack processing. Defaults are tuned to be generous
@@ -209,7 +226,21 @@ class PackProcessor:
         )
     
     async def process_pack(self, pack_id: str, tenant_id: str) -> bool:
-        """Main processing pipeline for a pack"""
+        """Main processing pipeline for a pack with top-level tracing.
+
+        Only annotate as model-triggered when we actually invoke the LLM or embeddings.
+        No synthetic token/cost metrics are added here.
+        """
+        model_triggered = False
+        with _maybe_span("pack.process") as span:
+            if span is not None:
+                try:
+                    span.set_attribute("kiff.pack_id", pack_id)
+                    span.set_attribute("kiff.tenant_id", tenant_id)
+                    span.set_attribute("kiff.pipeline", "pack_process")
+                    span.set_attribute("kiff.model_triggered", False)
+                except Exception:
+                    pass
         try:
             # Get pack details from database and immediately extract needed data
             db = SessionLocal()
@@ -236,20 +267,46 @@ class PackProcessor:
                 documentation_urls
             )
             
-            # Step 2: Extract API structure
+            # Step 2: Extract API structure (LLM likely invoked by agent)
             print(f"🔍 Analyzing API structure for pack {pack_id}")
-            api_structure = await self._extract_api_structure(documentation)
+            # Mark model as triggered before awaiting agent to ensure span captures it
+            model_triggered = True
+            with _maybe_span("pack.llm.extract_api_structure") as subspan:
+                if subspan is not None:
+                    try:
+                        subspan.set_attribute("kiff.stage", "extract_api_structure")
+                        subspan.set_attribute("kiff.pack_id", pack_id)
+                        subspan.set_attribute("kiff.tenant_id", tenant_id)
+                    except Exception:
+                        pass
+                api_structure = await self._extract_api_structure(documentation)
             
-            # Step 3: Generate code examples
+            # Step 3: Generate code examples (LLM)
             print(f"💻 Generating code examples for pack {pack_id}")
-            code_examples = await self._generate_code_examples(api_structure)
+            with _maybe_span("pack.llm.generate_code_examples") as subspan:
+                if subspan is not None:
+                    try:
+                        subspan.set_attribute("kiff.stage", "generate_code_examples")
+                        subspan.set_attribute("kiff.pack_id", pack_id)
+                        subspan.set_attribute("kiff.tenant_id", tenant_id)
+                    except Exception:
+                        pass
+                code_examples = await self._generate_code_examples(api_structure)
             
-            # Step 4: Create integration patterns
+            # Step 4: Create integration patterns (LLM)
             print(f"🔧 Creating integration patterns for pack {pack_id}")
-            integration_patterns = await self._create_integration_patterns(
-                api_structure, 
-                code_examples
-            )
+            with _maybe_span("pack.llm.create_integration_patterns") as subspan:
+                if subspan is not None:
+                    try:
+                        subspan.set_attribute("kiff.stage", "create_integration_patterns")
+                        subspan.set_attribute("kiff.pack_id", pack_id)
+                        subspan.set_attribute("kiff.tenant_id", tenant_id)
+                    except Exception:
+                        pass
+                integration_patterns = await self._create_integration_patterns(
+                    api_structure, 
+                    code_examples
+                )
             
             # Step 5: Update pack in database
             db = SessionLocal()
@@ -263,17 +320,35 @@ class PackProcessor:
                     pack.updated_at = datetime.utcnow()
                     db.commit()
                     
-                    # Step 6: Store in vector database
+                    # Step 6: Store in vector database (embeddings happen inside VectorStorageService)
                     print(f"💾 Storing pack vectors for pack {pack_id}")
+                    # Embedding wrapper will emit its own spans/usage events.
+                    # We mark model_triggered to ensure we only "track" when models run.
+                    model_triggered = True
                     await self.vector_service.store_pack_vectors(pack, tenant_id)
             finally:
                 db.close()
             
             print(f"✅ Pack {pack_id} processed successfully")
+            with _maybe_span("pack.process") as span2:
+                if span2 is not None:
+                    try:
+                        span2.set_attribute("kiff.status", "success")
+                        span2.set_attribute("kiff.model_triggered", bool(model_triggered))
+                    except Exception:
+                        pass
             return True
             
         except Exception as e:
             print(f"❌ Error processing pack {pack_id}: {e}")
+            with _maybe_span("pack.process") as span3:
+                if span3 is not None:
+                    try:
+                        span3.set_attribute("kiff.status", "error")
+                        span3.set_attribute("kiff.error", str(e))
+                        span3.set_attribute("kiff.model_triggered", bool(model_triggered))
+                    except Exception:
+                        pass
             
             # Update pack status to failed
             try:
