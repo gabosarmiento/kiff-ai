@@ -17,6 +17,22 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
   const { selectedPacks, removePack, clearPacks } = usePacks();
   const [open, setOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
+  // Track if a launcher session is active (URL contains ?kiff or ?sid)
+  const [hasSession, setHasSession] = React.useState(false);
+  React.useEffect(() => {
+    const check = () => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const sid = sp.get('kiff') || sp.get('sid');
+        setHasSession(Boolean(sid));
+      } catch {
+        setHasSession(false);
+      }
+    };
+    check();
+    const iv = setInterval(check, 1500);
+    return () => clearInterval(iv);
+  }, []);
 
   // Bag state
   type BagItem = {
@@ -312,19 +328,21 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
               }
             }}
           >
-            {/* Floating Kiff Packs button */}
-            <div className="mr-2">
-              <button
-                className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
-                onClick={() => setBagOpen(true)}
-                aria-label="Kiff Packs"
-              >
-                <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
-                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-xs text-white">
-                  {selectedPacks.length}
-                </span>
-              </button>
-            </div>
+            {/* Floating Kiff Packs button (hidden when 0 and no session) */}
+            {(selectedPacks.length > 0 || hasSession) && (
+              <div className="mr-2">
+                <button
+                  className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
+                  onClick={() => setBagOpen(true)}
+                  aria-label="Kiff Packs"
+                >
+                  <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
+                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-xs text-white">
+                    {selectedPacks.length}
+                  </span>
+                </button>
+              </div>
+            )}
 
             {/* Expanding segment to the left of the icon */}
             <div
@@ -398,29 +416,33 @@ export function Navbar({ kiffName }: { kiffName?: string }) {
             <span className="truncate max-w-[30vw] font-medium text-slate-700" title={kiffName}>{kiffName}</span>
           </span>
         )}
-        <button
-          className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
-          onClick={() => setBagOpen(true)}
-          aria-label="Kiff Packs"
-        >
-          <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
-          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-xs text-white">
-            {selectedPacks.length}
-          </span>
-        </button>
+        {(selectedPacks.length > 0 || hasSession) && (
+          <button
+            className="relative inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
+            onClick={() => setBagOpen(true)}
+            aria-label="Kiff Packs"
+          >
+            <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-xs text-white">
+              {selectedPacks.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Mobile FAB: Kiff Packs (only on small screens) */}
-      <button
-        className="md:hidden fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-3 shadow-lg"
-        onClick={() => setBagOpen(true)}
-        aria-label="Open Kiff Packs"
-      >
-        <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
-        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white/20 px-1 text-xs">
-          {selectedPacks.length}
-        </span>
-      </button>
+      {(selectedPacks.length > 0 || hasSession) && (
+        <button
+          className="md:hidden fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-3 shadow-lg"
+          onClick={() => setBagOpen(true)}
+          aria-label="Open Kiff Packs"
+        >
+          <span>{selectedPacks.length > 0 ? 'Packed' : 'Packs'}</span>
+          <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white/20 px-1 text-xs">
+            {selectedPacks.length}
+          </span>
+        </button>
+      )}
 
       {/* Kiff Packs Panel */}
       {bagOpen && (

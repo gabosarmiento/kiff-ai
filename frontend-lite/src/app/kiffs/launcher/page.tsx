@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Sidebar } from "@/components/navigation/Sidebar";
 import { BottomNav } from "@/components/navigation/BottomNav";
@@ -42,6 +42,12 @@ function LauncherPageContent() {
   const { collapsed } = useLayoutState();
   const leftWidth = collapsed ? 72 : 280;
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  // Guard to ensure we only bootstrap the "t" param once per mount
+  const bootstrappedRef = useRef(false);
+  // Guard to ensure we only process a given 't' once to avoid effect loops
+  const handledTRef = useRef<string | null>(null);
   const { selectedPacks: globalSelectedPacks, setSelectedPacks: setGlobalSelectedPacks, removePack: removePackGlobal } = usePacks();
   const ideaInputRef = useRef<HTMLTextAreaElement | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -72,10 +78,61 @@ function LauncherPageContent() {
   const [showDeployLogs, setShowDeployLogs] = useState(false);
   const logsRef = useRef<HTMLDivElement | null>(null);
   const [installState, setInstallState] = useState<string>("");
-  const [previewScale, setPreviewScale] = useState<number>(1);
+  const [previewScale, setPreviewScale] = useState(1);
+
+  // If user lands on /kiffs/launcher without kiff or t, append a one-shot t param.
+  // We guard with a ref to avoid re-appending during the brief window before SessionStarted sets kiff.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const hasKiff = !!sp.get('kiff');
+      const hasT = !!sp.get('t');
+      // If neither param exists, always append a one-shot t, even if Fast Refresh
+      // preserved the ref. The ref only prevents re-appending when params already exist.
+      if (!hasKiff && !hasT) {
+        console.debug('[launcher] bootstrap: no kiff/t found, appending t', { pathname, search: window.location.search });
+        sp.set('t', String(Date.now()));
+        router.replace(`${pathname}?${sp.toString()}`);
+        bootstrappedRef.current = true;
+        return;
+      }
+      console.debug('[launcher] bootstrap: params present, skipping append', { pathname, search: window.location.search, hasKiff, hasT });
+      if (bootstrappedRef.current) return;
+      bootstrappedRef.current = true;
+    } catch {}
+  }, [pathname, router]);
+
   // Model selection (like compose)
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [model, setModel] = useState<string>("moonshotai/kimi-k2-instruct");
+  // Accessible combobox state
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelHighlight, setModelHighlight] = useState<number | null>(null);
+  const [modelTypeahead, setModelTypeahead] = useState("");
+  const modelMenuRef = useRef<HTMLDivElement | null>(null);
+  // Stable derived URL params to avoid effect reruns due to identity churn
+  const tParam = useMemo(() => searchParams.get('t'), [searchParams]);
+  const kiffParam = useMemo(() => searchParams.get('kiff'), [searchParams]);
+  const packParam = useMemo(() => searchParams.get('pack'), [searchParams]);
+  const resetParam = useMemo(() => searchParams.get('reset'), [searchParams]);
+  const arraysEqual = (a: string[] | null | undefined, b: string[] | null | undefined) => {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+  useEffect(() => {
+    function onDocKey(e: KeyboardEvent) { if (e.key === 'Escape') setModelMenuOpen(false); }
+    function onDocClick(e: MouseEvent) {
+      const el = modelMenuRef.current; if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) setModelMenuOpen(false);
+    }
+    document.addEventListener('keydown', onDocKey);
+    document.addEventListener('mousedown', onDocClick);
+    return () => { document.removeEventListener('keydown', onDocKey); document.removeEventListener('mousedown', onDocClick); };
+  }, []);
   // Holds the active SSE stopper for file-apply, to allow cleanup on reset/navigation
   const sseStopRef = useRef<(() => void) | null>(null);
 
@@ -143,7 +200,7 @@ function LauncherPageContent() {
       }
     })();
     return () => { cancelled = true; };
-  }, [model]); // Remove model dependency to avoid loop
+  }, []); // Do not depend on model to avoid loop
 
   // Load persisted state
   useEffect(() => {
@@ -160,9 +217,9 @@ function LauncherPageContent() {
   // Initialize selected packs from global context and auto-open selector if packs exist
   useEffect(() => {
     if (globalSelectedPacks.length > 0) {
-      setSelectedPacks(globalSelectedPacks);
+      setSelectedPacks(prev => (arraysEqual(prev, globalSelectedPacks) ? prev : globalSelectedPacks));
       // Auto-open pack selector when there are selected packs
-      setShowPackSelector(true);
+      setShowPackSelector(prev => (prev ? prev : true));
     }
   }, [globalSelectedPacks]);
 
@@ -178,18 +235,22 @@ function LauncherPageContent() {
 
   // Check for pack parameter in URL
   useEffect(() => {
-    const packId = searchParams.get('pack');
-    if (packId) {
-      setSelectedPacks([packId]);
+    if (packParam) {
+      setSelectedPacks(prev => (prev.length === 1 && prev[0] === packParam ? prev : [packParam]));
     }
-  }, [searchParams]);
+  }, [packParam]);
 
   // Force reset to idle state when navigating via sidebar "New Kiff" (adds ?t=...)
   // Only do this when there is NO explicit kiff to load
   useEffect(() => {
-    const t = searchParams.get('t');
-    const kid = searchParams.get('kiff');
+    const t = tParam;
+    const kid = kiffParam;
     if (t && !kid) {
+      // If we already handled this exact 't', do nothing to avoid re-running the reset.
+      if (handledTRef.current === t) {
+        return;
+      }
+      handledTRef.current = t;
       // Clear persisted launcher state
       try { localStorage.removeItem('kiff_launcher_state'); } catch {}
       // Remove any stored packs for previous kiffs
@@ -233,12 +294,28 @@ function LauncherPageContent() {
       // Stop any ongoing file-apply SSE
       try { sseStopRef.current && sseStopRef.current(); } catch {}
       sseStopRef.current = null;
+      // Defer removing the 't' param until 'kiff' is present in the URL.
+      // This keeps '?t=...' visible briefly on bare launcher, then swaps to '?kiff=...'.
+      try {
+        if (typeof window !== 'undefined') {
+          const sp = new URLSearchParams(window.location.search);
+          const hasKiffNow = !!sp.get('kiff');
+          if (hasKiffNow) {
+            console.debug('[launcher] cleanup: kiff present, removing t', { pathname, search: window.location.search });
+            sp.delete('t');
+            const q = sp.toString();
+            router.replace(`${pathname}${q ? `?${q}` : ''}`);
+          } else {
+            console.debug('[launcher] cleanup: kiff not yet present, keeping t', { pathname, search: window.location.search });
+          }
+        }
+      } catch {}
     }
-  }, [searchParams, setGlobalSelectedPacks]);
+  }, [tParam, kiffParam, setGlobalSelectedPacks, router, pathname]);
 
   // Handle opening a specific kiff from URL (?kiff=ID): flush current chat and load its history
   useEffect(() => {
-    const kid = searchParams.get('kiff');
+    const kid = kiffParam;
     if (!kid || kid === kiffId) return;
     setKiffId(kid);
     setSessionId(null);
@@ -323,11 +400,11 @@ function LauncherPageContent() {
         console.warn("Failed to load session for kiff", e);
       }
     })();
-  }, [searchParams, kiffId]);
+  }, [kiffParam, kiffId]);
 
   // Check for reset parameter in URL and reset state
   useEffect(() => {
-    const shouldReset = searchParams.get('reset');
+    const shouldReset = resetParam;
     if (shouldReset === 'true') {
       // Reset all state to initial values
       setHasProject(false);
@@ -361,7 +438,7 @@ function LauncherPageContent() {
       
       toast.success("New Kiff ready!");
     }
-  }, [searchParams]);
+  }, [resetParam]);
 
   // Refresh files from sandbox (e2b) for current session and keep selection when possible
   const refreshFiles = useCallback(async () => {
@@ -482,7 +559,21 @@ function LauncherPageContent() {
             // Attach proposal metadata to the current assistant message
             try {
               if (!evt) return;
-              // Normalize: detect proposal-like payloads
+              // 1) Capture early session id if backend emits it
+              if (evt.type === 'SessionStarted' && typeof evt.session_id === 'string') {
+                setSessionId(evt.session_id);
+                // Prefer kiff_id for URL so reload can restore by kiff
+                try {
+                  if (typeof window !== 'undefined') {
+                    const sp = new URLSearchParams(window.location.search);
+                    const urlId = typeof evt.kiff_id === 'string' && evt.kiff_id ? evt.kiff_id : evt.session_id;
+                    sp.set('kiff', urlId);
+                    window.history.replaceState(null, '', `?${sp.toString()}`);
+                  }
+                } catch {}
+                return;
+              }
+              // 2) Normalize: detect proposal-like payloads
               const looksProposal = evt.type === 'ProposedFileChanges' || evt.proposal_id || evt.changes;
               if (!looksProposal) return;
               setChatMessages((prev) => {
@@ -493,7 +584,6 @@ function LauncherPageContent() {
                 const m = next[target] || { role: 'assistant', content: '' };
                 const meta = { ...(m as any).metadata };
                 const proposals = Array.isArray(meta.proposals) ? [...meta.proposals] : [];
-                // Build a compact proposal object for UI
                 const proposal = {
                   id: evt.proposal_id || evt.id || undefined,
                   title: evt.title || 'Proposed file changes',
@@ -1091,48 +1181,108 @@ function LauncherPageContent() {
         <h2 className="m-0 text-lg font-semibold">Launcher</h2>
       </div>
       <div className="flex items-center gap-2">
-        {/* Model selector */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-600">Model</label>
-          <select
-            className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
+        {/* Model selector (accessible combobox) */}
+        <div className="relative" ref={modelMenuRef}>
+          <div
+            role="combobox"
+            aria-expanded={modelMenuOpen ? 'true' : 'false'}
+            aria-controls="model-listbox"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                setModelMenuOpen(true);
+                setTimeout(() => {
+                  const el = document.getElementById('model-listbox');
+                  el?.focus();
+                }, 0);
+              }
+            }}
+            onClick={() => setModelMenuOpen((v) => !v)}
+            className="min-w-[220px] cursor-pointer select-none rounded-full border border-slate-200 bg-white px-3 py-1.5 text-left shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            aria-label="Model selector"
           >
-            {modelOptions.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{model}</div>
+                <div className="truncate text-[11px] text-slate-500">Choose the AI model</div>
+              </div>
+              <svg
+                className={`h-4 w-4 text-slate-500 transition-transform ${modelMenuOpen ? 'rotate-180' : ''}`}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M5.23 7.21a.75.75 0 011.06.02L10 11.084l3.71-3.853a.75.75 0 111.08 1.04l-4.24 4.4a.75.75 0 01-1.08 0l-4.24-4.4a.75.75 0 01.02-1.06z" />
+              </svg>
+            </div>
+          </div>
+          {modelMenuOpen && (
+            <div
+              role="listbox"
+              id="model-listbox"
+              tabIndex={-1}
+              aria-label="Models"
+              className="absolute z-20 mt-1 w-[min(320px,90vw)] max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg outline-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setModelMenuOpen(false); return; }
+                if (e.key === 'ArrowDown') { e.preventDefault(); setModelHighlight((i) => Math.min((i ?? -1) + 1, modelOptions.length - 1)); return; }
+                if (e.key === 'ArrowUp') { e.preventDefault(); setModelHighlight((i) => Math.max((i ?? modelOptions.length) - 1, 0)); return; }
+                if (e.key === 'Home') { e.preventDefault(); setModelHighlight(0); return; }
+                if (e.key === 'End') { e.preventDefault(); setModelHighlight(modelOptions.length - 1); return; }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const idx = modelHighlight ?? 0;
+                  const sel = modelOptions[idx];
+                  if (sel) { setModel(sel); setModelMenuOpen(false); }
+                  return;
+                }
+                // simple typeahead
+                const ch = e.key?.toLowerCase();
+                if (ch && ch.length === 1 && /[a-z0-9_\-./]/.test(ch)) {
+                  setModelTypeahead((s) => (s + ch).slice(-32));
+                  const idx = modelOptions.findIndex((m) => m.toLowerCase().startsWith(((modelTypeahead || '') + ch)));
+                  if (idx >= 0) setModelHighlight(idx);
+                }
+              }}
+            >
+              {modelOptions.map((m, i) => (
+                <div
+                  role="option"
+                  aria-selected={m === model}
+                  key={m}
+                  onMouseEnter={() => setModelHighlight(i)}
+                  onMouseDown={(e) => { e.preventDefault(); }}
+                  onClick={() => { setModel(m); setModelMenuOpen(false); }}
+                  className={`flex items-center justify-between gap-3 px-3 py-2 text-sm cursor-pointer ${i === modelHighlight ? 'bg-slate-50' : ''}`}
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{m}</div>
+                    <div className="truncate text-[11px] text-slate-500">General-purpose model</div>
+                  </div>
+                  {m === model && (
+                    <svg className="h-4 w-4 text-blue-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.5 7.5a1 1 0 01-1.42 0l-3-3a1 1 0 011.42-1.42l2.29 2.29 6.79-6.79a1 1 0 011.42 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          onClick={() => setShowPackSelector(!showPackSelector)}
+          onClick={() => setShowPackManager((open) => !open)}
           className="flex items-center gap-1"
-          aria-label="Toggle Packs"
+          aria-label="Manage Packs"
+          title="Manage your selected packs"
+          aria-pressed={showPackManager}
         >
-          <Package className="w-4 h-4" />
-          Packs
-          {selectedPacks.length > 0 && (
-            <span className="ml-1 text-xs rounded-full bg-blue-600 text-white px-1.5 py-0.5">
-              {selectedPacks.length}
-            </span>
-          )}
-          {showPackSelector ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          <Settings className="w-4 h-4" />
+          Manage Packs
+          <span className="ml-1 inline-flex items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-xs text-white min-w-[1.25rem]">{selectedPacks.length}</span>
         </Button>
-        {selectedPacks.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPackManager(true)}
-            className="flex items-center gap-1"
-            aria-label="Manage Selected Packs"
-            title="Manage your selected packs"
-          >
-            <Settings className="w-4 h-4" />
-            Manage Packs
-          </Button>
-        )}
         {hasProject && (
           <Button variant="ghost" size="sm" onClick={resetAll} className="flex items-center gap-1" aria-label="Reset">
             <RotateCcw className="w-4 h-4" />
@@ -1209,13 +1359,32 @@ function LauncherPageContent() {
           </div>
         </CardContent>
       </Card>
-      <button
-        className="mt-3 text-sm text-blue-600 hover:underline"
-        onClick={() => setShowPackSelector(true)}
-        aria-label="Show Packs"
-      >
-        Show Packs →
-      </button>
+      {/* Packs context like Compose */}
+      <div className="mt-4 text-sm text-slate-700">
+        <div className="font-semibold">Supercharged by Packs</div>
+        <div className="text-slate-500">
+          {selectedPacks.length === 0 ? 'No Packs selected' : `${selectedPacks.length} Pack${selectedPacks.length>1?'s':''} selected`}
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => (window.location.href = '/api-gallery')}
+            className="px-2"
+          >
+            Browse API Gallery
+          </Button>
+          <span className="h-4 w-px bg-slate-200" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => (window.location.href = '/kiffs/packs')}
+            className="px-2"
+          >
+            Customize Packs
+          </Button>
+        </div>
+      </div>
     </div>
   );
 
@@ -1487,68 +1656,61 @@ function LauncherPageContent() {
       )}
 
       {/* Pack Manager Modal */}
-      {showPackManager && (
-        <PackManagerModal
-          open={showPackManager}
-          onClose={() => setShowPackManager(false)}
-          selectedPacks={selectedPacks}
-          onRemovePack={async (packId) => {
-            if (hasProject) {
-              setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
-              toast.error("Can't change packs during an active chat");
-              return;
-            }
-            const next = selectedPacks.filter(id => id !== packId);
-            const prev = selectedPacks;
-            setSelectedPacks(next);
-            removePackGlobal(packId);
-            try {
-              if (sessionId) {
-                const res = await apiClient.updateSessionPacks(sessionId, next);
-                if (res.status === 409) {
-                  setSelectedPacks(prev);
-                  setPackConflict("Another process locked packs for this session. Start a new chat to change packs.");
-                  toast.error("Pack change conflicted (409)");
-                } else {
-                  toast.success("Pack removed from your selection");
-                }
-              } else {
-                toast.success("Pack removed from your selection");
+      <PackManagerModal
+        open={showPackManager}
+        onClose={() => setShowPackManager(false)}
+        selectedPacks={selectedPacks}
+        onRemovePack={async (packId) => {
+          if (hasProject) {
+            setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
+            toast.error("Can't change packs during an active chat");
+            return;
+          }
+          const next = selectedPacks.filter(id => id !== packId);
+          const prev = selectedPacks;
+          setSelectedPacks(next);
+          removePackGlobal(packId);
+          try {
+            if (sessionId) {
+              const res = await apiClient.updateSessionPacks(sessionId, next);
+              if (res.status < 200 || res.status >= 300) {
+                setSelectedPacks(prev);
+                toast.error("Failed to update packs");
               }
-            } catch (e) {
-              console.warn("onRemovePack updateSessionPacks failed", e);
             }
-          }}
-          onClearAll={async () => {
-            if (hasProject) {
-              setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
-              toast.error("Can't change packs during an active chat");
-              return;
-            }
-            const prev = selectedPacks;
-            setSelectedPacks([]);
-            setGlobalSelectedPacks([]);
-            try {
-              if (sessionId) {
-                const res = await apiClient.updateSessionPacks(sessionId, []);
-                if (res.status === 409) {
-                  setSelectedPacks(prev);
-                  setPackConflict("Another process locked packs for this session. Start a new chat to change packs.");
-                  toast.error("Pack change conflicted (409)");
-                } else {
-                  toast.success("All packs removed");
-                  setShowPackManager(false);
-                }
-              } else {
-                toast.success("All packs removed");
-                setShowPackManager(false);
+          } catch (e) {
+            console.warn("onRemovePack updateSessionPacks failed", e);
+            setSelectedPacks(prev);
+            toast.error("Failed to update packs");
+          }
+        }}
+        onClearAll={async () => {
+          if (hasProject) {
+            setPackConflict("Packs are locked for this chat. Start a new chat to change packs.");
+            toast.error("Can't change packs during an active chat");
+            return;
+          }
+          const prev = selectedPacks;
+          setSelectedPacks([]);
+          setGlobalSelectedPacks([]);
+          try {
+            if (sessionId) {
+              const res = await apiClient.updateSessionPacks(sessionId, []);
+              if (res.status < 200 || res.status >= 300) {
+                setSelectedPacks(prev);
+                setGlobalSelectedPacks(prev);
+                toast.error("Failed to clear packs");
               }
-            } catch (e) {
-              console.warn("onClearAll updateSessionPacks failed", e);
             }
-          }}
+          } catch (e) {
+            console.warn("onClearAll updateSessionPacks failed", e);
+            setSelectedPacks(prev);
+            setGlobalSelectedPacks(prev);
+            toast.error("Failed to clear packs");
+          }
+        }}
         />
-      )}
+      
 
       {/* Deploy Logs Toggle (top-right) */}
       {hasProject && (
@@ -1644,17 +1806,25 @@ function PackManagerModal({
   open: boolean;
   onClose: () => void;
   selectedPacks: string[];
-  onRemovePack: (packId: string) => void;
-  onClearAll: () => void;
+  onRemovePack: (packId: string) => void | Promise<void>;
+  onClearAll: () => void | Promise<void>;
 }) {
   const [packDetails, setPackDetails] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
+  const packsKey = useMemo(() => {
+    // Stable signature to avoid effect re-running due to array identity changes
+    return selectedPacks && selectedPacks.length
+      ? [...selectedPacks].join(',')
+      : '';
+  }, [selectedPacks]);
 
   // Fetch pack details when modal opens
   useEffect(() => {
-    if (!open || selectedPacks.length === 0) {
-      setPackDetails([]);
+    let cancelled = false;
+    if (!open || packsKey === '') {
+      // Avoid infinite re-render by only updating when state actually changes
+      setPackDetails((prev) => (prev.length ? [] : prev));
       return;
     }
     
@@ -1679,16 +1849,17 @@ function PackManagerModal({
             }
           })
         );
-        setPackDetails(details);
+        if (!cancelled) setPackDetails(details);
       } catch (error) {
         console.error('Failed to fetch pack details:', error);
-        setPackDetails([]);
+        if (!cancelled) setPackDetails([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchDetails();
-  }, [open, selectedPacks]);
+    return () => { cancelled = true; };
+  }, [open, packsKey, selectedPacks]);
 
   if (!open) return null;
 
@@ -1724,8 +1895,27 @@ function PackManagerModal({
           ) : packDetails.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No packs selected</p>
-              <p className="text-sm">Add packs from the gallery to get started</p>
+              <p className="font-medium text-gray-700">No packs selected</p>
+              <p className="text-sm mb-4">Add packs to supercharge your experience</p>
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => (window.location.href = '/api-gallery')}
+                  className="px-2"
+                >
+                  Browse API Gallery
+                </Button>
+                <span className="h-4 w-px bg-slate-200" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => (window.location.href = '/kiffs/packs')}
+                  className="px-2"
+                >
+                  Customize Packs
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">

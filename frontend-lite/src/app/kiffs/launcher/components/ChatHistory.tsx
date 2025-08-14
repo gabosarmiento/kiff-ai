@@ -13,20 +13,77 @@ type Props = {
   onRejectProposal?: (proposalId: string) => void;
 };
 
-// Simple code block with line numbers, copy button, language label.
-function CodeBlock({ inline, className, children }: { inline?: boolean; className?: string; children: React.ReactNode }) {
-  const code = String(children ?? "");
-  const match = /language-([\w-]+)/.exec(className || "");
-  const language = match?.[1] || "text";
-  const lines = useMemo(() => code.replace(/\n$/,"" ).split("\n"), [code]);
+// Local component to render a single proposed change with optional diff toggle
+function ChangeRow({ pid, index, label, path, diff }: { pid: string; index: number; label: string; path: string; diff?: string }) {
+  const [open, setOpen] = React.useState(false);
+  const hasDiff = typeof diff === 'string' && diff.length > 0;
+  return (
+    <li className="text-[11px]">
+      <div className="flex items-center gap-1">
+        <span className="inline-block w-12 text-gray-500">{label}</span>
+        <span className="truncate flex-1">{path}</span>
+        {hasDiff ? (
+          <button
+            className="ml-2 px-1.5 py-0.5 rounded border text-gray-700 hover:bg-gray-50"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-controls={`diff-${pid}-${index}`}
+          >
+            {open ? 'Hide diff' : 'View diff'}
+          </button>
+        ) : null}
+      </div>
+      {hasDiff && open ? (
+        <div id={`diff-${pid}-${index}`} className="mt-1 border rounded bg-gray-50">
+          <pre className="overflow-x-auto text-[11px] leading-5 p-2">
+            <code>
+              {diff}
+            </code>
+          </pre>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+// Inline code renderer
+function InlineCode({ className, children }: { className?: string; children: React.ReactNode }) {
+  const text = String(children ?? "");
+  return (
+    <code className={`px-1 py-0.5 rounded bg-gray-100 text-gray-900 font-mono text-[0.9em] ${className || ""}`.trim()}>{text}</code>
+  );
+}
+
+// Block code renderer used as a <pre> wrapper from react-markdown
+function CodeBlock({ children }: { children: React.ReactNode }) {
+  // react-markdown renders <pre><code class="language-xyz">content</code></pre>
+  // We receive that structure as children here; extract the inner text and language
+  let codeText = "";
+  let language = "text";
+  if (React.isValidElement(children)) {
+    const child: any = children;
+    const raw = child?.props?.children;
+    if (typeof raw === "string") codeText = raw;
+    else if (Array.isArray(raw) && typeof raw[0] === "string") codeText = raw[0];
+    const match = /language-([\w-]+)/.exec(child?.props?.className || "");
+    if (match?.[1]) language = match[1];
+  } else if (Array.isArray(children) && children.length > 0) {
+    const first: any = children[0];
+    const raw = first?.props?.children;
+    if (typeof raw === "string") codeText = raw;
+    else if (Array.isArray(raw) && typeof raw[0] === "string") codeText = raw[0];
+    const match = /language-([\w-]+)/.exec(first?.props?.className || "");
+    if (match?.[1]) language = match[1];
+  }
+  const lines = useMemo(() => codeText.replace(/\n$/,"" ).split("\n"), [codeText]);
 
   const copy = async () => {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
+        await navigator.clipboard.writeText(codeText);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = code;
+        ta.value = codeText;
         ta.style.position = "fixed";
         ta.style.left = "-9999px";
         document.body.appendChild(ta);
@@ -39,12 +96,6 @@ function CodeBlock({ inline, className, children }: { inline?: boolean; classNam
       toast.error("Copy failed—press Ctrl/Cmd+C");
     }
   };
-
-  if (inline) {
-    return (
-      <code className="px-1 py-0.5 rounded bg-gray-100 text-gray-900 font-mono text-[0.9em]">{code}</code>
-    );
-  }
 
   return (
     <div className="relative group not-prose my-2 border border-gray-200 rounded bg-white">
@@ -197,20 +248,62 @@ export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser
                     // Security: skip raw HTML
                     skipHtml
                     components={{
-                      code: CodeBlock as any,
-                      a: (props) => (
+                      // Render paragraphs as divs to avoid block elements inside <p>
+                      p: ({ children }: any) => <div>{children}</div>,
+                      // Custom pre wrapper renders our rich code block
+                      pre: ({ children }: any) => <CodeBlock>{children}</CodeBlock>,
+                      // Inline code stays inline; for block code we let <pre> handle it
+                      code: (props: any) => (
+                        props?.inline ? <InlineCode className={props.className}>{props.children}</InlineCode> : <code className={props.className}>{props.children}</code>
+                      ),
+                      a: (props: any) => (
                         <a {...props} target="_blank" rel="noopener noreferrer" className="underline text-blue-600" />
                       ),
-                    }}
+                    } as any}
                   >
-                    {m.content}
+                    {typeof m.content === 'string' ? m.content : String(m.content ?? '')}
                   </ReactMarkdown>
                 </div>
 
                 {/* Inline HITL proposal cards */}
-                {!isUser && Array.isArray((m as any).metadata?.proposals) && (m as any).metadata!.proposals.length > 0 ? (
+                {(() => {
+                  if (isUser) return null;
+                  const metaProposals: any[] = Array.isArray((m as any).metadata?.proposals) ? (m as any).metadata!.proposals : [];
+                  // Fallback: parse proposals embedded in assistant content like "DEBUG PROPOSAL:{...json...}"
+                  const contentStr = typeof m.content === 'string' ? m.content : '';
+                  const parsedFromContent: any[] = [];
+                  try {
+                    // Handle possibly line-broken markers e.g. "DEBUG PROPOSAL:{\n  ... }"
+                    const markerIdx = contentStr.indexOf('PROPOSAL');
+                    if (markerIdx >= 0) {
+                      // Find first "{" after the marker
+                      const jsonStart = contentStr.indexOf('{', markerIdx);
+                      if (jsonStart >= 0) {
+                        // Heuristic: find last closing brace before next DEBUG or end
+                        const tail = contentStr.slice(jsonStart);
+                        // Try progressively to parse a JSON block by balancing braces
+                        let depth = 0; let end = -1;
+                        for (let i = 0; i < tail.length; i++) {
+                          const ch = tail[i];
+                          if (ch === '{') depth++;
+                          else if (ch === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+                        }
+                        if (end > 0) {
+                          const jsonText = tail.slice(0, end);
+                          try {
+                            const obj = JSON.parse(jsonText);
+                            const changes = Array.isArray(obj?.changes) ? obj.changes : [];
+                            parsedFromContent.push({ id: obj?.proposal_id || obj?.id, title: obj?.title || 'Proposed file changes', changes });
+                          } catch {}
+                        }
+                      }
+                    }
+                  } catch {}
+                  const proposals: any[] = [...metaProposals, ...parsedFromContent];
+                  if (proposals.length === 0) return null;
+                  return (
                   <div className="mt-3 space-y-2">
-                    {(m as any).metadata!.proposals.map((p: any, idx: number) => {
+                    {proposals.map((p: any, idx: number) => {
                       const pid = p?.id || p?.proposal_id || `proposal-${idx}`;
                       const title = p?.title || "Proposed file changes";
                       const changes = Array.isArray(p?.changes) ? p.changes : [];
@@ -227,15 +320,16 @@ export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser
                           </div>
                           {changes.length > 0 ? (
                             <ul className="mt-1 space-y-1">
-                              {changes.slice(0, 5).map((c: any, ci: number) => (
-                                <li key={ci} className="text-[11px] flex items-center gap-1">
-                                  <span className="inline-block w-12 text-gray-500">{String(c?.action || c?.op || 'edit')}</span>
-                                  <span className="truncate flex-1">{String(c?.path || c?.file || '')}</span>
-                                </li>
+                              {changes.map((c: any, ci: number) => (
+                                <ChangeRow
+                                  key={ci}
+                                  pid={pid}
+                                  index={ci}
+                                  label={String(c?.action || c?.op || 'edit')}
+                                  path={String(c?.path || c?.file || '')}
+                                  diff={typeof c?.diff === 'string' ? c.diff : undefined}
+                                />
                               ))}
-                              {changes.length > 5 ? (
-                                <li className="text-[11px] text-gray-500">+{changes.length - 5} more…</li>
-                              ) : null}
                             </ul>
                           ) : null}
                           <div className="mt-2 flex items-center gap-2">
@@ -260,7 +354,8 @@ export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser
                       );
                     })}
                   </div>
-                ) : null}
+                  );
+                })()}
                 <div className="text-[10px] opacity-60 mt-1">
                   {m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : ""}
                 </div>

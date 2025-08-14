@@ -24,6 +24,7 @@ async function fetchWithTenant(input: RequestInfo | URL, init: RequestInit = {})
 export type SocialProvider = 'google' | 'github' | 'apple'
 
 export function LoginPage() {
+  const APPLE_ENABLED = process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === 'true'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState<'none' | 'password' | SocialProvider>('none')
@@ -146,18 +147,20 @@ export function LoginPage() {
               🐙
               Continue with GitHub
             </button>
-            <button
-              onClick={() => onSocialLogin('apple')}
-              disabled={loading !== 'none'}
-              className={cn(
-                'flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium',
-                'hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
-              )}
-              aria-label="Continue with Apple"
-            >
-              <img src="https://cdn.simpleicons.org/apple/000000" alt="Apple" className="h-4 w-4" />
-              Continue with Apple
-            </button>
+            {APPLE_ENABLED && (
+              <button
+                onClick={() => onSocialLogin('apple')}
+                disabled={loading !== 'none'}
+                className={cn(
+                  'flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium',
+                  'hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
+                )}
+                aria-label="Continue with Apple"
+              >
+                <img src="https://cdn.simpleicons.org/apple/000000" alt="Apple" className="h-4 w-4" />
+                Continue with Apple
+              </button>
+            )}
           </div>
 
           <div className="my-6 flex items-center gap-3">

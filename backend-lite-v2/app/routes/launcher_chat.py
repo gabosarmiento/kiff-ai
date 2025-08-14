@@ -394,6 +394,13 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
         final_content_parts: List[str] = []
         final_tool_calls: List[Dict[str, Any]] = []
         ended = False
+        # Emit early SessionStarted event before any tokens
+        try:
+            yield "event: message\n"
+            yield f"data: {json.dumps({'type': 'SessionStarted', 'session_id': session.id, 'kiff_id': session.kiff_id})}\n\n"
+        except Exception:
+            # Non-fatal; continue streaming
+            pass
         try:
             if getattr(agent, "agent", None) is None:
                 # AGNO unavailable, send minimal fallback
@@ -535,6 +542,14 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no",  # for nginx
     }
+    # Respect existing configured frontend origin for CORS if set globally via env
+    try:
+        _origin = os.getenv("FRONTEND_ORIGIN") or os.getenv("APP_FRONTEND_ORIGIN")
+        if _origin:
+            headers["Access-Control-Allow-Origin"] = _origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+    except Exception:
+        pass
     return StreamingResponse(event_generator(), headers=headers, media_type="text/event-stream")
 
 
@@ -631,12 +646,22 @@ async def toggle_hitl(req: HitlToggleRequest, request: Request, db: Session = De
 @router.post("/load-session", response_model=LoadSessionResponse)
 async def load_session(req: LoadSessionRequest, request: Request, db: Session = Depends(get_db)):
     tenant_id = _tenant_id_from_request(request)
+    # First, try interpreting provided ID as a kiff_id (existing behavior)
     session = (
         db.query(KiffChatSession)
         .filter(KiffChatSession.kiff_id == req.kiff_id, KiffChatSession.tenant_id == tenant_id)
         .order_by(KiffChatSession.created_at.desc())
         .first()
     )
+    # If not found, also try treating the provided value as a session_id.
+    # This makes the endpoint resilient when the frontend passes a session id in the `kiff` URL param.
+    if not session:
+        session = (
+            db.query(KiffChatSession)
+            .filter(KiffChatSession.id == req.kiff_id, KiffChatSession.tenant_id == tenant_id)
+            .order_by(KiffChatSession.created_at.desc())
+            .first()
+        )
     if not session:
         raise HTTPException(status_code=404, detail="No session found for kiff")
 

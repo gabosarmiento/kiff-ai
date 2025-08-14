@@ -100,7 +100,8 @@ export default function KiffPacksPage() {
         limit: '50'
       });
       
-      const data = await apiJson<PacksResponse>(`/api/packs?${params}`);
+      // Use trailing slash to avoid backend 307 redirect when route is defined as /api/packs/
+      const data = await apiJson<PacksResponse>(`/api/packs/?${params}`);
       setPacks(data.packs);
     } catch (error) {
       console.error('Error fetching packs:', error);
@@ -109,7 +110,8 @@ export default function KiffPacksPage() {
     }
   }, [isAuthenticated, searchQuery, categoryFilter, sortBy]);
 
-  // Fetch stats only on client to avoid Next.js export errors
+  // Fetch stats only on client to avoid Next.js export errors.
+  // Stabilize this callback so it doesn't depend on `packs` to prevent effect loops.
   const fetchPackStats = useCallback(async () => {
     if (typeof window === 'undefined') return;
     try {
@@ -117,26 +119,11 @@ export default function KiffPacksPage() {
       const data = await apiJson<PackStats>('/api/packs/stats');
       setStats(data);
     } catch (error) {
-      console.warn('Pack stats API unavailable, computing fallback from packs', error);
-      // Fallback: compute basic stats from current packs list
-      setStats((prev) => {
-        const total_packs = packs.length;
-        const total_usage = packs.reduce((acc, p) => acc + (p.usage_count || 0), 0);
-        const avg_rating_vals = packs.map((p) => p.avg_rating).filter((n) => typeof n === 'number' && !Number.isNaN(n));
-        const avg_rating = avg_rating_vals.length ? (avg_rating_vals.reduce((a, b) => a + b, 0) / avg_rating_vals.length) : 0;
-        const verified_packs = packs.filter((p) => p.is_verified).length;
-        const top = packs.slice().sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))[0];
-        return {
-          total_packs,
-          categories: {},
-          total_usage,
-          avg_rating,
-          verified_packs,
-          top_pack: top ? { name: top.display_name || top.name, usage_count: top.usage_count || 0 } : undefined,
-        } as PackStats;
-      });
+      console.warn('Pack stats API unavailable, will compute fallback from packs');
+      // Defer to the packs-based fallback effect below
+      setStats((prev) => prev ?? null);
     }
-  }, [isAuthenticated, packs]);
+  }, [isAuthenticated]);
 
   // Fetch when ready
   useEffect(() => {
@@ -148,6 +135,41 @@ export default function KiffPacksPage() {
     fetchTenantPacks();
     fetchPackStats();
   }, [isAuthenticated, fetchTenantPacks, fetchPackStats]);
+
+  // Compute stats fallback from current packs when API is unavailable
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!packs || packs.length === 0) return;
+    // If stats is null or missing fields, compute a local fallback
+    if (!stats || typeof (stats as any).total_packs !== 'number') {
+      const total_packs = packs.length;
+      const total_usage = packs.reduce((acc, p) => acc + (p.usage_count || 0), 0);
+      const avg_rating_vals = packs.map((p) => p.avg_rating).filter((n) => typeof n === 'number' && !Number.isNaN(n));
+      const avg_rating = avg_rating_vals.length ? (avg_rating_vals.reduce((a, b) => a + b, 0) / avg_rating_vals.length) : 0;
+      const verified_packs = packs.filter((p) => p.is_verified).length;
+      const top = packs.slice().sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))[0];
+      setStats({
+        total_packs,
+        categories: {},
+        total_usage,
+        avg_rating,
+        verified_packs,
+        top_pack: top ? { name: top.display_name || top.name, usage_count: top.usage_count || 0 } : undefined,
+        name: '',
+        usage_count: 0,
+      } as unknown as PackStats);
+    }
+  }, [isAuthenticated, packs, stats]);
+
+  // Conditional polling: while any pack is processing, refetch packs periodically
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!hasProcessing) return;
+    const id = setInterval(() => {
+      fetchTenantPacks();
+    }, 3000);
+    return () => clearInterval(id);
+  }, [isAuthenticated, hasProcessing, fetchTenantPacks]);
 
   const handlePackRate = async (packId: string, rating: number) => {
     if (!isAuthenticated) return;
