@@ -31,29 +31,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check both NextAuth JWT token AND custom session cookie
-  const nextAuthToken = await getToken({ 
+  // Get NextAuth token
+  const token = await getToken({ 
     req, 
     secret: process.env.NEXTAUTH_SECRET 
   })
 
-  // Also check for custom session cookie
-  const sessionCookieName = process.env.SESSION_COOKIE_NAME || 'session'
-  const customSessionCookie = req.cookies.get(sessionCookieName)?.value
+  const isAuthenticated = !!token
+  const userRole = token ? (token.role as string)?.toLowerCase() : null
 
-  const isAuthenticated = !!(nextAuthToken || customSessionCookie)
-  let userRole = null
-
-  if (nextAuthToken) {
-    userRole = (nextAuthToken.role as string)?.toLowerCase()
-    console.log(`Middleware: ${pathname}, NextAuth token found (${nextAuthToken.email}, role: ${userRole})`)
-  } else if (customSessionCookie) {
-    // For custom session, we'd need to decode it to get role, but for now assume regular user
-    userRole = 'user' // Default assumption for custom sessions
-    console.log(`Middleware: ${pathname}, custom session found`)
-  } else {
-    console.log(`Middleware: ${pathname}, no authentication found`)
-  }
+  console.log(`Middleware: ${pathname}, token:`, token ? `found (${token.email}, role: ${userRole})` : 'not found')
 
   // Root: redirect based on authentication status
   if (pathname === '/') {

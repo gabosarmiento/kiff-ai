@@ -3,23 +3,9 @@ import React, { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
+import { signIn } from 'next-auth/react'
 // Icons will be added back once TypeScript compatibility is resolved
 
-// Utility to get tenant id with fallback
-function getTenantId(): string {
-  const stored = localStorage.getItem('tenant_id') || localStorage.getItem('tenantId')
-  return stored && stored.trim().length > 0
-    ? stored
-    : '4485db48-71b7-47b0-8128-c6dca5be352d'
-}
-
-async function fetchWithTenant(input: RequestInfo | URL, init: RequestInit = {}) {
-  const tenantId = getTenantId()
-  const headers = new Headers(init.headers || {})
-  headers.set('Content-Type', 'application/json')
-  headers.set('X-Tenant-ID', tenantId)
-  return fetch(input, { ...init, headers })
-}
 
 export type SocialProvider = 'google' | 'github' | 'apple'
 
@@ -28,7 +14,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState<'none' | 'password' | SocialProvider>('none')
-  const { login, isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
 
   // Client-side guard: if already authenticated, redirect out of auth page
   useEffect(() => {
@@ -57,7 +43,17 @@ export function LoginPage() {
     }
     try {
       setLoading('password')
-      await login({ email, password })
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false
+      })
+      
+      if (result?.error) {
+        toast.error('Invalid credentials')
+        return
+      }
+      
       // Redirect preference: ?next= if present and safe, else role-based
       try {
         const next = (() => {
@@ -71,14 +67,14 @@ export function LoginPage() {
           window.location.href = next
           return
         }
-        const raw = localStorage.getItem('kiff_user_data')
-        const role = raw ? (JSON.parse(raw)?.role as string | undefined) : undefined
-        window.location.href = role === 'admin' ? '/admin' : '/kiffs/launcher'
+        // Since we're using NextAuth, role will be in session after successful login
+        // Let middleware handle the redirect based on authentication
+        window.location.href = '/'
       } catch {
-        window.location.href = '/kiffs/launcher'
+        window.location.href = '/'
       }
     } catch (err: any) {
-      // Error toast is handled in AuthContext
+      toast.error('Login failed')
     } finally {
       setLoading('none')
     }
@@ -87,21 +83,9 @@ export function LoginPage() {
   const onSocialLogin = async (provider: SocialProvider) => {
     try {
       setLoading(provider)
-      const res = await fetchWithTenant(`/api/auth/social/start?provider=${provider}`, {
-        method: 'POST'
-      })
-      if (!res.ok) throw new Error('Failed to start social login')
-      const data = await res.json()
-      // Redirect to OAuth provider
-      const url = data?.url
-      if (url) {
-        window.location.href = url
-      } else {
-        throw new Error('No OAuth URL received')
-      }
+      await signIn(provider, { callbackUrl: '/' })
     } catch (err: any) {
       toast.error(err?.message || 'Social login failed')
-    } finally {
       setLoading('none')
     }
   }
