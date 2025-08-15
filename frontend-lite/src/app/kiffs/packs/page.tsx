@@ -89,6 +89,11 @@ export default function KiffPacksPage() {
   const [sortBy, setSortBy] = useState('most_used');
   const [activeTab, setActiveTab] = useState('gallery');
   const hasProcessing = packs.some((p) => p.processing_status === 'processing');
+  // Track when we first noticed any pack in processing to avoid stale banners
+  const [processingSince, setProcessingSince] = useState<number | null>(null);
+  const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  // Allow user to hide a clearly stale banner locally
+  const [suppressProcessingBanner, setSuppressProcessingBanner] = useState(false);
 
   const fetchTenantPacks = useCallback(async () => {
     try {
@@ -101,7 +106,9 @@ export default function KiffPacksPage() {
       });
       
       // Use trailing slash to avoid backend 307 redirect when route is defined as /api/packs/
-      const data = await apiJson<PacksResponse>(`/api/packs/?${params}`);
+      // Add timestamp param and disable cache to avoid stale processing_status
+      params.set('_ts', String(Date.now()));
+      const data = await apiJson<PacksResponse>(`/api/packs/?${params.toString()}` , { cache: 'no-store' as any });
       setPacks(data.packs);
     } catch (error) {
       console.error('Error fetching packs:', error);
@@ -164,12 +171,29 @@ export default function KiffPacksPage() {
   // Conditional polling: while any pack is processing, refetch packs periodically
   useEffect(() => {
     if (!isAuthenticated) return;
-    if (!hasProcessing) return;
+    // Maintain the first-seen timestamp for processing
+    if (hasProcessing && processingSince == null) {
+      setProcessingSince(Date.now());
+    }
+    if (!hasProcessing && processingSince != null) {
+      setProcessingSince(null);
+    }
+
+    // Only poll while within the timeout window
+    const withinDeadline = hasProcessing && (processingSince == null || (Date.now() - processingSince) < PROCESSING_TIMEOUT_MS);
+    if (!withinDeadline) return;
+
     const id = setInterval(() => {
       fetchTenantPacks();
     }, 3000);
     return () => clearInterval(id);
-  }, [isAuthenticated, hasProcessing, fetchTenantPacks]);
+  }, [isAuthenticated, hasProcessing, processingSince, fetchTenantPacks]);
+
+  // Derived flag to control the banner visibility
+  const elapsed = processingSince == null ? 0 : (Date.now() - processingSince);
+  const isWithinTimeout = elapsed < PROCESSING_TIMEOUT_MS;
+  const showProcessingBanner = !suppressProcessingBanner && hasProcessing && (processingSince == null || isWithinTimeout);
+  const showStuckBanner = !suppressProcessingBanner && hasProcessing && processingSince != null && !isWithinTimeout;
 
   const handlePackRate = async (packId: string, rating: number) => {
     if (!isAuthenticated) return;
@@ -212,7 +236,7 @@ export default function KiffPacksPage() {
     const { selectedPacks, addPack, removePack } = usePacks();
     const [logoError, setLogoError] = useState(false);
     return (
-    <Card className="hover:shadow-lg transition-shadow duration-200">
+    <Card className="hover:shadow-lg transition-shadow duration-200 fx-card">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <div className="flex-1">
@@ -224,6 +248,7 @@ export default function KiffPacksPage() {
                     alt={`${pack.display_name} logo`}
                     width={32}
                     height={32}
+                    sizes="32px"
                     className="h-8 w-8 object-contain"
                     loading="lazy"
                     unoptimized
@@ -278,49 +303,57 @@ export default function KiffPacksPage() {
         </div>
 
         <div className="flex gap-2">
-          <Link href={`/kiffs/packs/${pack.id}`} className="flex-1">
-            <Button variant="outline" size="sm" className="w-full flex items-center gap-1" disabled={pack.processing_status === 'processing'}>
+          <Link href={`/kiffs/packs/scramble?pack=${pack.id}`} className="flex-1">
+            <Button variant="outline" size="sm" className="w-full flex items-center gap-1 fx-button" disabled={pack.processing_status === 'processing'}>
               <Eye className="w-3 h-3" />
               Preview
             </Button>
           </Link>
-          <Button 
-            size="sm" 
-            className="flex items-center gap-1"
-            variant={selectedPacks.includes(pack.id) ? "default" : "outline"}
-            disabled={pack.processing_status === 'processing'}
+          <Button
+  size="sm"
+  className={`rounded-lg px-4 py-2 text-base font-medium flex items-center gap-1 fx-button ${selectedPacks.includes(pack.id)
+    ? 'bg-black text-white hover:bg-zinc-800 shadow-lg border-0'
+    : 'text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'}`}
+  disabled={pack.processing_status === 'processing'}
+  onClick={() => {
+    if (selectedPacks.includes(pack.id)) {
+      const removedId = pack.id;
+      removePack(removedId);
+      toast.custom((t) => (
+        <div className="bg-gray-900 text-white shadow-lg px-4 py-3 rounded-xl text-sm flex items-center gap-4 border border-gray-800">
+          <span className="select-none">🗑️</span>
+          <span>Pack removed from your session packs</span>
+          <button
+            className="ml-2 text-gray-300 hover:text-gray-100"
             onClick={() => {
-              if (selectedPacks.includes(pack.id)) {
-                const removedId = pack.id;
-                removePack(removedId);
-                toast.custom((t) => (
-                  <div className="bg-gray-900 text-white shadow-lg px-4 py-3 rounded-xl text-sm flex items-center gap-4 border border-gray-800">
-                    <span className="select-none">🗑️</span>
-                    <span>Pack removed from your session packs</span>
-                    <button
-                      className="ml-2 text-gray-300 hover:text-gray-100"
-                      onClick={() => {
-                        addPack(removedId);
-                        toast.dismiss(t.id);
-                        toast.success('Restored');
-                      }}
-                      aria-label="Undo removal"
-                    >
-                      Undo
-                    </button>
-                  </div>
-                ), { duration: 5000 });
-              } else {
-                addPack(pack.id);
-                toast.success(`Pack "${pack.display_name}" added to your available packs - find them ready in your model!`, {
-                  duration: 5000,
-                });
-              }
+              addPack(removedId);
+              toast.dismiss(t.id);
+              toast.success('Restored');
             }}
+            aria-label="Undo removal"
           >
-            <Plus className="w-3 h-3" />
-            {selectedPacks.includes(pack.id) ? 'Remove' : 'Use'}
-          </Button>
+            Undo
+          </button>
+        </div>
+      ), { duration: 5000 });
+    } else {
+      addPack(pack.id);
+      toast.success(`Pack "${pack.display_name}" added to your available packs - find them ready in your model!`, {
+        duration: 5000,
+      });
+    }
+  }}
+>
+  {selectedPacks.includes(pack.id) ? (
+    <>
+      <span className="font-bold text-lg">-</span> Unpack
+    </>
+  ) : (
+    <>
+      <Plus className="w-3 h-3" /> Use
+    </>
+  )}
+</Button>
         </div>
 
         {/* Rating stars */}
@@ -334,7 +367,7 @@ export default function KiffPacksPage() {
                 pack.user_rating && pack.user_rating >= star
                   ? 'text-yellow-400'
                   : 'text-gray-300 hover:text-yellow-400'
-              }`}
+              } fx-button`}
             >
               <Star className="w-3 h-3 fill-current" />
             </button>
@@ -346,8 +379,8 @@ export default function KiffPacksPage() {
   }
 
   const StatsOverview = () => (
-    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-      <Card>
+    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 fx-stagger">
+      <Card className="fx-card">
         <CardContent className="p-4">
           <div className="flex items-center gap-2">
             <Package className="w-5 h-5 text-blue-500" />
@@ -396,7 +429,7 @@ export default function KiffPacksPage() {
       </Card>
 
       {stats?.top_pack && (
-        <Card>
+        <Card className="fx-card">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
@@ -431,7 +464,7 @@ export default function KiffPacksPage() {
             </CardHeader>
             <CardContent>
               <Link href="/login">
-                <Button className="w-full">Go to Login</Button>
+                <Button className="w-full fx-button">Go to Login</Button>
               </Link>
             </CardContent>
           </Card>
@@ -444,7 +477,7 @@ export default function KiffPacksPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane pane-with-sidebar" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
+      <main className="pane pane-with-sidebar fx-section" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
         <PageContainer padded>
           <div className="flex items-center justify-between">
             <div>
@@ -452,11 +485,13 @@ export default function KiffPacksPage() {
               <p className="mt-1 text-sm text-slate-600">API knowledge packs created by your team</p>
             </div>
             <Link href="/kiffs/packs/create">
-              <Button className="flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                Create Pack
-              </Button>
-            </Link>
+              <Button
+  className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 fx-button"
+>
+  <Plus className="w-4 h-4" />
+  Create Pack
+</Button>
+              </Link>
           </div>
 
           <div className="mt-6">
@@ -490,7 +525,7 @@ export default function KiffPacksPage() {
 
           <TabsContent value="gallery">
             {/* Filters */}
-            <Card className="mb-6">
+            <Card className="mb-6 fx-card">
               <CardContent className="p-4">
                 <div className="flex gap-4 items-center">
                   <div className="flex-1">
@@ -539,17 +574,45 @@ export default function KiffPacksPage() {
             </Card>
 
             {/* Pack Gallery */}
-            {hasProcessing ? (
-              <Card className="mb-4 border-dashed">
+            {showProcessingBanner ? (
+              <Card className="mb-4 border-dashed fx-card">
                 <CardContent className="p-4 text-sm text-gray-700 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Indexing in progress for one or more packs. This can take a couple of minutes.
                 </CardContent>
               </Card>
+            ) : showStuckBanner ? (
+              <Card className="mb-4 border-amber-300 bg-amber-50 fx-card">
+                <CardContent className="p-4 text-sm text-amber-800 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Indexing status seems stuck. We’ll stop auto-refreshing. You can refresh manually or dismiss this notice.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { setSuppressProcessingBanner(false); fetchTenantPacks(); }}>Refresh</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setSuppressProcessingBanner(true)}>Dismiss</Button>
+                  </div>
+                </CardContent>
+              </Card>
             ) : null}
             {loading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="border rounded-xl p-4 fx-card">
+                    <div className="flex items-start gap-3">
+                      <div className="h-8 w-8 rounded ring-1 ring-slate-200 fx-idle" />
+                      <div className="flex-1">
+                        <div className="h-4 w-40 fx-idle rounded mb-2" />
+                        <div className="h-3 w-24 fx-idle rounded" />
+                      </div>
+                    </div>
+                    <div className="h-16 w-full fx-idle rounded mt-4" />
+                    <div className="flex gap-2 mt-4">
+                      <div className="h-9 flex-1 fx-idle rounded" />
+                      <div className="h-9 flex-1 fx-idle rounded" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : packs.length === 0 ? (
               <Card>
@@ -568,7 +631,7 @@ export default function KiffPacksPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 fx-stagger">
                 {packs.map((pack) => (
                   <PackCard key={pack.id} pack={pack} />
                 ))}

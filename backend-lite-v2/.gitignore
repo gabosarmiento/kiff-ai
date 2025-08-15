@@ -1,1 +1,4 @@
 .vercel
+
+# AWS deployment scripts (contains ARNs and account IDs)
+update-apprunner.sh

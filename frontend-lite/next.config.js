@@ -2,7 +2,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN || 'http://localhost:8000'
+const BACKEND_ORIGIN = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

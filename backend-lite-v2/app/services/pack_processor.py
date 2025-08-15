@@ -222,7 +222,7 @@ class PackProcessor:
             ],
             show_tool_calls=True,
             markdown=True,
-            debug_mode=False
+            debug_mode=True
         )
     
     async def process_pack(self, pack_id: str, tenant_id: str) -> bool:
@@ -320,12 +320,24 @@ class PackProcessor:
                     pack.updated_at = datetime.utcnow()
                     db.commit()
                     
-                    # Step 6: Store in vector database (embeddings happen inside VectorStorageService)
+                    # Step 6: Store in vector database using ML service
                     print(f"💾 Storing pack vectors for pack {pack_id}")
-                    # Embedding wrapper will emit its own spans/usage events.
-                    # We mark model_triggered to ensure we only "track" when models run.
+                    # Use ML service for indexing instead of local processing
                     model_triggered = True
-                    await self.vector_service.store_pack_vectors(pack, tenant_id)
+                    from app.services.ml_api_client import ml_client
+                    try:
+                        await ml_client.index_pack(
+                            pack_id=pack.id,
+                            tenant_id=tenant_id,
+                            display_name=pack.display_name,
+                            api_url=pack.api_url,
+                            description=pack.description or ""
+                        )
+                        print(f"✅ Pack {pack_id} indexed via ML service")
+                    except Exception as ml_error:
+                        print(f"⚠️ ML service indexing failed, falling back to local: {ml_error}")
+                        # Fallback to local vector storage
+                        await self.vector_service.store_pack_vectors(pack, tenant_id)
             finally:
                 db.close()
             

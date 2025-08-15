@@ -15,6 +15,7 @@ const TrashIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
   React.createElement(Trash as any, props as any);
 
 interface KiffItem { id: string; name: string; created_at?: string; content_preview?: string }
+type PagedKiffs = { items: KiffItem[]; total: number; offset: number; limit: number };
 
 export default function KiffsIndexPage() {
   const router = useRouter();
@@ -40,29 +41,29 @@ export default function KiffsIndexPage() {
       setError(null);
       try {
         // Preferred: /api/kiffs/paged
-        const paged = await apiJson<{ items: KiffItem[]; total: number; offset: number; limit: number }>(
+        const paged = (await apiJson(
           `/api/kiffs/paged?offset=0&limit=${limit}`,
           { method: "GET" }
-        );
+        )) as PagedKiffs;
         setKiffs(Array.isArray(paged.items) ? paged.items : []);
         setTotal(typeof paged.total === 'number' ? paged.total : null);
         setOffset((paged.offset || 0) + (paged.items?.length || 0));
       } catch (err: any) {
         // Fallback to legacy list
         try {
-          const list = await apiJson<KiffItem[]>("/api/kiffs", { method: "GET" });
+          const list = (await apiJson("/api/kiffs", { method: "GET" })) as KiffItem[];
           setKiffs(Array.isArray(list) ? list : []);
           setTotal(Array.isArray(list) ? list.length : 0);
           setOffset(Array.isArray(list) ? list.length : 0);
         } catch (err2: any) {
           try {
-            const list = await apiJson<KiffItem[]>("/api/kiffs/", { method: "GET" });
+            const list = (await apiJson("/api/kiffs/", { method: "GET" })) as KiffItem[];
             setKiffs(Array.isArray(list) ? list : []);
             setTotal(Array.isArray(list) ? list.length : 0);
             setOffset(Array.isArray(list) ? list.length : 0);
           } catch (err3: any) {
             try {
-              const list = await apiJson<KiffItem[]>("/api/kiffs/list", { method: "POST", body: {} as any });
+              const list = (await apiJson("/api/kiffs/list", { method: "POST", body: {} as any })) as KiffItem[];
               setKiffs(Array.isArray(list) ? list : []);
               setTotal(Array.isArray(list) ? list.length : 0);
               setOffset(Array.isArray(list) ? list.length : 0);
@@ -81,10 +82,10 @@ export default function KiffsIndexPage() {
     if (loadingMore) return;
     setLoadingMore(true);
     try {
-      const paged = await apiJson<{ items: KiffItem[]; total: number; offset: number; limit: number }>(
+      const paged = (await apiJson(
         `/api/kiffs/paged?offset=${offset}&limit=${limit}`,
         { method: "GET" }
-      );
+      )) as PagedKiffs;
       const newItems = Array.isArray(paged.items) ? paged.items : [];
       setKiffs((prev) => [...prev, ...newItems]);
       setTotal(typeof paged.total === 'number' ? paged.total : (total ?? 0));
@@ -100,7 +101,7 @@ export default function KiffsIndexPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane pane-with-sidebar" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
+      <main className="pane pane-with-sidebar fx-section" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
         <PageContainer padded>
           <div className="flex items-center justify-between">
             <div>
@@ -118,9 +119,9 @@ export default function KiffsIndexPage() {
                 <a
                   href="/kiffs/launcher"
                   onClick={(e) => { e.preventDefault(); router.push(`/kiffs/launcher?t=${Date.now()}`); }}
-                  className="flex h-80 w-80 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-6 text-slate-700 hover:bg-slate-50"
+                  className="flex h-80 w-80 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-6 text-slate-700 hover:bg-slate-50 fx-card"
                 >
-                  <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm">+ New Kiff</button>
+                  <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm fx-button">+ New Kiff</button>
                   <div className="mt-3 text-xs text-slate-600">Start composing a new integration</div>
                 </a>
               </div>
@@ -133,10 +134,9 @@ export default function KiffsIndexPage() {
                 </div>
                 <div className="grid gap-6 lg:grid-cols-[1fr,16rem]">
                   {/* Left: Kiffs List */}
-                  <div className="space-y-4">
-                    
+                  <div className="space-y-4 fx-stagger">
                     {kiffs.map((k) => (
-                      <div key={k.id} className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 pt-8 pr-24 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors gap-4 sm:gap-6">
+                      <div key={k.id} className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 pt-8 pr-24 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors gap-4 sm:gap-6 fx-card">
                         <span className="absolute top-3 right-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Active</span>
                         <div className="flex-1 mb-1 sm:mb-0 pr-2 sm:pr-20">
                           <div className="flex items-center gap-3 mb-2">
@@ -148,14 +148,14 @@ export default function KiffsIndexPage() {
                         </div>
                         <div className="flex items-center gap-3 sm:pr-2">
                           <a
-                            href={`/kiffs/launcher?kiff=${k.id}`}
-                            className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors text-center"
+                            href={`/kiffs/expedition?kiff=${k.id}`}
+                            className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors text-center fx-button"
                           >
                             Open
                           </a>
                           <button
                             onClick={() => { setTargetKiff(k); setDeleteOpen(true); }}
-                            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-slate-300 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+                            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-slate-300 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 fx-button"
                             aria-label="Delete"
                             title="Delete"
                           >
@@ -165,15 +165,14 @@ export default function KiffsIndexPage() {
                       </div>
                     ))}
                   </div>
-
                   {/* Right: New Kiff Button - fixed square */}
                   <div className="flex justify-center lg:justify-start">
                     <a
                       href="/kiffs/launcher"
                       onClick={(e) => { e.preventDefault(); router.push(`/kiffs/launcher?t=${Date.now()}`); }}
-                      className="flex h-32 w-full max-w-xs lg:h-64 lg:w-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
+                      className="flex h-32 w-full max-w-xs lg:h-64 lg:w-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors fx-card"
                     >
-                      <button className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">+ New Kiff</button>
+                      <button className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 fx-button">+ New Kiff</button>
                       <div className="mt-3 text-sm text-slate-600 text-center px-2">Start composing a new integration</div>
                     </a>
                   </div>
@@ -188,7 +187,7 @@ export default function KiffsIndexPage() {
             <button
               onClick={loadMore}
               disabled={loadingMore}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60 fx-button"
             >
               {loadingMore ? "Loading…" : "Load more"}
             </button>

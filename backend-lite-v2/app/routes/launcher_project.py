@@ -86,8 +86,9 @@ async def _generate_project_files(idea: str, packs: List[str], tenant_id: str) -
             "Always include a README.md explaining how to run the project.",
             "Format your response as a JSON object with 'files' array containing objects with 'path', 'content', and 'language' fields."
         ],
-        show_tool_calls=False,
-        markdown=False,
+        show_tool_calls=True,
+        markdown=True,
+        debug_mode=True
     )
     
     # Prepare context about selected packs

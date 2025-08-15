@@ -99,55 +99,54 @@ def _tenant_id_from_request(request: Request) -> str:
 async def send_message(req: SendMessageRequest, request: Request, db: Session = Depends(get_db)):
     tenant_id = _tenant_id_from_request(request)
 
-    # Ensure kiff exists or create a temp placeholder if none
+    # Use short-lived session to resolve/create Kiff and Session to avoid SQLite locks
+    from ..db_core import SessionLocal as _SessionLocal  # local import to avoid cycles
     kiff_id: Optional[str] = None
-    if req.kiff_id:
-        k = db.query(Kiff).filter(Kiff.id == req.kiff_id, Kiff.tenant_id == tenant_id).first()
-        if not k:
-            raise HTTPException(status_code=404, detail="Kiff not found")
-        kiff_id = k.id
-    else:
-        # Create a lightweight placeholder kiff to bind the session
-        placeholder_kiff = Kiff(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            user_id=req.user_id,
-            name="Untitled Kiff",
-            slug=f"kiff-{uuid.uuid4().hex[:8]}",
-            model_id=None,
-            created_at=dt.datetime.utcnow(),
-        )
-        db.add(placeholder_kiff)
-        db.flush()
-        kiff_id = placeholder_kiff.id
+    session_id: Optional[str] = None
+    agent_state: Optional[Dict[str, Any]] = None
+    with _SessionLocal() as _s:
+        # Resolve or create kiff
+        if req.kiff_id:
+            k = _s.query(Kiff).filter(Kiff.id == req.kiff_id, Kiff.tenant_id == tenant_id).first()
+            if not k:
+                raise HTTPException(status_code=404, detail="Kiff not found")
+            kiff_id = k.id
+        else:
+            placeholder_kiff = Kiff(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                user_id=req.user_id,
+                name="Untitled Kiff",
+                slug=f"kiff-{uuid.uuid4().hex[:8]}",
+                model_id=None,
+                created_at=dt.datetime.utcnow(),
+            )
+            _s.add(placeholder_kiff)
+            _s.flush()
+            kiff_id = placeholder_kiff.id
 
-    # Ensure session
-    session: Optional[KiffChatSession] = None
-    if req.session_id:
-        session = db.query(KiffChatSession).filter(
-            KiffChatSession.id == req.session_id,
-            KiffChatSession.tenant_id == tenant_id
-        ).first()
-    if not session:
-        # Create new session bound to the resolved kiff_id
-        session = KiffChatSession(
-            id=str(uuid.uuid4()),
-            kiff_id=kiff_id,
-            tenant_id=tenant_id,
-            user_id=req.user_id,
-            agent_state=None,
-            created_at=dt.datetime.utcnow(),
-            updated_at=dt.datetime.utcnow(),
-        )
-        db.add(session)
-        db.flush()
-        # default HITL on
-        try:
-            session.agent_state = {"require_approval": True}
-            db.add(session)
-            db.flush()
-        except Exception:
-            pass
+        # Resolve or create chat session
+        sess_obj: Optional[KiffChatSession] = None
+        if req.session_id:
+            sess_obj = _s.query(KiffChatSession).filter(
+                KiffChatSession.id == req.session_id,
+                KiffChatSession.tenant_id == tenant_id,
+            ).first()
+        if not sess_obj:
+            sess_obj = KiffChatSession(
+                id=str(uuid.uuid4()),
+                kiff_id=kiff_id,
+                tenant_id=tenant_id,
+                user_id=req.user_id,
+                agent_state={"require_approval": True},
+                created_at=dt.datetime.utcnow(),
+                updated_at=dt.datetime.utcnow(),
+            )
+            _s.add(sess_obj)
+            _s.flush()
+        session_id = sess_obj.id
+        agent_state = sess_obj.agent_state
+        _s.commit()
 
     # Determine model for this run (request override -> session state -> default)
     effective_model_id: Optional[str] = None
@@ -155,7 +154,7 @@ async def send_message(req: SendMessageRequest, request: Request, db: Session = 
         effective_model_id = req.model_id
     else:
         try:
-            state0 = session.agent_state or {}
+            state0 = agent_state or {}
             if isinstance(state0, str):
                 import json as _json
                 state0 = _json.loads(state0)
@@ -163,28 +162,34 @@ async def send_message(req: SendMessageRequest, request: Request, db: Session = 
         except Exception:
             effective_model_id = None
 
-    # Persist model override into session state if provided
-    try:
-        if req.model_id:
-            state = session.agent_state or {}
-            if isinstance(state, str):
-                import json as _json
-                state = _json.loads(state)
-            if not isinstance(state, dict):
-                state = {}
-            state["model_id"] = req.model_id
-            session.agent_state = state
-            db.add(session)
-            db.flush()
-    except Exception:
-        pass
+    # Persist model override into session state if provided (short-lived update)
+    if req.model_id:
+        try:
+            with _SessionLocal() as _s:
+                sess = _s.query(KiffChatSession).filter(
+                    KiffChatSession.id == session_id,
+                    KiffChatSession.tenant_id == tenant_id,
+                ).first()
+                if sess:
+                    state = sess.agent_state or {}
+                    if isinstance(state, str):
+                        import json as _json
+                        state = _json.loads(state)
+                    if not isinstance(state, dict):
+                        state = {}
+                    state["model_id"] = req.model_id
+                    sess.agent_state = state
+                    _s.add(sess)
+                    _s.commit()
+        except Exception:
+            pass
 
     # Prepare enhanced message and run agent with session context
-    agent = get_launcher_agent(session_id=session.id, model_id=effective_model_id)
-    # Extract selected packs from session agent_state when present
+    agent = get_launcher_agent(session_id=session_id, model_id=effective_model_id)
+    # Extract selected packs from agent_state
     selected_packs: List[str] = []
     try:
-        state = session.agent_state or {}
+        state = agent_state or {}
         if isinstance(state, str):
             import json as _json
             state = _json.loads(state)
@@ -197,7 +202,7 @@ async def send_message(req: SendMessageRequest, request: Request, db: Session = 
     # Ensure HITL approval flag set on launcher_agent module for this run
     try:
         import app.services.launcher_agent as _launcher_agent_mod  # type: ignore
-        _state = session.agent_state or {}
+        _state = agent_state or {}
         if isinstance(_state, str):
             import json as _json
             _state = _json.loads(_state)
@@ -211,66 +216,71 @@ async def send_message(req: SendMessageRequest, request: Request, db: Session = 
         message=req.message,
         chat_history=[m.dict() for m in req.chat_history],
         tenant_id=tenant_id,
-        kiff_id=session.kiff_id,
+        kiff_id=kiff_id or "",
         selected_packs=selected_packs,
     )
 
-    # Persist conversation messages
-    now = dt.datetime.utcnow()
-    # Count existing messages BEFORE inserting new ones to detect first turn
-    existing_count = (
-        db.query(ConversationMessage)
-        .filter(ConversationMessage.session_id == session.id, ConversationMessage.tenant_id == tenant_id)
-        .count()
-    )
-    user_msg = ConversationMessage(
-        id=str(uuid.uuid4()),
-        kiff_id=session.kiff_id,
-        tenant_id=tenant_id,
-        user_id=req.user_id,
-        session_id=session.id,
-        role="user",
-        content=req.message,
-        created_at=now,
-    )
-    asst_msg = ConversationMessage(
-        id=str(uuid.uuid4()),
-        kiff_id=session.kiff_id,
-        tenant_id=tenant_id,
-        user_id=req.user_id,
-        session_id=session.id,
-        role="assistant",
-        content=run.content,
-        action_json=(run.action_json or None),
-        created_at=now,
-    )
-    db.add_all([user_msg, asst_msg])
-    # If this is the first message in this session, mark chat_active in agent_state
-    if existing_count == 0:
-        # Parse and update agent_state.chat_active
-        import json as _json
-        state = {}
-        try:
-            raw = session.agent_state or {}
-            if isinstance(raw, str):
-                state = _json.loads(raw) if raw else {}
-            elif isinstance(raw, dict):
-                state = raw
-        except Exception:
-            state = {}
-        state["chat_active"] = True
-        session.agent_state = state
-        session.updated_at = now
-        db.add(session)
-
-    db.commit()
+    # Persist conversation messages using a fresh session
+    try:
+        now = dt.datetime.utcnow()
+        with _SessionLocal() as _s2:
+            existing_count = (
+                _s2.query(ConversationMessage)
+                .filter(ConversationMessage.session_id == session_id, ConversationMessage.tenant_id == tenant_id)
+                .count()
+            )
+            user_msg = ConversationMessage(
+                id=str(uuid.uuid4()),
+                kiff_id=kiff_id,
+                tenant_id=tenant_id,
+                user_id=req.user_id,
+                session_id=session_id,
+                role="user",
+                content=req.message,
+                created_at=now,
+            )
+            asst_msg = ConversationMessage(
+                id=str(uuid.uuid4()),
+                kiff_id=kiff_id,
+                tenant_id=tenant_id,
+                user_id=req.user_id,
+                session_id=session_id,
+                role="assistant",
+                content=run.content,
+                action_json=(run.action_json or None),
+                created_at=now,
+            )
+            _s2.add_all([user_msg, asst_msg])
+            if existing_count == 0:
+                import json as _json
+                stateu = {}
+                try:
+                    raw = agent_state or {}
+                    if isinstance(raw, str):
+                        stateu = _json.loads(raw) if raw else {}
+                    elif isinstance(raw, dict):
+                        stateu = raw
+                except Exception:
+                    stateu = {}
+                stateu["chat_active"] = True
+                _s2.query(KiffChatSession).filter(
+                    KiffChatSession.id == session_id,
+                    KiffChatSession.tenant_id == tenant_id,
+                ).update({
+                    KiffChatSession.agent_state: stateu,
+                    KiffChatSession.updated_at: now,
+                })
+            _s2.commit()
+    except Exception:
+        # non-fatal persistence
+        pass
 
     return SendMessageResponse(
         content=run.content,
         tool_calls=run.tool_calls,
         kiff_update=run.kiff_update,
         relevant_context=run.relevant_context,
-        session_id=session.id,
+        session_id=session_id or "",
     )
 
 
@@ -281,66 +291,77 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
     """
     tenant_id = _tenant_id_from_request(request)
 
-    # Ensure kiff exists or create placeholder
+    # Ensure kiff exists or create placeholder (short-lived session to avoid locks)
     kiff_id: Optional[str] = None
-    if req.kiff_id:
-        k = db.query(Kiff).filter(Kiff.id == req.kiff_id, Kiff.tenant_id == tenant_id).first()
-        if not k:
-            raise HTTPException(status_code=404, detail="Kiff not found")
-        kiff_id = k.id
-    else:
-        placeholder_kiff = Kiff(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            user_id=req.user_id,
-            name="Untitled Kiff",
-            slug=f"kiff-{uuid.uuid4().hex[:8]}",
-            model_id=None,
-            created_at=dt.datetime.utcnow(),
-        )
-        db.add(placeholder_kiff)
-        db.flush()
-        kiff_id = placeholder_kiff.id
+    session_id: Optional[str] = None
+    # also load current agent_state for flags/model resolution
+    agent_state: Optional[Dict[str, Any]] = None
+    from ..db_core import SessionLocal as _SessionLocal  # local import to avoid cycles
+    with _SessionLocal() as _s:
+        # Resolve or create kiff
+        if req.kiff_id:
+            k = _s.query(Kiff).filter(Kiff.id == req.kiff_id, Kiff.tenant_id == tenant_id).first()
+            if not k:
+                raise HTTPException(status_code=404, detail="Kiff not found")
+            kiff_id = k.id
+        else:
+            placeholder_kiff = Kiff(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                user_id=req.user_id,
+                name="Untitled Kiff",
+                slug=f"kiff-{uuid.uuid4().hex[:8]}",
+                model_id=None,
+                created_at=dt.datetime.utcnow(),
+            )
+            _s.add(placeholder_kiff)
+            _s.flush()
+            kiff_id = placeholder_kiff.id
 
-    # Ensure session
-    session: Optional[KiffChatSession] = None
-    if req.session_id:
-        session = db.query(KiffChatSession).filter(
-            KiffChatSession.id == req.session_id,
-            KiffChatSession.tenant_id == tenant_id,
-        ).first()
-    if not session:
-        session = KiffChatSession(
-            id=str(uuid.uuid4()),
-            kiff_id=kiff_id,
-            tenant_id=tenant_id,
-            user_id=req.user_id,
-            agent_state=None,
-            created_at=dt.datetime.utcnow(),
-            updated_at=dt.datetime.utcnow(),
-        )
-        db.add(session)
-        db.flush()
+        # Resolve or create chat session
+        sess_obj: Optional[KiffChatSession] = None
+        if req.session_id:
+            sess_obj = _s.query(KiffChatSession).filter(
+                KiffChatSession.id == req.session_id,
+                KiffChatSession.tenant_id == tenant_id,
+            ).first()
+        if not sess_obj:
+            sess_obj = KiffChatSession(
+                id=str(uuid.uuid4()),
+                kiff_id=kiff_id,
+                tenant_id=tenant_id,
+                user_id=req.user_id,
+                # default HITL on for new sessions
+                agent_state={"require_approval": True},
+                created_at=dt.datetime.utcnow(),
+                updated_at=dt.datetime.utcnow(),
+            )
+            _s.add(sess_obj)
+            _s.flush()
+        # capture IDs and agent_state, then commit and close
+        session_id = sess_obj.id
+        agent_state = sess_obj.agent_state
+        _s.commit()
 
-    # Resolve model
+    # Resolve model using provided override or stored agent_state
     effective_model_id: Optional[str] = None
     if req.model_id:
         effective_model_id = req.model_id
     else:
         try:
-            state0 = session.agent_state or {}
+            state0 = agent_state or {}
             if isinstance(state0, str):
                 import json as _json
                 state0 = _json.loads(state0)
             effective_model_id = (state0 or {}).get("model_id")
         except Exception:
             effective_model_id = None
-    agent = get_launcher_agent(session_id=session.id, model_id=effective_model_id)
+    agent = get_launcher_agent(session_id=session_id, model_id=effective_model_id)
 
     # Extract selected packs from session agent_state
     selected_packs: List[str] = []
     try:
-        state = session.agent_state or {}
+        state = agent_state or {}
         if isinstance(state, str):
             import json as _json
             state = _json.loads(state)
@@ -358,7 +379,7 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
         context_lines.append(f"{role.upper()}: {content}")
     context_text = "\n".join(context_lines)
     prompt = (
-        f"Tenant: {tenant_id}\nKiff: {session.kiff_id}\n"
+        f"Tenant: {tenant_id}\nKiff: {kiff_id}\n"
         f"Selected Packs: {', '.join(selected_packs or [])}\n"
         "You are assisting the user to define and iteratively build a 'kiff' (project).\n"
         "Ask clarifying questions when needed and propose concrete file additions or changes.\n"
@@ -377,7 +398,7 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
             _launcher_agent_mod._CURRENT_TENANT_ID = tenant_id  # type: ignore[attr-defined]
             # Set HITL require-approval flag from session state (default True)
             try:
-                _state = session.agent_state or {}
+                _state = agent_state or {}
                 if isinstance(_state, str):
                     import json as _json
                     _state = _json.loads(_state)
@@ -397,7 +418,7 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
         # Emit early SessionStarted event before any tokens
         try:
             yield "event: message\n"
-            yield f"data: {json.dumps({'type': 'SessionStarted', 'session_id': session.id, 'kiff_id': session.kiff_id})}\n\n"
+            yield f"data: {json.dumps({'type': 'SessionStarted', 'session_id': session_id, 'kiff_id': kiff_id})}\n\n"
         except Exception:
             # Non-fatal; continue streaming
             pass
@@ -412,12 +433,60 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
             # Prefer async streaming; fallback to sync iterator if needed
             stream = None
             try:
-                stream = await agen.arun(prompt, stream=True)  # type: ignore
+                # Enable intermediate step streaming for thoughts/reasoning
+                stream = await agen.arun(prompt, stream=True, stream_intermediate_steps=True)  # type: ignore
                 is_async = True
             except TypeError:
                 # arun may return non-awaitable iterator for some versions
-                stream = agen.run(prompt, stream=True)  # type: ignore
+                stream = agen.run(prompt, stream=True, stream_intermediate_steps=True)  # type: ignore
                 is_async = False
+
+            def _safe_jsonable(obj: Any):
+                """Return a JSON-serializable representation of obj.
+                Recurses into lists/dicts and attempts to extract useful fields from objects.
+                """
+                try:
+                    json.dumps(obj)
+                    return obj
+                except Exception:
+                    pass
+
+                # Primitives
+                if obj is None or isinstance(obj, (str, int, float, bool)):
+                    return obj
+                # Sequences
+                if isinstance(obj, (list, tuple, set)):
+                    return [_safe_jsonable(x) for x in obj]
+                # Mappings
+                if isinstance(obj, dict):
+                    return {str(k): _safe_jsonable(v) for k, v in obj.items()}
+
+                # Pydantic-like / dataclass-like objects
+                for attr in ("model_dump", "dict"):
+                    try:
+                        fn = getattr(obj, attr, None)
+                        if callable(fn):
+                            return _safe_jsonable(fn())
+                    except Exception:
+                        pass
+
+                # Generic objects: try selected attributes first
+                try_keys = [
+                    "event", "content", "tool", "args", "result", "message",
+                    "name", "text", "steps", "status",
+                ]
+                out = {}
+                for k in try_keys:
+                    try:
+                        if hasattr(obj, k):
+                            out[k] = _safe_jsonable(getattr(obj, k))
+                    except Exception:
+                        continue
+                if out:
+                    return out
+
+                # Fallback to string
+                return str(obj)
 
             async def handle_event(ev: Any):
                 etype = getattr(ev, "event", None) or (isinstance(ev, dict) and ev.get("event"))
@@ -426,12 +495,21 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
                     if chunk:
                         final_content_parts.append(str(chunk))
                         yield f"data: {{\"token\": {str(chunk)!r} }}\n\n"
+                elif etype == "ToolCallStarted":
+                    tool = getattr(ev, "tool", None) or (isinstance(ev, dict) and ev.get("tool"))
+                    args = getattr(ev, "args", None) or (isinstance(ev, dict) and ev.get("args"))
+                    evt = {"type": "ToolCallStarted", "tool": _safe_jsonable(tool), "args": _safe_jsonable(args)}
+                    yield f"data: {json.dumps(evt)}\n\n"
                 elif etype == "ToolCallCompleted":
                     # Collect minimal tool call info for final summary
                     tool = getattr(ev, "tool", None) or (isinstance(ev, dict) and ev.get("tool"))
                     result = getattr(ev, "result", None) or (isinstance(ev, dict) and ev.get("result"))
                     args = getattr(ev, "args", None) or (isinstance(ev, dict) and ev.get("args"))
-                    final_tool_calls.append({"tool": tool, "result": result, "args": args})
+                    final_tool_calls.append({
+                        "tool": _safe_jsonable(tool),
+                        "result": _safe_jsonable(result),
+                        "args": _safe_jsonable(args),
+                    })
                     # Forward proposal events when tool returns PROPOSAL payload
                     try:
                         if isinstance(result, str) and result.startswith("PROPOSAL:"):
@@ -441,10 +519,18 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
                             yield f"data: {json.dumps(evt)}\n\n"
                     except Exception:
                         pass
+                    # Also forward completion info for UI
+                    yield f"data: {json.dumps({'type': 'ToolCallCompleted', 'tool': _safe_jsonable(tool)})}\n\n"
+                elif etype in ("ReasoningStarted", "ReasoningStep", "ReasoningCompleted"):
+                    content = getattr(ev, "content", None) or (isinstance(ev, dict) and ev.get("content"))
+                    payload = {"type": etype}
+                    if content is not None:
+                        payload["content"] = _safe_jsonable(content)
+                    yield f"data: {json.dumps(payload)}\n\n"
                 elif etype == "RunCompleted":
                     # Emit final structured summary before DONE to satisfy frontend onDone()
                     try:
-                        summary = {"session_id": session.id, "tool_calls": final_tool_calls}
+                        summary = {"session_id": session_id, "tool_calls": _safe_jsonable(final_tool_calls)}
                         yield f"data: {json.dumps(summary)}\n\n"
                     except Exception:
                         pass
@@ -454,18 +540,41 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
                     yield f"data: {{\"error\": {str(err)!r} }}\n\n"
                 # Optionally expose tool events in the future
 
-            if is_async:
-                async for ev in stream:  # type: ignore
-                    async for line in handle_event(ev):
-                        yield line
-            else:
-                for ev in stream:  # type: ignore
-                    # Use a small async wrapper to reuse handle_event
-                    async for line in handle_event(ev):
-                        yield line
-            # If the provider didn't send an explicit RunCompleted, still emit a summary+DONE
+            processed_stream = False
             try:
-                summary = {"session_id": session.id, "tool_calls": final_tool_calls}
+                if is_async:
+                    async for ev in stream:  # type: ignore
+                        async for line in handle_event(ev):
+                            yield line
+                    processed_stream = True
+                else:
+                    for ev in stream:  # type: ignore
+                        # Use a small async wrapper to reuse handle_event
+                        async for line in handle_event(ev):
+                            yield line
+                    processed_stream = True
+            except Exception:
+                # Fall through to non-streaming path below
+                processed_stream = False
+
+            # Fallback: if we couldn't process a stream, run non-streaming and emit as a single token
+            if not processed_stream:
+                text = ""
+                try:
+                    out = await agen.arun(prompt, stream=False)  # type: ignore
+                except TypeError:
+                    out = agen.run(prompt)  # type: ignore
+                except Exception as _e2:
+                    text = f"[launcher] error: {_e2}"
+                else:
+                    text = getattr(out, "content", None) or str(out)
+                if text:
+                    final_content_parts.append(str(text))
+                    yield f"data: {{\"token\": {str(text)!r} }}\n\n"
+
+            # Emit a final summary and DONE if provider didn't send an explicit RunCompleted
+            try:
+                summary = {"session_id": session_id, "tool_calls": final_tool_calls}
                 yield f"data: {json.dumps(summary)}\n\n"
             except Exception:
                 pass
@@ -486,53 +595,59 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
             except Exception:
                 pass
 
-            # Persist messages if we produced any output
+            # Persist messages if we produced any output (use a fresh session to avoid long-held locks)
             try:
                 final_text = "".join(final_content_parts).strip()
                 if final_text:
                     now = dt.datetime.utcnow()
-                    existing_count = (
-                        db.query(ConversationMessage)
-                        .filter(ConversationMessage.session_id == session.id, ConversationMessage.tenant_id == tenant_id)
-                        .count()
-                    )
-                    user_msg = ConversationMessage(
-                        id=str(uuid.uuid4()),
-                        kiff_id=session.kiff_id,
-                        tenant_id=tenant_id,
-                        user_id=req.user_id,
-                        session_id=session.id,
-                        role="user",
-                        content=req.message,
-                        created_at=now,
-                    )
-                    asst_msg = ConversationMessage(
-                        id=str(uuid.uuid4()),
-                        kiff_id=session.kiff_id,
-                        tenant_id=tenant_id,
-                        user_id=req.user_id,
-                        session_id=session.id,
-                        role="assistant",
-                        content=final_text,
-                        created_at=now,
-                    )
-                    db.add_all([user_msg, asst_msg])
-                    if existing_count == 0:
-                        import json as _json
-                        state = {}
-                        try:
-                            raw = session.agent_state or {}
-                            if isinstance(raw, str):
-                                state = _json.loads(raw) if raw else {}
-                            elif isinstance(raw, dict):
-                                state = raw
-                        except Exception:
+                    with _SessionLocal() as _s2:
+                        existing_count = (
+                            _s2.query(ConversationMessage)
+                            .filter(ConversationMessage.session_id == session_id, ConversationMessage.tenant_id == tenant_id)
+                            .count()
+                        )
+                        user_msg = ConversationMessage(
+                            id=str(uuid.uuid4()),
+                            kiff_id=kiff_id,
+                            tenant_id=tenant_id,
+                            user_id=req.user_id,
+                            session_id=session_id,
+                            role="user",
+                            content=req.message,
+                            created_at=now,
+                        )
+                        asst_msg = ConversationMessage(
+                            id=str(uuid.uuid4()),
+                            kiff_id=kiff_id,
+                            tenant_id=tenant_id,
+                            user_id=req.user_id,
+                            session_id=session_id,
+                            role="assistant",
+                            content=final_text,
+                            created_at=now,
+                        )
+                        _s2.add_all([user_msg, asst_msg])
+                        if existing_count == 0:
+                            import json as _json
                             state = {}
-                        state["chat_active"] = True
-                        session.agent_state = state
-                        session.updated_at = now
-                        db.add(session)
-                    db.commit()
+                            try:
+                                raw = agent_state or {}
+                                if isinstance(raw, str):
+                                    state = _json.loads(raw) if raw else {}
+                                elif isinstance(raw, dict):
+                                    state = raw
+                            except Exception:
+                                state = {}
+                            state["chat_active"] = True
+                            # update session row
+                            _s2.query(KiffChatSession).filter(
+                                KiffChatSession.id == session_id,
+                                KiffChatSession.tenant_id == tenant_id,
+                            ).update({
+                                KiffChatSession.agent_state: state,
+                                KiffChatSession.updated_at: now,
+                            })
+                        _s2.commit()
             except Exception:
                 # Do not break the stream termination on persistence errors
                 pass

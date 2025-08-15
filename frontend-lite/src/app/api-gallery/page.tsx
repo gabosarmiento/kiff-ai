@@ -7,6 +7,7 @@ import { useLayoutState } from "../../components/layout/LayoutState";
 import { apiJson } from "../../lib/api";
 import { getTenantId } from "../../lib/tenant";
 import Image from "next/image";
+import toast from "react-hot-toast";
 
 type CategoriesResponse = {
   categories: string[];
@@ -159,7 +160,7 @@ export default function ApiGalleryPage() {
   const [target, setTarget] = React.useState<ProviderItem | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [createdPackId, setCreatedPackId] = React.useState<string | null>(null);
+  // No need to store created id for this simplified flow
 
   const toggleCat = (c: string) => {
     setActiveCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -218,7 +219,6 @@ export default function ApiGalleryPage() {
   function openExpress(provider: ProviderItem) {
     setTarget(provider);
     setError(null);
-    setCreatedPackId(null);
     setExpressOpen(true);
   }
 
@@ -255,11 +255,13 @@ export default function ApiGalleryPage() {
       };
       // Ensure tenant is set (defensive)
       getTenantId();
-      const res = await apiJson<{ pack_id: string }>(`/api/packs/create`, {
+      await apiJson<{ pack_id: string }>(`/api/packs/create`, {
         method: 'POST',
         body,
       });
-      setCreatedPackId(res.pack_id);
+      // Success: show toast and close modal, remain on page
+      toast.success('Started indexing. We will let you know when it is ready.');
+      closeExpress();
     } catch (e: any) {
       console.error('Express create failed', e);
       setError(e?.message || 'Failed to start indexing');
@@ -272,7 +274,7 @@ export default function ApiGalleryPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane pane-with-sidebar" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto", overflowX: "hidden" }}>
+      <main className="pane pane-with-sidebar fx-section" style={{ padding: 16, maxWidth: 1100, paddingLeft: leftWidth + 24, margin: "0 auto", overflowX: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 22 }}>API Gallery</h1>
@@ -281,7 +283,7 @@ export default function ApiGalleryPage() {
           <div className="pill pill-info" style={{ marginLeft: "auto" }}>{loading ? "Loading..." : `${filtered.length} providers`}</div>
         </div>
 
-        <div className="card" style={{ marginTop: 16 }}>
+        <div className="card fx-card" style={{ marginTop: 16 }}>
           <div className="card-body">
             <input
               className="input"
@@ -289,7 +291,7 @@ export default function ApiGalleryPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <div className="chips" style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div className="chips fx-stagger" style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
               {(loadingCats ? [] : topCats).map((c) => (
                 <span
                   key={c}
@@ -314,7 +316,7 @@ export default function ApiGalleryPage() {
             <div className="modal" style={{ maxWidth: 640 }}>
               <div className="modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>Filter by categories</div>
-                <button className="button" onClick={() => setMoreOpen(false)}>Close</button>
+                <button className="button fx-button" onClick={() => setMoreOpen(false)}>Close</button>
               </div>
               <div className="modal-body">
                 <input
@@ -347,16 +349,16 @@ export default function ApiGalleryPage() {
                 </div>
                 <div className="row" style={{ gap: 8 }}>
                   {activeCats.length > 0 ? (
-                    <button className="button" onClick={() => setActiveCats([])}>Clear all</button>
+                    <button className="button fx-button" onClick={() => setActiveCats([])}>Clear all</button>
                   ) : null}
-                  <button className="button primary" onClick={() => setMoreOpen(false)}>Apply</button>
+                  <button className="button primary fx-button" onClick={() => setMoreOpen(false)}>Apply</button>
                 </div>
               </div>
             </div>
           </div>
         ) : null}
 
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+        <div className="grid fx-stagger" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
           {filtered.map((p) => (
             <ProviderCard
               key={p.provider_id}
@@ -379,62 +381,37 @@ export default function ApiGalleryPage() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={(e) => {
           if (e.target === e.currentTarget) closeExpress();
         }}>
-          <div
-            className="modal"
-            style={{
-              width: 380,
-              maxWidth: 380,
-              height: '100%',
-              position: 'fixed',
-              right: 0,
-              top: 0,
-              bottom: 0,
-              borderRadius: 0,
-              display: 'flex',
-              flexDirection: 'column'
-            }}
-          >
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
-              <div style={{ fontWeight: 600 }}>Index API</div>
-              <button className="button" onClick={closeExpress} disabled={creating} aria-label="Close" title="Close" style={{ fontWeight: 700 }}>×</button>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 600 }}>Confirm Indexing</div>
+              <button
+                onClick={closeExpress}
+                disabled={creating}
+                aria-label="Close"
+                title="Close"
+                className="fx-button"
+                style={{ background: 'transparent', border: 'none', fontSize: 20, lineHeight: 1 }}
+              >
+                ×
+              </button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12 }}>
-              <div className="card">
-                <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div className="row" style={{ alignItems: 'center', gap: 10 }}>
-                    {target.logo_url ? (
-                      <Image
-                        src={target.logo_url}
-                        alt={target.name}
-                        width={28}
-                        height={28}
-                        style={{ width: 28, height: 28, objectFit: 'contain' }}
-                        unoptimized
-                      />
-                    ) : (
-                      <span style={{ fontSize: 20 }}>🌐</span>
-                    )}
-                    <div style={{ fontWeight: 600 }}>{target.name}</div>
-                  </div>
-                  <p className="muted" style={{ margin: 0 }}>
-                    You are about to start indexing this API into a Kiff Pack. This can take a couple of minutes. You can track progress only in
-                    <a href="/kiffs/packs/" className="link" style={{ marginLeft: 4 }}>/kiffs/packs/</a>.
-                  </p>
-                  {target.doc_base_url ? (
-                    <div className="muted" style={{ fontSize: 12 }}>Docs: <a href={target.doc_base_url} target="_blank" rel="noreferrer">{target.doc_base_url}</a></div>
-                  ) : null}
-                  {error ? (
-                    <div className="pill pill-error">{error}</div>
-                  ) : null}
-                  {createdPackId ? (
-                    <div className="pill pill-success">Started indexing. We will let you know when it is ready.</div>
-                  ) : null}
-                </div>
+            <div className="modal-body">
+              <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+                {target.logo_url ? (
+                  <Image src={target.logo_url} alt={target.name} width={24} height={24} style={{ width: 24, height: 24, objectFit: 'contain' }} unoptimized />
+                ) : (
+                  <span style={{ fontSize: 18 }}>🌐</span>
+                )}
+                <div style={{ fontWeight: 600 }}>{target.name}</div>
               </div>
+              <p className="muted" style={{ marginTop: 12 }}>
+                You are about to start indexing this API into a Kiff Pack. This can take a couple of minutes.
+              </p>
+              {error ? (<div className="pill pill-error" style={{ marginTop: 12 }}>{error}</div>) : null}
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: 12 }}>
-              <button className="button" onClick={closeExpress} disabled={creating}>Cancel</button>
-              <button className="button primary" onClick={confirmExpress} disabled={creating || !!createdPackId}>
+            <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <button className="button fx-button" onClick={closeExpress} disabled={creating}>Cancel</button>
+              <button className="button primary fx-button" onClick={confirmExpress} disabled={creating}>
                 {creating ? 'Starting…' : 'Confirm to Add'}
               </button>
             </div>

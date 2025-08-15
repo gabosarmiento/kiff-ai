@@ -84,6 +84,8 @@ html body {
   .pane { 
     padding-bottom: 8rem !important; /* Space for bottom navigation */
   }
+  /* Avoid iOS input zoom by enforcing 16px minimum font-size */
+  input, select, textarea, button { font-size: 16px; }
 }
 
 /* Dashboard layout */
@@ -124,8 +126,8 @@ html body {
 .muted { color: #64748b; font-size: 12px; }
 
 /* Modal */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal { width: 420px; max-width: calc(100% - 32px); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; animation: fade-up .24s var(--ease-live) both; }
+.modal { width: 420px; max-width: calc(100% - 32px); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); animation: pop .18s ease-out both; }
 .modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
 .modal-body { padding: 14px 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 16px; border-top: 1px solid var(--border); }
@@ -141,14 +143,10 @@ html body {
 .pill-info { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.25); }
 .pill-success { background: rgba(16, 185, 129, 0.12); color: #047857; border-color: rgba(16, 185, 129, 0.25); }
 
-/* Respect users who prefer less motion */
+/* Respect users who prefer less motion (non-destructive) */
+/* Note: We avoid blanket !important rules that kill essential UI animations (e.g., spinners). */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-    scroll-behavior: auto !important;
-  }
+  html:focus-within { scroll-behavior: auto; }
 }
 
 :root { --ease-live: cubic-bezier(.22,.61,.36,1); }
@@ -157,23 +155,83 @@ html body {
 @layer components {
   /* Buttons (works great with DaisyUI .btn) */
   .fx-button {
-    @apply transition-all duration-fast ease-live will-change-transform hover:scale-[1.02] active:scale-[0.98] hover:shadow-lift;
+    transition-property: all;
+    transition-duration: 180ms; /* was duration-fast */
+    transition-timing-function: var(--ease-live); /* was ease-live */
+    will-change: transform;
   }
+  .fx-button:hover { transform: scale(1.02); box-shadow: 0 10px 24px rgba(0,0,0,0.08); /* was shadow-lift */ }
+  .fx-button:active { transform: scale(0.98); }
   /* Icon wrangler — put on a parent that contains an SVG */
-  .fx-icon { @apply inline-flex items-center transition-transform duration-fast ease-live; }
-  .fx-icon > svg { @apply transition-transform duration-fast ease-live; }
-  .group:hover .fx-icon, .group:hover .fx-icon > svg { @apply scale-110; }
-  .group:active .fx-icon, .group:active .fx-icon > svg { @apply scale-95; }
+  .fx-icon { display: inline-flex; align-items: center; transition: transform 180ms var(--ease-live); }
+  .fx-icon > svg { transition: transform 180ms var(--ease-live); }
+  .group:hover .fx-icon, .group:hover .fx-icon > svg { transform: scale(1.10); }
+  .group:active .fx-icon, .group:active .fx-icon > svg { transform: scale(0.95); }
 
   /* Cards / panels */
-  .fx-card { @apply transition-all duration-base ease-live hover:-translate-y-0.5 hover:shadow-lift; }
+  .fx-card { transition: all 220ms var(--ease-live); }
+  .fx-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,0.08); }
 
   /* Links that feel tappable */
-  .fx-link { @apply transition-all duration-fast ease-live hover:translate-x-0.5 hover:opacity-90; }
+  .fx-link { transition: all 180ms var(--ease-live); }
+  .fx-link:hover { transform: translateX(2px); opacity: 0.9; }
 
   /* Section reveal on mount */
-  .fx-section { @apply animate-fade-up; }
+  .fx-section { animation: fade-up .36s var(--ease-live) both; }
 
   /* Subtle press effect for anything clickable */
-  .fx-pressable { @apply active:scale-[0.98] transition-transform duration-fast ease-live; }
+  .fx-pressable { transition: transform 180ms var(--ease-live); }
+  .fx-pressable:active { transform: scale(0.98); }
+}
+
+/* Additional utilities layer for global effects */
+@layer utilities {
+  /* Staggered entrance: apply to a container to animate its children in sequence */
+  .fx-stagger > * { animation: fade-up .36s var(--ease-live) both; }
+  .fx-stagger > *:nth-child(1) { animation-delay: 40ms; }
+  .fx-stagger > *:nth-child(2) { animation-delay: 80ms; }
+  .fx-stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .fx-stagger > *:nth-child(4) { animation-delay: 160ms; }
+  .fx-stagger > *:nth-child(5) { animation-delay: 200ms; }
+  .fx-stagger > *:nth-child(6) { animation-delay: 240ms; }
+
+  /* Motion keyframes */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  /* Opacity-only alternative to avoid transformed ancestors breaking fixed elements on iOS */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pop {
+    0% { opacity: 0; transform: scale(0.98); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  /* Idle shimmer utility for skeletons/placeholders */
+  @keyframes fx-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .fx-idle {
+    background: linear-gradient(90deg, rgba(0,0,0,0.06), rgba(0,0,0,0.12), rgba(0,0,0,0.06));
+    background-size: 200% 100%;
+    animation: fx-shimmer 1.2s linear infinite;
+    border-radius: 8px;
+  }
+}
+
+/* On mobile, prefer opacity-only section animation to prevent iOS fixed-position bugs */
+@media (max-width: 767px) {
+  .fx-section { animation: fade-in .28s var(--ease-live) both; }
+}
+
+/* BottomNav responsive adjustments for very small widths */
+@media (max-width: 380px) {
+  .bottom-fab { width: 2.75rem !important; height: 2.75rem !important; transform: translate(-50%, -0.9rem) !important; }
+}
+@media (max-width: 330px) {
+  .bottom-fab { width: 2.5rem !important; height: 2.5rem !important; transform: translate(-50%, -0.6rem) !important; }
 }

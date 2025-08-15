@@ -2,8 +2,7 @@
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Home, FlaskConical, User, LogOut, Settings, Plus } from "lucide-react";
-import { UsersThree, Folders, ShareNetwork } from "@phosphor-icons/react";
+import { Home, FlaskConical, User, LogOut, Settings, Plus, Users, Folder, Share2 } from "lucide-react";
 import { LeftSidebarNav, type NavItem } from "./LeftSidebarNav";
 import { useLayoutState } from "../layout/LayoutState";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,10 +15,10 @@ function createIconWrapper(C: any) {
   return Wrapped;
 }
 const HomeIcon = createIconWrapper(Home);
-const ShareNetworkIcon = (props: any) => <ShareNetwork size={20} weight="duotone" {...props} />;
+const ShareIcon = createIconWrapper(Share2);
 const FlaskConicalIcon = createIconWrapper(FlaskConical);
-const UsersThreeIcon = (props: any) => <UsersThree size={20} weight="duotone" {...props} />;
-const FoldersIcon = (props: any) => <Folders size={20} weight="duotone" {...props} />;
+const UsersIcon = createIconWrapper(Users);
+const FolderIcon = createIconWrapper(Folder);
 const UserIcon = createIconWrapper(User);
 const LogOutIcon = createIconWrapper(LogOut);
 const SettingsIcon = createIconWrapper(Settings);
@@ -37,13 +36,13 @@ const BluePlusCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
-const iconCls = "h-5 w-5";
+const iconCls = "h-5 w-5 fx-icon";
 
 const WORKSPACE_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
-  { id: "/kiffs/launcher", label: "New Kiff", href: "/kiffs/launcher", icon: <BluePlusCircleIcon className="h-5 w-5" /> },
-  { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <ShareNetworkIcon className={iconCls} /> },
-  { id: "/kiffs/packs", label: "Kiff Packs", href: "/kiffs/packs", icon: <UsersThreeIcon className={iconCls} /> },
-  { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <FoldersIcon className={iconCls} /> },
+  { id: "/kiffs/launcher", label: "New Kiff", href: "/kiffs/launcher", icon: <BluePlusCircleIcon className="h-5 w-5 fx-icon" /> },
+  { id: "/api-gallery", label: "API Gallery", href: "/api-gallery", icon: <ShareIcon className={iconCls} /> },
+  { id: "/kiffs/packs", label: "Kiff Packs", href: "/kiffs/packs", icon: <UsersIcon className={iconCls} /> },
+  { id: "/kiffs", label: "Kiffs", href: "/kiffs", icon: <FolderIcon className={iconCls} /> },
 ];
 
 const ACCOUNT_LINKS: { id: string; label: string; href: string; icon?: React.ReactNode }[] = [
@@ -77,7 +76,7 @@ export function Sidebar() {
     const ADMIN_LINKS = [
       { id: "/admin/users", label: "Users", href: "/admin/users", icon: <UserIcon className={iconCls} /> },
       { id: "/admin/models", label: "Models", href: "/admin/models", icon: <SettingsIcon className={iconCls} /> },
-      { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <ShareNetworkIcon className={iconCls} /> },
+      { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <ShareIcon className={iconCls} /> },
       { id: "/admin/extractor", label: "Extractor", href: "/admin/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
     ];
     items = [
@@ -92,7 +91,7 @@ export function Sidebar() {
       const ADMIN_LINKS = [
         { id: "/admin/users", label: "Users", href: "/admin/users", icon: <UserIcon className={iconCls} /> },
         { id: "/admin/models", label: "Models", href: "/admin/models", icon: <SettingsIcon className={iconCls} /> },
-        { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <ShareNetworkIcon className={iconCls} /> },
+        { id: "/admin/api-gallery-editor", label: "API Gallery Editor", href: "/admin/api-gallery-editor", icon: <ShareIcon className={iconCls} /> },
         { id: "/admin/extractor", label: "Extractor", href: "/admin/extractor", icon: <FlaskConicalIcon className={iconCls} /> },
       ];
       items.push({ id: "admin", label: "Admin", children: mkChildren(ADMIN_LINKS) });

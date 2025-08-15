@@ -265,6 +265,36 @@ export default function ChatHistory({ messages, onRetryAssistant, onEditLastUser
                   </ReactMarkdown>
                 </div>
 
+                {/* Reasoning panel (progressive) */}
+                {(() => {
+                  if (isUser) return null;
+                  const meta: any = (m as any).metadata;
+                  const reasoning = meta?.reasoning;
+                  if (!reasoning) return null;
+                  const steps: string[] = Array.isArray(reasoning.steps) ? reasoning.steps : [];
+                  const completed = !!reasoning.completed;
+                  return (
+                    <div className="mt-2 border rounded bg-gray-50 text-gray-800 p-2">
+                      <div className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                        <span>{completed ? 'Reasoning' : 'Thinking…'}</span>
+                        {!completed ? (
+                          <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" aria-hidden />
+                        ) : null}
+                      </div>
+                      {steps.length > 0 ? (
+                        <ul className="mt-1 space-y-1 text-[11px]">
+                          {steps.map((s, si) => (
+                            <li key={si} className="flex gap-2">
+                              <span className="text-gray-400">{si + 1}.</span>
+                              <span className="whitespace-pre-wrap break-words flex-1">{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
                 {/* Inline HITL proposal cards */}
                 {(() => {
                   if (isUser) return null;

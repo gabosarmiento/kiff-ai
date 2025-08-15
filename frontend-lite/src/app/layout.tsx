@@ -5,6 +5,14 @@ export const metadata = {
   description: 'Lightweight chat + preview workbench',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: 'no' as const,
+  viewportFit: 'cover',
+};
+
 import { ThemeProvider } from '../components/theme/ThemeProvider';
 import { LayoutStateProvider } from '../components/layout/LayoutState';
 import { NextAuthProvider } from '../contexts/NextAuthProvider';

@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Core Backend Service - Lightweight API
+  core-backend:
+    build:
+      context: ./backend-lite-v2
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ML_SERVICE_URL=http://ml-service:8001
+      - DATABASE_URL=sqlite:///./kiff_dev.db
+      - AWS_REGION=eu-west-3
+    depends_on:
+      - ml-service
+    volumes:
+      - ./backend-lite-v2/kiff_dev.db:/app/kiff_dev.db
+    networks:
+      - kiff-network
+
+  # ML Service - Heavy AI/ML operations
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - LANCEDB_DIR=/data/vectors
+      - TRANSFORMERS_CACHE=/models/hf
+      - HF_HOME=/models/hf
+      - SENTENCE_TRANSFORMERS_HOME=/models/sentence_transformers
+    volumes:
+      - ml-models:/models
+      - ml-vectors:/data
+    networks:
+      - kiff-network
+
+  # Frontend (optional for local testing)
+  frontend:
+    build:
+      context: ./frontend-lite
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - core-backend
+    networks:
+      - kiff-network
+
+volumes:
+  ml-models:
+    driver: local
+  ml-vectors:
+    driver: local
+
+networks:
+  kiff-network:
+    driver: bridge

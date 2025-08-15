@@ -254,7 +254,7 @@ export default function CreatePackPage() {
   if (isProcessing) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md fx-card">
           <CardContent className="p-8 text-center">
             <Loader className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
             <h3 className="text-lg font-semibold mb-2">Creating Your Pack</h3>
@@ -268,7 +268,7 @@ export default function CreatePackPage() {
               </p>
             </div>
             <Button
-              className="mt-6 w-full"
+              className="mt-6 w-full fx-button"
               variant="outline"
               onClick={() => router.push('/kiffs/packs')}
             >
@@ -284,7 +284,7 @@ export default function CreatePackPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane pane-with-sidebar" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
+      <main className="pane pane-with-sidebar fx-section" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
         <PageContainer padded>
           {/* Header */}
           <div className="mb-8">
@@ -307,7 +307,7 @@ export default function CreatePackPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Quick API Selection */}
-          <Card>
+          <Card className="fx-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5" />
@@ -318,7 +318,7 @@ export default function CreatePackPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 fx-stagger">
                 {popularAPIs.map((api) => {
   const isSelected = selectedAPI?.name === api.name;
   return (
@@ -369,6 +369,7 @@ export default function CreatePackPage() {
                       type="button" 
                       variant="outline" 
                       size="sm"
+                      className="fx-button"
                       onClick={clearSelection}
                     >
                       Clear
@@ -380,7 +381,7 @@ export default function CreatePackPage() {
           </Card>
 
           {/* Pack Details */}
-          <Card>
+          <Card className="fx-card">
             <CardHeader>
               <CardTitle>Pack Details</CardTitle>
               <CardDescription>
@@ -459,7 +460,7 @@ export default function CreatePackPage() {
           </Card>
 
           {/* API Documentation */}
-          <Card>
+          <Card className="fx-card">
             <CardHeader>
               <CardTitle>API Documentation</CardTitle>
               <CardDescription>
@@ -528,7 +529,7 @@ export default function CreatePackPage() {
           </Card>
 
           {/* Sharing Settings */}
-          <Card>
+          <Card className="fx-card">
             <CardHeader>
               <CardTitle>Sharing Settings</CardTitle>
               <CardDescription>
@@ -571,11 +572,11 @@ export default function CreatePackPage() {
           {/* Submit */}
           <div className="flex justify-end gap-4">
             <Link href="/kiffs/packs">
-              <Button type="button" variant="outline">Cancel</Button>
+              <Button type="button" variant="outline" className="fx-button">Cancel</Button>
             </Link>
             <Button 
               type="submit" 
-              className="flex items-center gap-2"
+              className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 fx-button"
             >
               <Wand2 className="w-4 h-4" />
               Create Pack

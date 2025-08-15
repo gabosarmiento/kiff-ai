@@ -17,15 +17,19 @@ try:
     from agno.agent import Agent  # type: ignore
     from agno.models.groq import Groq  # type: ignore
     from agno.vectordb.lancedb import LanceDb  # type: ignore
+    from agno.vectordb.search import SearchType  # type: ignore
     from agno.storage.sqlite import SqliteStorage  # type: ignore
     from agno.tools import tool  # type: ignore
+    from agno.tools.knowledge import KnowledgeTools  # type: ignore
     _HAS_AGNO = True
 except Exception:
     Agent = None  # type: ignore
     Groq = None  # type: ignore
     LanceDb = None  # type: ignore
+    SearchType = None  # type: ignore
     SqliteStorage = None  # type: ignore
     tool = None  # type: ignore
+    KnowledgeTools = None  # type: ignore
 
 # Module-level tenant context for tool functions
 # These tools are created at __init__ time and don't receive tenant_id directly.
@@ -351,7 +355,7 @@ def create_todo_tools(session_id: str):
 class LauncherAgent:
     def __init__(self, session_id: Optional[str] = None, model_id: Optional[str] = None) -> None:
         self.model_id = model_id or os.getenv("LAUNCHER_MODEL_ID", "moonshotai/kimi-k2-instruct")
-        self.lancedb_dir = os.getenv("LANCEDB_DIR", os.path.abspath(os.path.join(os.getcwd(), "../../local_lancedb")))
+        self.lancedb_dir = os.getenv("LANCEDB_DIR", os.path.abspath(os.path.join(os.getcwd(), "./kiff_vectors")))
         self.kb_table = os.getenv("LAUNCHER_KB_TABLE", "kiff_packs")
         self.agent_sessions_table = os.getenv("LAUNCHER_AGENT_SESSIONS_TABLE", "agent_sessions")
         self.search_knowledge = True
@@ -390,12 +394,21 @@ class LauncherAgent:
                         if embedder:
                             print(f"[LAUNCHER_AGENT] Using cached sentence-transformers embedder")
                             # Create LanceDB vector database with our embedder
-                            vector_db = LanceDb(
-                                table_name=self.kb_table,
-                                uri=self.lancedb_dir,
-                                search_type="similarity",
-                                embedder=embedder  # Use our cached embedder instead of OpenAI
-                            )
+                            # Prefer AGNO's SearchType.hybrid if available; otherwise omit search_type
+                            if 'SearchType' in globals() and SearchType is not None:
+                                # Use vector-only search to avoid FTS index requirements
+                                vector_db = LanceDb(
+                                    table_name=self.kb_table,
+                                    uri=self.lancedb_dir,
+                                    search_type=SearchType.vector,
+                                    embedder=embedder  # Use our cached embedder instead of OpenAI
+                                )
+                            else:
+                                vector_db = LanceDb(
+                                    table_name=self.kb_table,
+                                    uri=self.lancedb_dir,
+                                    embedder=embedder  # Use our cached embedder instead of OpenAI
+                                )
                             # Persist reference for later use
                             try:
                                 self.vector_db = vector_db  # type: ignore[attr-defined]
@@ -450,53 +463,64 @@ class LauncherAgent:
 
                         @tool
                         def search_pack_knowledge(query: str, k: int = 4) -> str:  # type: ignore
-                            """Search tenant- and pack-scoped knowledge in LanceDB.
+                            """Search tenant- and pack-scoped knowledge using ML service.
                             Args:
                                 query: Natural language query to search for.
                                 k: Max documents to return (default 4).
                             Returns: A concise list of results with citations.
                             """
                             try:
-                                vdb = getattr(self, "vector_db", None)
-                                if vdb is None:
-                                    return "Knowledge DB unavailable."
-
-                                # Build filters from the latest run() context
+                                # Use the ML API client instead of local processing
+                                from app.services.ml_api_client import ml_client
+                                import asyncio
+                                
                                 t_id = getattr(self, "_current_tenant_id", None)
                                 pack_ids = getattr(self, "_current_pack_ids", None)
-                                filters = {}
-                                if t_id:
-                                    filters["tenant_id"] = t_id
-                                if pack_ids:
-                                    filters["pack_id"] = {"$in": pack_ids}
-
-                                # Try common LanceDb API patterns safely
-                                results = None
+                                
+                                if not t_id:
+                                    return "No tenant context available."
+                                
+                                if not pack_ids:
+                                    return "No packs selected for knowledge search."
+                                
+                                # Call ML service for vector search
                                 try:
-                                    # Preferred API (if supported by agno LanceDb wrapper)
-                                    results = vdb.search(query=query, filters=filters, limit=k)
-                                except Exception:
+                                    # Run async call in current event loop or create new one
                                     try:
-                                        # Fallback signatures
-                                        results = vdb.search(query, k)  # type: ignore
-                                    except Exception:
-                                        results = []
-
-                                # Format output
-                                out_lines = []
-                                for r in (results or []):
-                                    # Support dict or object-like returns
-                                    if isinstance(r, dict):
-                                        text = r.get("text") or r.get("content") or ""
-                                        meta = r.get("metadata") or {}
-                                    else:
-                                        text = getattr(r, "text", "") or getattr(r, "content", "")
-                                        meta = getattr(r, "metadata", {}) or {}
-                                    pack = meta.get("pack_id")
-                                    src = meta.get("source") or meta.get("doc") or meta.get("path")
-                                    out_lines.append(f"- pack={pack} source={src}: {text[:300].replace('\n',' ')}")
-
-                                return "No results." if not out_lines else "Results:\n" + "\n".join(out_lines)
+                                        loop = asyncio.get_event_loop()
+                                        if loop.is_running():
+                                            # We're in an async context, create a task
+                                            import concurrent.futures
+                                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                                future = executor.submit(
+                                                    asyncio.run,
+                                                    ml_client.search_vectors(query, t_id, pack_ids, k)
+                                                )
+                                                results = future.result(timeout=30)
+                                        else:
+                                            results = asyncio.run(ml_client.search_vectors(query, t_id, pack_ids, k))
+                                    except RuntimeError:
+                                        # No event loop, safe to create one
+                                        results = asyncio.run(ml_client.search_vectors(query, t_id, pack_ids, k))
+                                    
+                                    # Format output
+                                    out_lines = []
+                                    for r in results:
+                                        content = r.get("content", "")
+                                        pack_name = r.get("pack_name", "")
+                                        doc_type = r.get("document_type", "")
+                                        # Truncate content for readability
+                                        content_snippet = content[:250].replace('\n', ' ').strip()
+                                        out_lines.append(f"• [{pack_name}] {doc_type}: {content_snippet}...")
+                                    
+                                    if not out_lines:
+                                        return f"No knowledge found in selected packs ({', '.join(pack_ids)}) for query: {query}"
+                                    
+                                    return f"Knowledge from selected packs:\n" + "\n".join(out_lines)
+                                    
+                                except Exception as ml_error:
+                                    return f"ML service error: {ml_error}"
+                                    
                             except Exception as e:  # pragma: no cover
                                 return f"Search error: {e}"
 
@@ -504,15 +528,36 @@ class LauncherAgent:
                         print(f"[LAUNCHER_AGENT] ✅ Added knowledge search tool")
                     except Exception as e:
                         print(f"[LAUNCHER_AGENT] ⚠️ Failed to add knowledge search tool: {e}")
-                
+
+                # Add AGNO KnowledgeTools to enable Think -> Search -> Analyze over our knowledge base
+                try:
+                    kt_knowledge = getattr(self, "knowledge", None)
+                    if _HAS_AGNO and KnowledgeTools is not None and kt_knowledge is not None:
+                        kt = KnowledgeTools(
+                            knowledge=kt_knowledge,
+                            think=True,
+                            search=True,
+                            analyze=True,
+                            add_few_shot=True,
+                            add_instructions=True,
+                        )
+                        tools.append(kt)  # type: ignore[arg-type]
+                        print(f"[LAUNCHER_AGENT] ✅ Added KnowledgeTools (think+search+analyze)")
+                    else:
+                        if kt_knowledge is None:
+                            print(f"[LAUNCHER_AGENT] ⚠️ KnowledgeTools skipped: no knowledge configured")
+                except Exception as e:
+                    print(f"[LAUNCHER_AGENT] ⚠️ Failed to add KnowledgeTools: {e}")
+
                 self.agent = Agent(
                     model=groq_model,
                     storage=storage,
                     tools=tools if tools else None,
-                    # Attach knowledge when available for agentic RAG
+                    # Attach knowledge for KnowledgeTools context (search handled by KnowledgeTools)
                     **({"knowledge": getattr(self, "knowledge", None)} if hasattr(self, "knowledge") else {}),
-                    search_knowledge=True,
+                    search_knowledge=False,
                     instructions=[
+                        # Launcher workflow: plan, read, modify files using provided tools
                         "You are an AI agent specialized in understanding and modifying existing code projects through conversational interaction.",
                         "If the idea is complex: first use todo_plan to create a short step-by-step plan, then execute the steps. If the idea is simple: skip todo_plan and implement directly.",
                         "You have full access to read, understand, and modify files in the current project using the provided tools.",
@@ -522,19 +567,18 @@ class LauncherAgent:
                         "Always explain what you're doing and why when modifying files.",
                         "Generate production-ready code that follows the existing project's patterns and conventions.",
                         "Ask clarifying questions when requirements are ambiguous.",
-                        "Be helpful, concise, and technical when appropriate.",
-                        "When modifying existing files, preserve existing functionality unless specifically asked to change it.",
-                        # Pack-aware knowledge policy
+                        # Pack-aware knowledge policy unique to Kiff
                         "Knowledge usage policy:",
-                        "- Only retrieve and cite knowledge matching the current tenant_id and the user's selected pack_id(s).",
-                        "- Always filter by metadata: tenant_id=<CURRENT_TENANT>, pack_id in <SELECTED_PACKS>.",
-                        "- Provide brief citations including pack_id and document title/section.",
-                        "- If retrieval is insufficient, say so and ask whether to broaden packs.",
-                        "When answering pack-related questions, start by calling search_pack_knowledge(query) to fetch scoped citations.",
+                        "- ALWAYS use search_pack_knowledge(query) when users ask questions that could be answered from API documentation or pack content.",
+                        "- The search will automatically filter by the current tenant and user's selected pack(s).",
+                        "- Provide citations from the knowledge search results in your answers.",
+                        "- If no relevant knowledge is found, explain this and work with general programming knowledge.",
+                        "- For API-related questions, code examples, integration patterns, always search knowledge first.",
                     ],
                     show_tool_calls=True,
                     markdown=True,
-                    debug_mode=True,
+                    add_datetime_to_instructions=True,
+                    debug_mode=False
                 )
                 print(f"[LAUNCHER_AGENT] ✅ AGNO agent initialized successfully")
                 
@@ -613,7 +657,18 @@ class LauncherAgent:
                 messages = [{"role": "user", "content": prompt}]
 
                 async def _delegate(*, messages, stream=False):  # type: ignore
-                    out = await self.agent.arun(prompt, stream=stream)  # type: ignore
+                    """Call arun in a version-tolerant way.
+                    Prefer streaming + intermediate steps when supported; otherwise fallback.
+                    """
+                    try:
+                        out = await self.agent.arun(prompt, stream=stream, stream_intermediate_steps=True)  # type: ignore
+                    except TypeError:
+                        # Older AGNO may not support stream_intermediate_steps
+                        try:
+                            out = await self.agent.arun(prompt, stream=stream)  # type: ignore
+                        except TypeError:
+                            # Fallback to non-streaming
+                            out = await self.agent.arun(prompt)  # type: ignore
                     text = getattr(out, "content", "") or str(out)
                     return {"content": text}
 

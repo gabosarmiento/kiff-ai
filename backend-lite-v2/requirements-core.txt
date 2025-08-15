@@ -1,3 +1,4 @@
+# Core Backend Requirements - Lightweight version without ML dependencies
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
 uvloop==0.19.0
@@ -8,24 +9,25 @@ httpx==0.27.0
 beautifulsoup4==4.12.3
 sqlalchemy==2.0.31
 psycopg2-binary>=2.9.0  # PostgreSQL driver for SQLAlchemy
-# LanceDB stack (optional at runtime; used if installed)
+
+# Database storage (still needed for fallback vector storage)
 lancedb>=0.5.0
 pyarrow>=15.0.0
 numpy>=1.26.0,<2.0.0
 tantivy  # Required for LanceDB full text search
+
+# AWS and infrastructure
 boto3>=1.34.0
 e2b-code-interpreter>=1.5.2
 
-# AGNO + Groq LLM provider and local embedder
+# AGNO framework (still needed for agent operations in launcher)
 agno
 groq
 chonkie  # Required for semantic chunking in agno
 pypdf  # Required for PDF processing in agno
 
-# CPU-only PyTorch for sentence transformers (much smaller than CUDA)
-torch==2.2.2  # CPU wheel from PyPI (no +cu suffix)
-transformers>=4.41.0
-sentence-transformers>=3.0.0
- 
+# HTTP client for ML service communication
+aiohttp>=3.9.0
+
 # Email delivery
 resend>=0.7.0

@@ -1,12 +1,20 @@
 "use client";
+/**
+ * DEPRECATED: Kiff Compose UI
+ * -------------------------------------------------
+ * This component (KiffComposePanel) is deprecated and no longer used.
+ * We do not use the Compose flow anymore; the Launcher chat flow replaces it.
+ * Keep this file only for historical reference until full removal.
+ */
 import React from "react";
 import { apiJson, apiFetch } from "@/lib/api";
-// HITL: do not auto-dispatch actions; gate via explicit approval
-// import { dispatchAgentAction } from "../compose/agentActions";
+// Auto-dispatch local UI actions when proposed
+import { dispatchAgentAction } from "@/components/compose/agentActions";
 import { ProposedActionCard, parseTags, type ProposedAction, type ActionStatus } from "@/components/compose/HITL";
 import { listKBs } from "@/lib/api";
 import { createPreviewSandbox, streamApplyFiles, restartDevServer, fetchPreviewLogs, type PreviewSandbox, type ApplyFile, type PreviewEvent } from "@/lib/preview";
 import { getTenantId } from "@/lib/tenant";
+import { useAuth } from "@/hooks/useAuth";
 
 function normalizeModelIds(input: any): string[] {
   if (!input) return [];
@@ -54,6 +62,15 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
   onKiffSaved,
   compact = false,
 }) => {
+  const { isAdmin } = useAuth();
+  const autoRun = isAdmin && process.env.NEXT_PUBLIC_COMPOSE_AUTO_RUN === "1";
+  // Dev notice to avoid accidental usage during development
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn("[DEPRECATED] KiffComposePanel is deprecated and not used. Use the Launcher flow instead.");
+    }
+  }, []);
   // Core state
   // KBs fetched from backend (id + name). We store the selected value as the KB ID.
   const [kbs, setKbs] = React.useState<Array<{ id: string; name: string; vectors?: number }>>([]);
@@ -135,10 +152,21 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
     // Block destructive commands (future): if action.command?.destructive
     updateActionStatus(action.id, 'executing');
     try {
-      const id = sessionId || await createSession();
-      if (!id) throw new Error("No session");
+      const name = action.raw?.name || action.title;
       const args = editedArgs ?? action.raw?.args ?? '';
-      const approval = `User APPROVED action: ${action.raw?.name || action.title}(${args}). Execute and return exact file diffs, commands, and API calls as code blocks.`;
+
+      // 1) Dispatch locally for immediate UX effect
+      try {
+        await dispatchAgentAction({ name, args });
+        updateActionStatus(action.id, 'succeeded');
+      } catch (err: any) {
+        updateActionStatus(action.id, 'failed', { error: err?.message || String(err) });
+      }
+
+      // 2) Also notify backend of the approval (non-blocking for local state)
+      const id = sessionId || await createSession();
+      if (!id) return;
+      const approval = `User APPROVED action: ${name}(${args}). Execute and return exact file diffs, commands, and API calls as code blocks.`;
       const res = await apiJson<{ message_id: string; content: string }>(
         "/api/compose/message",
         { method: "POST", body: { session_id: id, prompt: approval, model_id: model } as any }
@@ -150,8 +178,8 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         { id: res.message_id, role: 'assistant', content: res.content }
       ]);
       setOutput((prev) => prev ? prev + "\n\n" + res.content : res.content);
-      updateActionStatus(action.id, 'succeeded');
     } catch (e: any) {
+      // Unexpected failure path
       updateActionStatus(action.id, 'failed', { error: e?.message || String(e) });
     }
   }
@@ -365,7 +393,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
         { id: `user_${Date.now()}`, role: 'user', content: prompt },
         { id: res.message_id, role: 'assistant', content: text, thought: res.thought || null, step: res.step ?? null, validator: res.validator || null, action_json: res.action ? JSON.stringify(res.action) : null }
       ]);
-      // HITL: if backend returned an action, propose it as a card (no auto-exec)
+      // If backend returned an action, surface it and conditionally auto-execute locally
       if (res.action && typeof res.action === 'object') {
         const act: ProposedAction = {
           id: `${res.message_id}:action`,
@@ -376,7 +404,17 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
           created_at: new Date().toISOString(),
           raw: { name: res.action.name, args: res.action.args }
         };
-        setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'proposed' } }]);
+        if (autoRun) {
+          setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'executing' } }]);
+          try {
+            await dispatchAgentAction({ name: res.action.name, args: res.action.args });
+            updateActionStatus(act.id, 'succeeded');
+          } catch (err: any) {
+            updateActionStatus(act.id, 'failed', { error: err?.message || String(err) });
+          }
+        } else {
+          setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'proposed' } }]);
+        }
       }
       await saveKiffAuto(text);
       await fetchUsedContext(id);
@@ -421,7 +459,7 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
             await fetchUsedContext(id);
             await saveKiffAuto(output);
             try { if (buffer && onOutput) await onOutput(buffer); } catch {}
-            // After complete, attempt to parse tags for a provisional action
+            // After complete, attempt to parse tags and conditionally auto-run the action
             if (buffer) {
               const parsed = parseTags(buffer);
               if (parsed.action) {
@@ -434,7 +472,17 @@ export const KiffComposePanel: React.FC<KiffComposePanelProps> = ({
                   created_at: new Date().toISOString(),
                   raw: parsed.action,
                 };
-                setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'proposed' } }]);
+                if (autoRun) {
+                  setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'executing' } }]);
+                  try {
+                    await dispatchAgentAction({ name: parsed.action.name, args: parsed.action.args });
+                    updateActionStatus(act.id, 'succeeded');
+                  } catch (err: any) {
+                    updateActionStatus(act.id, 'failed', { error: err?.message || String(err) });
+                  }
+                } else {
+                  setActions((prev) => [...prev, { action: act, status: { id: act.id, state: 'proposed' } }]);
+                }
               }
             }
             setLoading(false);
@@ -934,6 +982,7 @@ export default function App() {
                             onApprove={(a) => approveAction(a)}
                             onReject={(a) => rejectAction(a)}
                             onEdit={(a) => editAction(a)}
+                            hideControls={autoRun}
                           />
                         ))}
                       </div>

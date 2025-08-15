@@ -13,8 +13,7 @@ import json
 from datetime import datetime
 import uuid
 
-from app.services.embedder_cache import get_embedder
-from app.services.embedder_cache import EMBEDDING_MODEL_NAME
+from app.services.ml_api_client import ml_client
 from app.observability.llm_wrapper import embed_and_track, SessionContext
 
 class VectorStorageService:
@@ -23,22 +22,20 @@ class VectorStorageService:
     def __init__(self, db_path: str = "./kiff_vectors"):
         self.db_path = db_path
         self.db = lancedb.connect(db_path)
-        
-        # Use cached embedder
-        self.embedder = get_embedder()
     
-    def _embed_text(self, text: str) -> List[float]:
-        """Generate embeddings for text using Agno's embedder (sync fallback)."""
-        if self.embedder:
-            return self.embedder.get_embedding(text)
-        else:
+    async def _embed_text(self, text: str) -> List[float]:
+        """Generate embeddings for text using ML service."""
+        try:
+            return await ml_client.embed_text(text)
+        except Exception as e:
+            print(f"ML service embedding failed: {e}")
             # Fallback: use simple hash-based embedding
             return [float(hash(text) % 100) / 100.0 for _ in range(384)]
 
     async def _embed_text_tracked(self, text: str, tenant_id: Optional[str], *, tool_name: str) -> List[float]:
-        """Generate embeddings via embed_and_track for observability and budgeting."""
-        provider = "sentence-transformers"
-        model = EMBEDDING_MODEL_NAME
+        """Generate embeddings via ML service with observability tracking."""
+        provider = "ml-service"
+        model = "all-MiniLM-L6-v2"
         # Build minimal session context
         ctx = SessionContext(
             tenant_id=tenant_id,
@@ -51,14 +48,16 @@ class VectorStorageService:
             tool_name=tool_name,
         )
 
-        # Define async callable that returns embedding and optional usage
+        # Define async callable that returns embedding via ML service
         async def _call(text: str):
-            # Run sync embedder in a thread to avoid blocking
-            if self.embedder:
-                vec = await asyncio.to_thread(self.embedder.get_embedding, text)
-            else:
+            try:
+                vec = await ml_client.embed_text(text)
+                return {"embedding": vec}
+            except Exception as e:
+                print(f"ML service embedding failed: {e}")
+                # Fallback
                 vec = [float(hash(text) % 100) / 100.0 for _ in range(384)]
-            return {"embedding": vec}
+                return {"embedding": vec}
 
         result = await embed_and_track(
             provider=provider,
@@ -146,6 +145,15 @@ class VectorStorageService:
             vectors_data = []
             for doc in documents:
                 embedding = await self._embed_text_tracked(doc["content"], tenant_id, tool_name="store_pack_vectors")
+                # Prepare metadata as JSON string to avoid schema conflicts
+                metadata_str = ""
+                if doc.get("metadata"):
+                    try:
+                        import json
+                        metadata_str = json.dumps(doc["metadata"])
+                    except Exception:
+                        metadata_str = str(doc["metadata"])
+                
                 vectors_data.append({
                     "vector": embedding,
                     "content": doc["content"],
@@ -161,10 +169,10 @@ class VectorStorageService:
                     "api_url": pack.api_url,
                     "created_by": pack.created_by,
                     "document_type": doc["type"],
-                    "metadata": doc["metadata"]
+                    "metadata_json": metadata_str
                 })
             
-            # Create or get table
+            # Create or get table - handle schema changes by recreating table
             try:
                 table = self.db.open_table(table_name)
                 # Delete existing vectors for this pack to avoid duplicates
@@ -172,6 +180,22 @@ class VectorStorageService:
                     table.delete(f"pack_id = '{pack.id}'")
                 except Exception:
                     pass  # Table might not exist yet
+                
+                # Try adding a test record to check schema compatibility
+                if vectors_data:
+                    try:
+                        # Test with a single record first
+                        table.add(vectors_data[:1])
+                        vectors_data = vectors_data[1:]  # Skip first record since it's already added
+                    except ValueError as schema_error:
+                        if "not found in target schema" in str(schema_error):
+                            print(f"⚠️ Schema mismatch detected, recreating table: {schema_error}")
+                            # Drop and recreate table with new schema
+                            self.db.drop_table(table_name)
+                            table = self.db.create_table(table_name, vectors_data[:1])
+                            vectors_data = vectors_data[1:]  # Skip first record as it's used for schema
+                        else:
+                            raise
             except Exception:
                 # Create new table if it doesn't exist
                 if vectors_data:

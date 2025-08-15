@@ -1,11 +1,51 @@
 export type AgentAction = { name: string; args?: any };
 
+// Normalize a variety of arg formats (JSON string, "key: value" pairs, raw URL/selector) into structured objects
+function normalizeArgs(arg: any, name?: string): any {
+  if (arg == null) return arg;
+  if (typeof arg === 'object') return arg;
+  if (typeof arg === 'string') {
+    const s = arg.trim();
+    if (!s) return s;
+    // Try JSON parse first
+    try {
+      const parsed = JSON.parse(s);
+      return parsed;
+    } catch {}
+    // Allow raw URL string for navigate
+    if (name && name.toLowerCase() === 'navigate') return s;
+    // Parse simple "key: value, key2: value2" patterns
+    const obj: Record<string, any> = {};
+    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+    for (const part of parts) {
+      const i = part.indexOf(':');
+      if (i === -1) continue;
+      const key = part.slice(0, i).trim().replace(/^['"]|['"]$/g, '');
+      let val = part.slice(i + 1).trim();
+      val = val.replace(/^['"]|['"]$/g, '');
+      if (/^-?\d+(?:\.\d+)?$/.test(val)) obj[key] = Number(val);
+      else if (val === 'true' || val === 'false') obj[key] = val === 'true';
+      else obj[key] = val;
+    }
+    // Heuristics / aliases
+    if ((obj as any).sel && !(obj as any).selector) (obj as any).selector = (obj as any).sel;
+    if ((obj as any).val != null && (obj as any).value === undefined) (obj as any).value = (obj as any).val;
+    if (!Object.keys(obj).length) {
+      // map plain selector strings to { selector }
+      if (s.startsWith('#') || s.startsWith('.')) return { selector: s };
+      return s;
+    }
+    return obj;
+  }
+  return arg;
+}
+
 // Basic DOM operations dispatcher following Superwizard-style contract.
 // Extend safely with app-specific behaviors and EB2 triggers.
 export async function dispatchAgentAction(action: AgentAction): Promise<void> {
   if (!action || typeof action !== 'object') return;
   const name = String(action.name || '').toLowerCase();
-  const args = action.args;
+  const args = normalizeArgs(action.args, name);
   try {
     switch (name) {
       case 'navigate':

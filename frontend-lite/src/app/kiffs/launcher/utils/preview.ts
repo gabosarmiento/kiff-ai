@@ -98,12 +98,46 @@ export async function getFile(sessionId: string, path: string) {
   return res.json() as Promise<{ content: string }>; 
 }
 
-export async function installPackagesSSE(sessionId: string, packages: string[], onEvent: (evt: any) => void) {
+export async function installPackagesSSE(
+  sessionId: string,
+  packages: string[],
+  onEvent: (evt: any) => void,
+  opts?: { signal?: AbortSignal; timeoutMs?: number; inactivityMs?: number }
+) {
+  const controller = new AbortController();
+  const external = opts?.signal;
+  let abortedBy: 'external' | 'inactivity' | 'timeout' | null = null;
+  const onExternalAbort = () => { abortedBy = 'external'; controller.abort(); };
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  const timeoutMs = opts?.timeoutMs ?? 120_000; // overall safety timeout
+  const inactivityMs = opts?.inactivityMs ?? 90_000; // no chunks for 90s => abort
+  let inactivityTimer: any = null;
+  let overallTimer: any = null;
+  const resetInactivity = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      abortedBy = 'inactivity';
+      try { controller.abort(); } catch {}
+    }, inactivityMs);
+  };
+  const armOverall = () => {
+    if (overallTimer) clearTimeout(overallTimer);
+    overallTimer = setTimeout(() => {
+      abortedBy = 'timeout';
+      try { controller.abort(); } catch {}
+    }, timeoutMs);
+  };
   try {
+    armOverall();
+    resetInactivity();
     const res = await fetch(`${getBackendUrl()}/api/preview/install`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Tenant-ID": getTenantId() },
       body: JSON.stringify({ session_id: sessionId, packages }),
+      signal: controller.signal,
     });
     if (!res.ok) throw new Error(`installPackages failed: ${res.status}`);
     const reader = res.body?.getReader();
@@ -113,6 +147,7 @@ export async function installPackagesSSE(sessionId: string, packages: string[], 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      resetInactivity();
       buf += decoder.decode(value, { stream: true });
       const parts = buf.split("\n\n");
       buf = parts.pop() || "";
@@ -124,9 +159,15 @@ export async function installPackagesSSE(sessionId: string, packages: string[], 
       }
     }
   } catch (err: any) {
-    if (err?.name !== "AbortError") {
+    if (err?.name === "AbortError") {
+      try { onEvent({ type: 'aborted', reason: abortedBy || 'aborted' }); } catch {}
+    } else {
       console.warn("installPackagesSSE error", err);
     }
+  } finally {
+    try { if (external) external.removeEventListener("abort", onExternalAbort as any); } catch {}
+    try { if (inactivityTimer) clearTimeout(inactivityTimer); } catch {}
+    try { if (overallTimer) clearTimeout(overallTimer); } catch {}
   }
 }
 

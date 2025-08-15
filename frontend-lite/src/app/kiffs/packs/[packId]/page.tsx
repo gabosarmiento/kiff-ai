@@ -27,8 +27,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { apiJson } from '@/lib/api';
 
 interface KiffPackDetails {
@@ -556,16 +554,9 @@ export default function PackDetailsPage() {
               </CardHeader>
               <CardContent>
                 {pack.api_structure && Object.keys(pack.api_structure).length > 0 ? (
-                  <SyntaxHighlighter
-                    language="json"
-                    style={vscDarkPlus}
-                    customStyle={{
-                      maxHeight: '600px',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    {JSON.stringify(pack.api_structure, null, 2)}
-                  </SyntaxHighlighter>
+                  <pre className="max-h-[600px] overflow-auto rounded-lg bg-gray-900 text-gray-100 p-4 text-sm">
+                    <code>{JSON.stringify(pack.api_structure, null, 2)}</code>
+                  </pre>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     <Code className="w-12 h-12 mx-auto mb-2" />
@@ -585,15 +576,9 @@ export default function PackDetailsPage() {
                       <CardTitle className="capitalize">{language} Examples</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <SyntaxHighlighter
-                        language={language === 'curl' ? 'bash' : language}
-                        style={vscDarkPlus}
-                        customStyle={{
-                          borderRadius: '8px'
-                        }}
-                      >
-                        {code}
-                      </SyntaxHighlighter>
+                      <pre className="overflow-auto rounded-lg bg-gray-900 text-gray-100 p-4 text-sm">
+                        <code>{code}</code>
+                      </pre>
                     </CardContent>
                   </Card>
                 ))

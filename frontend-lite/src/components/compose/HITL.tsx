@@ -58,11 +58,13 @@ export function ProposedActionCard(props: {
   onApprove: (action: ProposedAction) => void | Promise<void>;
   onReject: (action: ProposedAction) => void | Promise<void>;
   onEdit: (action: ProposedAction) => void | Promise<void>;
+  hideControls?: boolean;
 }) {
-  const { action, status, onApprove, onReject, onEdit } = props;
+  const { action, status, onApprove, onReject, onEdit, hideControls } = props;
   const disabled = status.state !== "proposed" && status.state !== "draft";
 
   React.useEffect(() => {
+    if (hideControls) return; // do not bind shortcuts if controls are hidden
     function onKey(e: KeyboardEvent) {
       if (disabled) return;
       if (e.key.toLowerCase() === "a") onApprove(action);
@@ -71,7 +73,7 @@ export function ProposedActionCard(props: {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [action, disabled, onApprove, onReject, onEdit]);
+  }, [action, disabled, onApprove, onReject, onEdit, hideControls]);
 
   const safetyColor = action.safety === "high" ? "bg-rose-100 text-rose-800" : action.safety === "medium" ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-900";
 
@@ -131,24 +133,28 @@ export function ProposedActionCard(props: {
         )}
       </div>
       <div className="flex items-center gap-2 border-t p-2">
-        <button
-          className="rounded-md bg-emerald-600 text-white text-xs px-3 py-1.5 disabled:opacity-50"
-          onClick={() => onApprove(action)}
-          disabled={disabled}
-          aria-label="Approve"
-        >Approve</button>
-        <button
-          className="rounded-md bg-rose-600 text-white text-xs px-3 py-1.5 disabled:opacity-50"
-          onClick={() => onReject(action)}
-          disabled={disabled}
-          aria-label="Reject"
-        >Reject</button>
-        <button
-          className="rounded-md border border-slate-200 bg-white text-slate-800 text-xs px-3 py-1.5 disabled:opacity-50"
-          onClick={() => onEdit(action)}
-          disabled={disabled}
-          aria-label="Edit"
-        >Edit</button>
+        {!hideControls && (
+          <>
+            <button
+              className="rounded-md bg-emerald-600 text-white text-xs px-3 py-1.5 disabled:opacity-50"
+              onClick={() => onApprove(action)}
+              disabled={disabled}
+              aria-label="Approve"
+            >Approve</button>
+            <button
+              className="rounded-md bg-rose-600 text-white text-xs px-3 py-1.5 disabled:opacity-50"
+              onClick={() => onReject(action)}
+              disabled={disabled}
+              aria-label="Reject"
+            >Reject</button>
+            <button
+              className="rounded-md border border-slate-200 bg-white text-slate-800 text-xs px-3 py-1.5 disabled:opacity-50"
+              onClick={() => onEdit(action)}
+              disabled={disabled}
+              aria-label="Edit"
+            >Edit</button>
+          </>
+        )}
         <div className="ml-auto text-[12px] text-slate-500">State: {status.state}</div>
       </div>
     </div>

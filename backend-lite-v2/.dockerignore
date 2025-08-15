@@ -6,25 +6,72 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
 
 # Virtual envs
 .venv/
 venv/
 ENV/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
 
-# OS
-.DS_Store
+# ML models (downloaded at runtime to /models volume)
+*.pth
+*.pt
+*.ckpt
+models/
+checkpoints/
+.cache/
 
-# Tests/docs/examples not needed in image
+# Testing & development
 .tests/
 tests/
+test_*
+*_test.py
+.pytest_cache
+.coverage
+.mypy_cache
+.hypothesis
+
+# Documentation & examples
 docs/
 examples/
+README.md
+*.md
 
-# Local env files
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local development
 .env
 .env.*
-
-# Misc
-*.log
+local_*
+tmp/
+temp/
 .tmp/
+*.log
+
+# Docker
+Dockerfile.old
+docker-compose*
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+wheels/

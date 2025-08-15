@@ -151,8 +151,29 @@ export const apiClient = {
     ];
     debugLog('sendMessageStream candidate', urlCandidates[0]);
     let lastErr: any = null;
+    let aborted = false;
     for (const url of urlCandidates) {
       try {
+        // Combine external signal with an inactivity timeout to avoid indefinite hangs
+        const streamCtrl = new AbortController();
+        const external = handlers.signal;
+        const onExternalAbort = () => streamCtrl.abort();
+        if (external) {
+          if (external.aborted) streamCtrl.abort();
+          else external.addEventListener('abort', onExternalAbort, { once: true });
+        }
+        const INACTIVITY_MS = 60_000; // 60s without chunks => abort
+        let inactivityTimer: any = null;
+        const resetTimer = () => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          inactivityTimer = setTimeout(() => {
+            debugLog('sendMessageStream: inactivity timeout, aborting');
+            try { streamCtrl.abort(); } catch {}
+          }, INACTIVITY_MS);
+        };
+        // Initial arm
+        resetTimer();
+
         const res = await fetch(url, {
           method: "POST",
           headers: {
@@ -160,11 +181,14 @@ export const apiClient = {
             "X-Tenant-ID": validateTenant(),
           },
           body: JSON.stringify(payload),
-          signal: handlers.signal,
+          signal: streamCtrl.signal,
         });
         if (!res.ok) {
           lastErr = new Error(`stream failed: ${res.status} @ ${url}`);
           debugLog('stream failed', res.status, url);
+          // Clean up listeners/timers before trying next candidate
+          try { if (external) external.removeEventListener('abort', onExternalAbort as any); } catch {}
+          try { if (inactivityTimer) clearTimeout(inactivityTimer); } catch {}
           continue;
         }
         const ctype = res.headers.get('content-type') || '';
@@ -178,6 +202,8 @@ export const apiClient = {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          // Got a chunk: reset inactivity timer
+          resetTimer();
           buffer += decoder.decode(value, { stream: true });
           // Parse SSE-style lines: data: {json} or data: token
           const parts = buffer.split(/\n\n|\r\n\r\n/);
@@ -239,14 +265,31 @@ export const apiClient = {
           if (text) {
             const maybe = JSON.parse(text);
             handlers.onDone(maybe);
+            try { if (external) external.removeEventListener('abort', onExternalAbort as any); } catch {}
+            try { if (inactivityTimer) clearTimeout(inactivityTimer); } catch {}
             return;
           }
         } catch {}
         handlers.onDone(null);
+        try { if (external) external.removeEventListener('abort', onExternalAbort as any); } catch {}
+        try { if (inactivityTimer) clearTimeout(inactivityTimer); } catch {}
         return;
       } catch (e) {
         lastErr = e;
+        // If aborted (by user or inactivity), do not fallback to non-streaming
+        if ((e as any)?.name === 'AbortError') {
+          aborted = true;
+          break;
+        }
       }
+    }
+    // If we aborted, surface error and skip fallback
+    if (aborted) {
+      const abortErr = (lastErr && (lastErr as any).name === 'AbortError')
+        ? lastErr
+        : Object.assign(new Error('Request aborted'), { name: 'AbortError' });
+      handlers.onError(abortErr);
+      return;
     }
     // Fallback to non-streaming request
     try {
