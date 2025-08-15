@@ -23,6 +23,7 @@ from .routes import preview_live
 from .routes import admin_url_extractor
 from .routes import admin_api_gallery_editor
 from .routes import admin_bulk_indexer
+from .routes import admin_database
 from .routes import api_gallery_public
 from .routes import email
 from .telemetry.otel import init_otel
@@ -84,6 +85,7 @@ app.include_router(deps.router)
 app.include_router(admin_url_extractor.router)
 app.include_router(admin_api_gallery_editor.router)
 app.include_router(admin_bulk_indexer.router)
+app.include_router(admin_database.router)
 app.include_router(api_gallery_public.router)
 app.include_router(launcher_chat.router)
 app.include_router(packs.router)
