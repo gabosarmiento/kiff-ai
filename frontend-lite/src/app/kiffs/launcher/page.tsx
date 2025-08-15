@@ -585,6 +585,19 @@ function LauncherPageContent() {
       if (abortRef.current) abortRef.current.abort();
       abortRef.current = new AbortController();
 
+      // Get current project files from localStorage for agent context
+      let projectFiles: any[] = [];
+      if (sessionId && hasProject) {
+        try {
+          const storedFiles = localStorage.getItem(`files_${sessionId}`);
+          if (storedFiles) {
+            projectFiles = JSON.parse(storedFiles);
+          }
+        } catch (e) {
+          console.warn('Failed to load project files from localStorage', e);
+        }
+      }
+
       await apiClient.sendMessageStream(
         {
           message: msg,
@@ -599,6 +612,8 @@ function LauncherPageContent() {
           files: attSnapshot
             .filter((a) => !a.mime.startsWith("image/"))
             .map((a) => ({ name: a.name, mime: a.mime, content_base64: a.content_base64 })),
+          // Include current project files so the agent has context
+          project_files: projectFiles.length > 0 ? projectFiles : undefined,
         },
         {
           signal: abortRef.current.signal,
@@ -730,23 +745,81 @@ function LauncherPageContent() {
     if (!sessionId) return;
     try {
       await apiClient.approveProposal({ session_id: sessionId, proposal_id: proposalId });
-      // Mark proposal as approved in chat metadata
+      
+      // Find the proposal changes and apply them to localStorage files
+      let proposalChanges: any[] = [];
       setChatMessages((prev) => prev.map((m) => {
         const meta: any = (m as any).metadata;
         if (!meta?.proposals) return m;
-        const proposals = meta.proposals.map((p: any) => p?.id === proposalId ? { ...p, status: 'approved' } : p);
+        const proposals = meta.proposals.map((p: any) => {
+          if (p?.id === proposalId) {
+            proposalChanges = p.changes || [];
+            return { ...p, status: 'approved' };
+          }
+          return p;
+        });
         return { ...m, metadata: { ...meta, proposals } } as ChatMessage;
       }));
-      // Refresh file tree and selected file content
-      const { getFileTree, getFile } = await import('./utils/preview');
-      const tree = await getFileTree(sessionId);
-      setFilePaths(tree.files || []);
-      if (selectedPath) {
+
+      // Apply changes to localStorage files
+      try {
+        const storedFiles = localStorage.getItem(`files_${sessionId}`);
+        if (storedFiles && proposalChanges.length > 0) {
+          let parsedFiles = JSON.parse(storedFiles);
+          
+          // Apply each change from the proposal
+          for (const change of proposalChanges) {
+            const existingFileIndex = parsedFiles.findIndex((f: any) => f.path === change.path);
+            
+            if (existingFileIndex >= 0) {
+              // Update existing file
+              parsedFiles[existingFileIndex] = {
+                ...parsedFiles[existingFileIndex],
+                content: change.content,
+                language: change.language || parsedFiles[existingFileIndex].language
+              };
+            } else {
+              // Add new file
+              parsedFiles.push({
+                path: change.path,
+                content: change.content,
+                language: change.language || 'text'
+              });
+            }
+          }
+          
+          // Update localStorage with modified files
+          localStorage.setItem(`files_${sessionId}`, JSON.stringify(parsedFiles));
+          
+          // Update UI: refresh file list and current file content
+          const newFilePaths = parsedFiles.map((f: any) => f.path);
+          setFilePaths(newFilePaths);
+          
+          // If currently selected file was changed, update its content
+          if (selectedPath) {
+            const updatedFile = parsedFiles.find((f: any) => f.path === selectedPath);
+            if (updatedFile) {
+              setFileContent(updatedFile.content || '');
+            }
+          }
+        }
+      } catch (localError) {
+        console.warn('Failed to apply changes to localStorage, falling back to sandbox refresh', localError);
+        
+        // Fallback to sandbox refresh if localStorage approach fails
         try {
-          const f = await getFile(sessionId, selectedPath);
-          setFileContent(f.content || '');
-        } catch {}
+          const { getFileTree, getFile } = await import('./utils/preview');
+          const tree = await getFileTree(sessionId);
+          setFilePaths(tree.files || []);
+          if (selectedPath) {
+            const f = await getFile(sessionId, selectedPath);
+            setFileContent(f.content || '');
+          }
+        } catch (sandboxError) {
+          console.warn('Sandbox refresh also failed', sandboxError);
+        }
       }
+      
       toast.success('Proposal approved');
     } catch (e) {
       console.error('approveProposal failed', e);
@@ -847,23 +920,52 @@ function LauncherPageContent() {
         setTimeout(() => { try { stopFn(); } catch {} resolve(); }, 2000);
       });
 
-      // 4) Fetch file tree and load initial file
+      // 4) Set files directly from generated response (bypass sandbox requirement)
       let filesAfterApply: string[] = [];
       try {
-        const { getFileTree, getFile } = await import("./utils/preview");
-        const tree = await getFileTree(gen.session_id);
-        filesAfterApply = tree.files || [];
+        // Use generated files directly instead of fetching from sandbox
+        const generatedFiles = gen.files || [];
+        filesAfterApply = generatedFiles.map((f: any) => f.path);
         setFilePaths(filesAfterApply);
-        const firstTsx = (filesAfterApply || []).find((p: string) => p.endsWith("app/page.tsx")) || (filesAfterApply || [])[0] || null;
+        
+        // Select first file (prefer common entry points, fallback to first file)
+        const firstTsx = filesAfterApply.find((p: string) => p.endsWith("app.py") || p.endsWith("main.py") || p.endsWith("server.py")) || 
+                         filesAfterApply.find((p: string) => p.endsWith("app/page.tsx")) || 
+                         filesAfterApply[0] || null;
         setSelectedPath(firstTsx);
+        
         if (firstTsx) {
-          const f = await getFile(gen.session_id, firstTsx);
-          setFileContent(f.content || "");
+          // Get content directly from generated files instead of sandbox
+          const selectedFile = generatedFiles.find((f: any) => f.path === firstTsx);
+          setFileContent(selectedFile?.content || "");
         } else {
           setFileContent("");
         }
+        
+        // Store generated files for later access without sandbox dependency
+        if (typeof window !== 'undefined' && gen.session_id) {
+          localStorage.setItem(`files_${gen.session_id}`, JSON.stringify(generatedFiles));
+        }
+        
       } catch (e) {
-        console.warn("Failed to fetch file tree", e);
+        console.warn("Failed to process generated files", e);
+        // Fallback to sandbox if available
+        try {
+          const { getFileTree, getFile } = await import("./utils/preview");
+          const tree = await getFileTree(gen.session_id);
+          filesAfterApply = tree.files || [];
+          setFilePaths(filesAfterApply);
+          const firstTsx = (filesAfterApply || []).find((p: string) => p.endsWith("app/page.tsx")) || (filesAfterApply || [])[0] || null;
+          setSelectedPath(firstTsx);
+          if (firstTsx) {
+            const f = await getFile(gen.session_id, firstTsx);
+            setFileContent(f.content || "");
+          } else {
+            setFileContent("");
+          }
+        } catch (sandboxError) {
+          console.warn("Sandbox fallback also failed", sandboxError);
+        }
       }
 
       // 5) Install dependencies if package.json exists
@@ -1514,9 +1616,28 @@ function LauncherPageContent() {
                 onSelect={async (p) => {
                   setSelectedPath(p);
                   if (sessionId) {
-                    const { getFile } = await import("./utils/preview");
-                    const f = await getFile(sessionId, p);
-                    setFileContent(f.content || "");
+                    // Try to get file content from localStorage first (direct from generation)
+                    try {
+                      const storedFiles = localStorage.getItem(`files_${sessionId}`);
+                      if (storedFiles) {
+                        const parsedFiles = JSON.parse(storedFiles);
+                        const selectedFile = parsedFiles.find((f: any) => f.path === p);
+                        if (selectedFile) {
+                          setFileContent(selectedFile.content || "");
+                          return;
+                        }
+                      }
+                    } catch {}
+                    
+                    // Fallback to sandbox if stored files not available
+                    try {
+                      const { getFile } = await import("./utils/preview");
+                      const f = await getFile(sessionId, p);
+                      setFileContent(f.content || "");
+                    } catch (e) {
+                      console.warn("Failed to load file content:", e);
+                      setFileContent("// File content not available");
+                    }
                   }
                 }}
                 selectedPath={selectedPath}

@@ -20,6 +20,8 @@ export type SendMessageRequest = {
   model_id?: string;
   images?: { name: string; mime: string; content_base64: string }[];
   files?: { name: string; mime: string; content_base64: string }[];
+  // Optional: full project file context for the agent (not uploaded files)
+  project_files?: { path: string; content: string; language?: string }[];
 };
 
 export type SendMessageResponse = {

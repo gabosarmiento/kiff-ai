@@ -527,7 +527,7 @@ export default function KiffPacksPage() {
             {/* Filters */}
             <Card className="mb-6 fx-card">
               <CardContent className="p-4">
-                <div className="flex gap-4 items-center">
+                <div className="flex flex-wrap gap-4 items-center">
                   <div className="flex-1">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -541,7 +541,7 @@ export default function KiffPacksPage() {
                   </div>
                   
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-full sm:w-48">
                       <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent>
@@ -559,7 +559,7 @@ export default function KiffPacksPage() {
                   </Select>
 
                   <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-full sm:w-48">
                       <SelectValue placeholder="Sort by" />
                     </SelectTrigger>
                     <SelectContent>

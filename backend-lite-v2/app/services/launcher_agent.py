@@ -41,6 +41,32 @@ def _get_current_tenant_id() -> str:
     tid = _CURRENT_TENANT_ID or "default"
     return tid
 
+def _detect_language_from_extension(file_path: str) -> str:
+    """Detect programming language from file extension"""
+    ext = file_path.lower().split('.')[-1] if '.' in file_path else ''
+    lang_map = {
+        'py': 'python',
+        'js': 'javascript', 
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'md': 'markdown',
+        'yml': 'yaml',
+        'yaml': 'yaml',
+        'txt': 'text',
+        'sh': 'bash',
+        'sql': 'sql',
+        'go': 'go',
+        'rs': 'rust',
+        'java': 'java',
+        'php': 'php',
+        'rb': 'ruby'
+    }
+    return lang_map.get(ext, 'text')
+
 # Observability & budgeting
 try:
     from ..observability import SessionContext, call_llm_and_track
@@ -76,24 +102,10 @@ def create_project_tools(session_id: str):
             The content of the file or an error message
         """
         try:
-            # Use the preview store to get file content
-            from ..util.preview_store import PreviewStore
-            import os
-            table = os.getenv("DYNAMO_TABLE_PREVIEW_SESSIONS") or "preview_sessions" 
-            region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
-            store = PreviewStore(table_name=table, region_name=region)
-            
-            # Get session data and find the file
-            tenant_id = _get_current_tenant_id()
-            sess = store.get_session(tenant_id, session_id) or {}
-            files = sess.get("files") or []
-            
-            for f in files:
-                if isinstance(f, dict) and f.get("path") == file_path:
-                    content = f.get("content", "")
-                    return f"Content of {file_path}:\n\n{content}"
-            
-            return f"File {file_path} not found in project"
+            # Note: This tool now relies on the project_files context passed to the agent
+            # The actual file content should be available in the conversation context
+            # For now, we'll indicate that the agent should refer to the files in context
+            return f"To read {file_path}, please refer to the current project files provided in the conversation context. The file content should be visible above in the 'Current Project Files' section."
         except Exception as e:
             return f"Error reading {file_path}: {str(e)}"
 
@@ -109,80 +121,50 @@ def create_project_tools(session_id: str):
             Success message or error message
         """
         try:
-            # Use the E2B provider and update preview store
-            from ..util.sandbox_e2b import E2BProvider, E2BUnavailable
-            from ..util.preview_store import PreviewStore
-            import os
             import json
             import uuid as _uuid
             import difflib
             
-            # Get the sandbox ID from session
-            table = os.getenv("DYNAMO_TABLE_PREVIEW_SESSIONS") or "preview_sessions"
-            region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
-            store = PreviewStore(table_name=table, region_name=region)
-            tenant_id = _get_current_tenant_id()
-            sess = store.get_session(tenant_id, session_id) or {}
-            sandbox_id = sess.get("sandbox_id")
+            # Always create proposals for frontend approval since we're using localStorage
+            # The frontend will apply the changes to localStorage when approved
             
-            if not sandbox_id:
-                return f"Error: No sandbox found for session {session_id}"
-            
-            # Load existing file content to compute diff
-            files = sess.get("files") or []
-            updated = False
+            # Try to get current file content from the context or assume empty for new files
+            # This is a simple implementation - in a more sophisticated version,
+            # we could parse the project_files from the conversation context
             old_content = ""
-            for i, f in enumerate(files):
-                if isinstance(f, dict) and f.get("path") == file_path:
-                    old_content = f.get("content", "")
-                    # In approval mode, don't mutate yet
-                    if not _REQUIRE_APPROVAL:
-                        files[i] = {"path": file_path, "content": content, "language": f.get("language")}
-                    updated = True
-                    break
             
-            if not updated:
-                # new file
-                if not _REQUIRE_APPROVAL:
-                    files.append({"path": file_path, "content": content})
-            
-            if _REQUIRE_APPROVAL:
-                # Build proposal with diff and new content
-                diff_lines = list(
-                    difflib.unified_diff(
-                        old_content.splitlines(keepends=True),
-                        content.splitlines(keepends=True),
-                        fromfile=file_path,
-                        tofile=file_path,
-                    )
+            # Build proposal with diff and complete content
+            diff_lines = list(
+                difflib.unified_diff(
+                    old_content.splitlines(keepends=True),
+                    content.splitlines(keepends=True),
+                    fromfile=file_path,
+                    tofile=file_path,
                 )
-                proposal_id = str(_uuid.uuid4())
-                change = {
-                    "path": file_path,
-                    "diff": "".join(diff_lines),
-                    "new_content": content,
-                }
-                proposals = sess.get("pending_proposals") or []
-                proposals.append({"id": proposal_id, "changes": [change]})
-                sess["pending_proposals"] = proposals
-                store.update_session_fields(tenant_id, session_id, {"pending_proposals": proposals})
-                return "PROPOSAL:" + json.dumps({"proposal_id": proposal_id, "changes": [change]})
-            else:
-                # Apply the file to E2B immediately
-                try:
-                    provider = E2BProvider()
-                    provider.apply_files(sandbox_id=sandbox_id, files=[{"path": file_path, "content": content}])
-                except E2BUnavailable:
-                    # Mock mode - just update the store
-                    pass
-                # Update the preview store now
-                if not updated:
-                    files.append({"path": file_path, "content": content})
-                sess["files"] = files
-                store.update_session_fields(tenant_id, session_id, {"files": files})
-                return f"Successfully updated {file_path}"
+            )
+            
+            proposal_id = str(_uuid.uuid4())
+            change = {
+                "path": file_path,
+                "content": content,  # Include complete content for localStorage
+                "diff": "".join(diff_lines),
+                "language": _detect_language_from_extension(file_path)
+            }
+            
+            # Return proposal in JSON format that the frontend expects
+            proposal = {
+                "type": "ProposedFileChanges",
+                "proposal_id": proposal_id,
+                "title": f"Update {file_path}",
+                "changes": [change],
+                "status": "pending"
+            }
+            
+            # Return as special PROPOSAL format that the chat handler recognizes
+            return "PROPOSAL:" + json.dumps(proposal)
+            
         except Exception as e:
-            return f"Error writing {file_path}: {str(e)}"
+            return f"Error preparing file changes for {file_path}: {str(e)}"
 
     @tool  
     def list_files() -> str:
@@ -563,7 +545,10 @@ class LauncherAgent:
                         "You have full access to read, understand, and modify files in the current project using the provided tools.",
                         "When users request changes, always start by using list_files to see the project structure, then read relevant files to understand the current state.",
                         "Use read_file to examine existing code before making changes.",
-                        "Use write_file to apply modifications, always providing the complete updated file content.",
+                        "CRITICAL: When users ask you to modify files or make changes, you MUST use the write_file tool to create file proposals.",
+                        "The write_file tool creates proposals that the frontend can apply instantly - always use it instead of just describing changes.",
+                        "Always provide the complete updated file content when using write_file, not just partial changes.",
+                        "When making small changes like changing a single word, still use write_file with the complete file content.",
                         "Always explain what you're doing and why when modifying files.",
                         "Generate production-ready code that follows the existing project's patterns and conventions.",
                         "Ask clarifying questions when requirements are ambiguous.",

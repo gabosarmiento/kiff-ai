@@ -33,6 +33,11 @@ class ChatMessage(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class ProjectFile(BaseModel):
+    path: str
+    content: str
+    language: Optional[str] = None
+
 class SendMessageRequest(BaseModel):
     message: str
     chat_history: List[ChatMessage] = []
@@ -40,6 +45,10 @@ class SendMessageRequest(BaseModel):
     kiff_id: Optional[str] = None
     model_id: Optional[str] = None
     session_id: Optional[str] = None
+    project_files: Optional[List[ProjectFile]] = None
+    selected_packs: Optional[List[str]] = None
+    images: Optional[List[Dict[str, Any]]] = None
+    files: Optional[List[Dict[str, Any]]] = None
 
 
 class SendMessageResponse(BaseModel):
@@ -212,12 +221,25 @@ async def send_message(req: SendMessageRequest, request: Request, db: Session = 
     except Exception:
         pass
 
+    # Prepare enhanced message with project files context
+    enhanced_message = req.message
+    if req.project_files and len(req.project_files) > 0:
+        files_context = "\n\n## Current Project Files:\n"
+        for file in req.project_files[:10]:  # Limit to first 10 files to avoid token limit
+            files_context += f"\n**{file.path}** ({file.language or 'text'}):\n```{file.language or ''}\n"
+            # Truncate file content if too long
+            content = file.content[:2000] if len(file.content) > 2000 else file.content
+            files_context += content + ("\n... [truncated]" if len(file.content) > 2000 else "")
+            files_context += "\n```\n"
+        
+        enhanced_message = f"{req.message}{files_context}"
+
     run: AgentRunResult = await agent.run(
-        message=req.message,
+        message=enhanced_message,
         chat_history=[m.dict() for m in req.chat_history],
         tenant_id=tenant_id,
         kiff_id=kiff_id or "",
-        selected_packs=selected_packs,
+        selected_packs=req.selected_packs or selected_packs,
     )
 
     # Persist conversation messages using a fresh session
@@ -378,13 +400,26 @@ async def stream_message(req: SendMessageRequest, request: Request, db: Session 
         content = getattr(m, "content", None) or (isinstance(m, dict) and m.get("content")) or ""
         context_lines.append(f"{role.upper()}: {content}")
     context_text = "\n".join(context_lines)
+    
+    # Add project files context if available
+    files_context = ""
+    if req.project_files and len(req.project_files) > 0:
+        files_context = "\n\n## Current Project Files:\n"
+        for file in req.project_files[:8]:  # Limit files for streaming to avoid token limit
+            files_context += f"\n**{file.path}** ({file.language or 'text'}):\n```{file.language or ''}\n"
+            # More aggressive truncation for streaming
+            content = file.content[:1500] if len(file.content) > 1500 else file.content
+            files_context += content + ("\n... [truncated]" if len(file.content) > 1500 else "")
+            files_context += "\n```\n"
+        files_context += "\nWhen proposing changes, reference the existing files and provide complete updated file contents.\n"
+    
     prompt = (
         f"Tenant: {tenant_id}\nKiff: {kiff_id}\n"
         f"Selected Packs: {', '.join(selected_packs or [])}\n"
         "You are assisting the user to define and iteratively build a 'kiff' (project).\n"
         "Ask clarifying questions when needed and propose concrete file additions or changes.\n"
         "When knowledge is present, cite patterns; otherwise proceed with best practices.\n\n"
-        f"Chat so far:\n{context_text}\n\nUser: {req.message}"
+        f"Chat so far:\n{context_text}\n\nUser: {req.message}{files_context}"
     )
 
     # Set tenant/pack context for tools and knowledge

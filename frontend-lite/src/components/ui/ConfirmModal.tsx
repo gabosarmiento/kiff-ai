@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import ReactDOM from "react-dom";
 
 type Props = {
   open: boolean;
@@ -21,7 +22,7 @@ export function ConfirmModal({ open, title = "Are you sure?", message, confirmTe
   }, [open, confirmMatch]);
   const matchOk = confirmMatch ? value === confirmMatch : true;
   if (!open) return null;
-  return (
+  const content = (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal">
         <div className="modal-header">{title}</div>
@@ -47,4 +48,9 @@ export function ConfirmModal({ open, title = "Are you sure?", message, confirmTe
       </div>
     </div>
   );
+  // Render in a portal attached to body to avoid transformed ancestors affecting fixed positioning
+  if (typeof document !== 'undefined' && document.body) {
+    return ReactDOM.createPortal(content, document.body);
+  }
+  return content;
 }

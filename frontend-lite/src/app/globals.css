@@ -84,6 +84,10 @@ html body {
   .pane { 
     padding-bottom: 8rem !important; /* Space for bottom navigation */
   }
+  /* Prevent any horizontal overflow on small screens */
+  html, body, .app-shell, .pane { overflow-x: hidden !important; }
+  /* Ensure content does not exceed viewport width even if inline styles set a maxWidth */
+  .pane-with-sidebar { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
   /* Avoid iOS input zoom by enforcing 16px minimum font-size */
   input, select, textarea, button { font-size: 16px; }
 }
@@ -126,7 +130,7 @@ html body {
 .muted { color: #64748b; font-size: 12px; }
 
 /* Modal */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; animation: fade-up .24s var(--ease-live) both; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 2000; animation: fade-up .24s var(--ease-live) both; }
 .modal { width: 420px; max-width: calc(100% - 32px); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); animation: pop .18s ease-out both; }
 .modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
 .modal-body { padding: 14px 16px; }

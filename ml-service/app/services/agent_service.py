@@ -30,6 +30,13 @@ class AgentService:
     def _setup_agent(self):
         """Initialize AGNO agent"""
         try:
+            # Check if GROQ API key is available
+            groq_api_key = os.getenv("GROQ_API_KEY")
+            if not groq_api_key:
+                print(f"[AGENT] ⚠️ GROQ_API_KEY not set. Agent will be unavailable.")
+                self.agent = None
+                return
+            
             model_id = os.getenv("AGENT_MODEL_ID", "llama-3.1-8b-instant")
             groq_model = Groq(id=model_id)
             
