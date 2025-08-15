@@ -1,43 +1,63 @@
-# Kiff AI - Knowledge-Driven Development SaaS Platform
+# Kiff AI - Microservice AI Development Platform
 
-Enterprise-grade AI-powered SaaS platform that combines comprehensive knowledge bases with advanced LLM agents to generate sophisticated applications, provide intelligent development assistance, and deliver real-time insights across multiple domains.
+Enterprise-grade AI-powered platform with optimized microservice architecture that combines comprehensive knowledge bases with advanced LLM agents to generate sophisticated applications, provide intelligent development assistance, and deliver real-time insights across multiple domains.
 
-## 🚀 Quick Start
+## 🏗️ Microservice Architecture
+
+### 🔧 Architecture Overview
+
+The platform is built with a modern microservice architecture optimizing for performance and scalability:
+
+- **Core Backend Service** (~214MB): Lightweight FastAPI service handling authentication, APIs, and database operations
+- **ML Service** (~3.2GB): Specialized service for vector embeddings, LanceDB operations, and AGNO agent processing
+- **Frontend**: Next.js application with localStorage-based file management
+
+### 🚀 Quick Start
 
 ```bash
-# Backend (FastAPI + PostgreSQL)
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+# Option 1: Microservices with Docker Compose
+docker-compose -f docker-compose.kiff.yml up --build
+
+# Option 2: Individual services for development
+# Core Backend (FastAPI)
+cd backend-lite-v2
+pip install -r requirements-core.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# Frontend (React + Vite)
-cd frontend
+# ML Service (AGNO + Vector DB)
+cd ml-service
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+
+# Frontend (Next.js)
+cd frontend-lite
 npm install && npm run dev
 ```
 
-**Backend**: http://localhost:8000 | **Frontend**: http://localhost:5173 | **API Docs**: http://localhost:8000/docs | **Admin**: http://localhost:5173/admin
+**Local URLs**: Backend: http://localhost:8000 | ML Service: http://localhost:8001 | Frontend: http://localhost:3000
 
 ## 🌟 **Platform Capabilities**
 
-### 📊 **Real-Time Token Tracking & Billing**
-- **Multi-Model Tracking**: Automatic detection and tracking of actual LLM models used (Llama, DeepSeek, Qwen, Kimi-K2)
-- **Billing Cycle Management**: Monthly billing cycles with automatic reset and consumption aggregation
-- **Dashboard Integration**: Real-time token consumption display in user dashboard with detailed breakdowns
-- **Admin Monitoring**: Comprehensive tenant-wide token consumption analytics and cost management
+### 🚀 **Kiff Launcher - AI-Powered Development Workspace**
+- **Instant Project Generation**: Create complete project structures with AI assistance
+- **Interactive Chat Agent**: AGNO-powered agent with file modification capabilities
+- **Real-Time File Management**: localStorage-based file system with instant modifications
+- **Live Preview Integration**: See changes applied immediately without external dependencies
+- **Knowledge-Aware Development**: Agent leverages indexed API documentation and best practices
 
 ### 🧠 **Knowledge-Driven Development**
-- **Dynamic Knowledge Bases**: Real-time indexing of API documentation from major providers
-- **Intelligent RAG**: Modular Retrieval-Augmented Generation with swappable knowledge sources
-- **Conversational AI**: Context-aware development assistance with integrated knowledge retrieval
-- **API Gallery**: Curated collection of indexed API documentation with smart filtering
+- **Pack-Based Knowledge System**: Curated knowledge packs with tenant-scoped access
+- **Vector Search Integration**: LanceDB-powered semantic search with confidence scoring
+- **Multi-Source RAG**: Combines pack knowledge with web search (Serper, Tavily, EXA APIs)
+- **Intelligent Context Retrieval**: Automatic knowledge augmentation for low-confidence responses
+- **API Documentation Index**: Real-time indexing of API documentation from major providers
 
-### 🤖 **Advanced Application Generation**
-- **Generate V0.1**: Comprehensive AGNO framework integration with 30+ documentation sources
-- **Generate V0**: Fast, efficient application generation with curated knowledge
-- **Production-Ready Output**: Complete applications with Docker, testing, and deployment configurations
-- **Multi-Framework Support**: Flask, FastAPI, React, CLI tools, microservices, and full-stack applications
+### 🤖 **Advanced AI Agent Integration**
+- **AGNO Framework**: Sophisticated agent framework with tool-driven interactions
+- **File Modification Tools**: Direct file creation/editing with proposal-based approval system
+- **Multi-Model Support**: Dynamic LLM selection (Groq: Llama, DeepSeek, Qwen, Kimi-K2)
+- **Streaming Responses**: Real-time agent communication with intermediate steps visibility
+- **Context-Aware Processing**: Agent maintains project context and applies changes intelligently
 
 **Backend**: http://localhost:8000 | **Frontend**: http://localhost:5173 | **API Docs**: http://localhost:8000/docs | **Admin**: http://localhost:5173/admin
 
@@ -67,53 +87,58 @@ npm install && npm run dev
 - 📈 **Observability**: LangTrace integration, metrics collection, and real-time monitoring
 - 🔄 **Streaming Interfaces**: Real-time updates and progressive application generation
 
-## 🏗️ Enterprise Architecture
+## 🏗️ Microservice Architecture
 
-**Knowledge-Driven SaaS Platform:**
+**Optimized Knowledge-Driven Platform:**
 ```
 kiff-ai/
-├── frontend/              # React + TypeScript + Tailwind CSS
-│   ├── src/components/    # Modular UI components
-│   │   ├── admin/        # Admin dashboard components
-│   │   ├── billing/      # Token tracking & billing UI
-│   │   ├── chat/         # Conversational interfaces
-│   │   └── knowledge/    # Knowledge base management
-│   └── src/pages/        # Application pages & routing
-├── backend/              # FastAPI + PostgreSQL + AGNO Framework
-│   ├── app/api/routes/   # RESTful API endpoints
-│   │   ├── admin*.py     # Admin & analytics APIs
-│   │   ├── *_generation.py  # App generation services
-│   │   ├── billing_*.py  # Token tracking & billing
-│   │   └── knowledge.py  # Knowledge base APIs
-│   ├── app/knowledge/    # Knowledge management system
-│   │   ├── engine/       # Knowledge processing engines
-│   │   ├── data/         # Vector databases (LanceDB)
-│   │   └── interfaces/   # Modular RAG interfaces
+├── frontend-lite/         # Next.js + TypeScript + Tailwind CSS
+│   ├── src/app/          # App router pages
+│   │   ├── kiffs/        # Kiff management & launcher
+│   │   ├── admin/        # Admin dashboard
+│   │   └── api/          # API route handlers
+│   ├── src/components/   # Modular UI components
+│   │   ├── compose/      # Development workspace
+│   │   ├── kiffs/        # Kiff-specific components  
+│   │   └── ui/           # Shared UI components
+│   └── src/lib/          # Utilities & API clients
+├── backend-lite-v2/      # Core Backend Service (~214MB)
+│   ├── app/routes/       # FastAPI API endpoints
+│   │   ├── launcher_*.py # Launcher & project management
+│   │   ├── auth.py       # Authentication & sessions
+│   │   ├── packs.py      # Knowledge pack management
+│   │   └── admin_*.py    # Admin operations
 │   ├── app/services/     # Business logic services
-│   │   ├── *_generator.py    # Application generators
-│   │   ├── billing_*.py      # Billing & token services
-│   │   └── modular_rag_*.py  # RAG system services
-│   └── app/core/         # Core infrastructure
-│       ├── multi_tenant_db.py    # Multi-tenant database
-│       ├── token_tracker.py      # Token consumption tracking
-│       └── middleware/           # Security & tenant middleware
+│   │   ├── launcher_agent.py    # AGNO agent integration
+│   │   ├── ml_api_client.py     # ML service client
+│   │   └── vector_storage.py    # Vector operations
+│   └── app/middleware/   # Security & tenant middleware
+├── ml-service/           # ML Service (~3.2GB)
+│   ├── app/services/     # AI/ML processing services
+│   │   ├── embedder_service.py  # Text embeddings
+│   │   ├── vector_service.py    # LanceDB operations
+│   │   └── agent_service.py     # AGNO agent processing
+│   └── requirements.txt  # ML-specific dependencies
+├── storybookv0/          # Component library showcase
 └── docs/                 # Documentation & guides
 ```
 
 ## 🛠️ Advanced Tech Stack
 
-### 🔧 **Backend Infrastructure**
-- **Framework**: FastAPI + SQLAlchemy + PostgreSQL with async operations
-- **AI Framework**: AGNO (Advanced Agent Framework) with comprehensive tooling
-- **Vector Databases**: LanceDB with hybrid search capabilities
+### 🔧 **Microservice Infrastructure**
+- **Core Backend** (~214MB): FastAPI + SQLAlchemy + PostgreSQL with optimized Docker builds
+- **ML Service** (~3.2GB): AGNO (Advanced Agent Framework) + LanceDB + sentence-transformers
+- **Service Communication**: HTTP API client with async operations between services
+- **Vector Databases**: LanceDB with hybrid search capabilities in dedicated ML service
 - **Multi-Tenancy**: Advanced tenant isolation with security middleware
 - **Observability**: LangTrace integration for LLM monitoring and analytics
 
 ### 🎨 **Frontend Architecture**
-- **Framework**: React 18 + TypeScript + Vite for lightning-fast development
+- **Framework**: Next.js 14 + TypeScript + App Router for modern development
 - **Styling**: Tailwind CSS with custom design system components
-- **State Management**: Context API with optimized re-rendering
-- **Real-Time**: WebSocket integration for streaming interfaces
+- **State Management**: localStorage-based file management with React state
+- **Real-Time**: Server-Sent Events (SSE) for streaming chat interfaces
+- **File Management**: Direct localStorage integration replacing sandbox dependency
 
 ### 🤖 **AI & LLM Integration**
 - **Multi-Model Support**: Dynamic selection across multiple LLM providers
@@ -130,11 +155,29 @@ kiff-ai/
 
 ## 🌐 Deployment
 
-### Vercel (Recommended)
-1. Push to GitHub repository
-2. Connect Vercel to this repo
-3. Deploy both frontend and backend automatically
-4. See `backend/VERCEL_DEPLOYMENT.md` for detailed instructions
+### 🚀 Production Deployment
+
+**Frontend (Vercel)**
+```bash
+cd frontend-lite
+vercel --prod --env NEXT_PUBLIC_API_BASE_URL=<your-backend-url>
+```
+
+**Backend Services (AWS App Runner)**
+```bash
+# Build and push to ECR
+docker build -t your-registry/core-backend ./backend-lite-v2
+docker build -t your-registry/ml-service ./ml-service
+
+# Deploy via AWS App Runner with ECR integration
+# Core backend: Small instance (1 vCPU, 2GB RAM)
+# ML service: Medium instance (2 vCPU, 4GB RAM)
+```
+
+**Environment Variables**
+- Core Backend: API keys via AWS Secrets Manager
+- ML Service: Model cache paths and vector storage configuration
+- Frontend: Backend API URL via Vercel environment variables
 
 ## Monorepo Vercel Setup (frontend-lite + storybookv0)
 

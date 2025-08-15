@@ -61,11 +61,13 @@ class SendMessageResponse(BaseModel):
 
 class LoadSessionRequest(BaseModel):
     kiff_id: str
+    last_n_sessions: Optional[int] = 1
 
 
 class LoadSessionResponse(BaseModel):
     session_id: str
     messages: List[ChatMessage]
+    agent_state: Optional[Dict[str, Any]] = None
 
 
 class SaveSessionRequest(BaseModel):
@@ -240,6 +242,7 @@ async def send_message(req: SendMessageRequest, request: Request, db: Session = 
         tenant_id=tenant_id,
         kiff_id=kiff_id or "",
         selected_packs=req.selected_packs or selected_packs,
+        user_id=req.user_id,
     )
 
     # Persist conversation messages using a fresh session
@@ -796,35 +799,52 @@ async def toggle_hitl(req: HitlToggleRequest, request: Request, db: Session = De
 @router.post("/load-session", response_model=LoadSessionResponse)
 async def load_session(req: LoadSessionRequest, request: Request, db: Session = Depends(get_db)):
     tenant_id = _tenant_id_from_request(request)
+    # Determine how many sessions to load
+    n = max(1, int(req.last_n_sessions or 1))
     # First, try interpreting provided ID as a kiff_id (existing behavior)
-    session = (
+    sessions = (
         db.query(KiffChatSession)
         .filter(KiffChatSession.kiff_id == req.kiff_id, KiffChatSession.tenant_id == tenant_id)
         .order_by(KiffChatSession.created_at.desc())
-        .first()
+        .limit(n)
+        .all()
     )
-    # If not found, also try treating the provided value as a session_id.
-    # This makes the endpoint resilient when the frontend passes a session id in the `kiff` URL param.
-    if not session:
-        session = (
+    if not sessions:
+        # Also try if provided value is actually a session_id; treat as single session
+        sess = (
             db.query(KiffChatSession)
             .filter(KiffChatSession.id == req.kiff_id, KiffChatSession.tenant_id == tenant_id)
-            .order_by(KiffChatSession.created_at.desc())
             .first()
         )
-    if not session:
+        if sess:
+            sessions = [sess]
+    if not sessions:
         raise HTTPException(status_code=404, detail="No session found for kiff")
 
-    msgs = (
+    # Collect messages from the selected sessions and sort chronologically
+    all_msgs: List[ConversationMessage] = (
         db.query(ConversationMessage)
-        .filter(ConversationMessage.session_id == session.id, ConversationMessage.tenant_id == tenant_id)
+        .filter(ConversationMessage.session_id.in_([s.id for s in sessions]), ConversationMessage.tenant_id == tenant_id)
         .order_by(ConversationMessage.created_at.asc())
         .all()
     )
     out: List[ChatMessage] = []
-    for m in msgs:
+    for m in all_msgs:
         out.append(ChatMessage(role=m.role, content=m.content, timestamp=m.created_at.isoformat()))
-    return LoadSessionResponse(session_id=session.id, messages=out)
+    # Return the most recent session_id for continuity
+    # Normalize agent_state to dict for the most recent session
+    try:
+        raw_state = sessions[0].agent_state if sessions else None
+        if isinstance(raw_state, str):
+            import json as _json
+            agent_state = _json.loads(raw_state) if raw_state else {}
+        else:
+            agent_state = raw_state or {}
+        if not isinstance(agent_state, dict):
+            agent_state = {}
+    except Exception:
+        agent_state = {}
+    return LoadSessionResponse(session_id=sessions[0].id, messages=out, agent_state=agent_state)
 
 
 @router.post("/save-session")

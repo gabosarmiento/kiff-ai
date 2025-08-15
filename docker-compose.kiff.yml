@@ -9,11 +9,11 @@ services:
     env_file:
       - .env
     environment:
-      - ML_SERVICE_URL=http://ml-service:8001
+      - ML_SERVICE_URL=https://7p5dqvvip5.eu-west-3.awsapprunner.com
       - DATABASE_URL=sqlite:///./kiff_dev.db
       - AWS_REGION=eu-west-3
-    depends_on:
-      - ml-service
+    # depends_on:
+      # - ml-service  # Using deployed ML service instead
     volumes:
       - ./backend-lite-v2/kiff_dev.db:/app/kiff_dev.db
     networks:

@@ -76,6 +76,20 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit & { 
 }
 
 export const apiClient = {
+  async saveSession(payload: { session_id: string; agent_state: Record<string, any> }): Promise<{ status: string }> {
+    const tenant = validateTenant();
+    const res = await withRetry(() => fetchWithTimeout(`${getBackendUrl()}/api/chat/save-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Tenant-ID": tenant,
+      },
+      body: JSON.stringify(payload),
+      timeoutMs: 20000,
+    }));
+    if (!res.ok) throw new Error(`save-session failed: ${res.status}`);
+    return res.json();
+  },
   async updateSessionPacks(session_id: string, selected_packs: string[]): Promise<{ status: number }> {
     const tenant = validateTenant();
     const url = `${getBackendUrl()}/api/launcher/session/${encodeURIComponent(session_id)}/packs`;

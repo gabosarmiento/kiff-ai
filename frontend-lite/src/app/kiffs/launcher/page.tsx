@@ -79,6 +79,9 @@ function LauncherPageContent() {
   const logsRef = useRef<HTMLDivElement | null>(null);
   const [installState, setInstallState] = useState<string>("");
   const [previewScale, setPreviewScale] = useState(1);
+  // Debounce and guards for agent_state persistence
+  const saveDebounceRef = useRef<any>(null);
+  const appliedAgentStateRef = useRef<boolean>(false);
 
   // Auto-resize for IdleHero idea textarea up to 10 lines, then enable scroll
   const adjustIdeaHeight = useCallback(() => {
@@ -399,7 +402,25 @@ function LauncherPageContent() {
           }
           // Consider we now have a project to show
           setHasProject(true);
-          // 2) Restore packs selected for this kiff from localStorage
+          // 2) Restore agent_state (model, selected_packs) from backend if present
+          try {
+            const stRaw = data?.agent_state;
+            const st = typeof stRaw === 'string' ? JSON.parse(stRaw) : (stRaw || {});
+            if (st && typeof st === 'object') {
+              const packs = Array.isArray(st.selected_packs) ? st.selected_packs.filter((x: any) => typeof x === 'string') : null;
+              const mid = typeof st.model_id === 'string' ? st.model_id : null;
+              if (packs && packs.length >= 0) {
+                setSelectedPacks(packs);
+                setGlobalSelectedPacks(packs);
+                try { localStorage.setItem(`kiff_packs_${kid}`, JSON.stringify(packs)); } catch {}
+              }
+              if (mid) setModel(mid);
+              appliedAgentStateRef.current = true;
+            }
+          } catch (e) {
+            console.warn('Failed to apply agent_state from backend', e);
+          }
+          // 2b) Fallback: restore packs selected for this kiff from localStorage
           try {
             const packsKey = `kiff_packs_${kid}`;
             const packsRaw = localStorage.getItem(packsKey);
@@ -457,6 +478,29 @@ function LauncherPageContent() {
       }
     })();
   }, [kiffParam, kiffId]);
+
+  // Persist agent_state (model_id, selected_packs) when they change
+  useEffect(() => {
+    if (!sessionId) return;
+    // If we just applied backend state, skip the first save to avoid echoing unchanged values
+    if (appliedAgentStateRef.current) {
+      appliedAgentStateRef.current = false;
+      return;
+    }
+    // Keep localStorage in sync for backwards compatibility
+    try {
+      if (kiffId) localStorage.setItem(`kiff_packs_${kiffId}`, JSON.stringify(selectedPacks));
+    } catch {}
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      apiClient
+        .saveSession({ session_id: sessionId, agent_state: { model_id: model, selected_packs: selectedPacks, chat_active: true } })
+        .catch((e) => console.warn('save-session failed', e));
+    }, 500);
+    return () => {
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    };
+  }, [sessionId, model, selectedPacks, kiffId]);
 
   // Check for reset parameter in URL and reset state
   useEffect(() => {

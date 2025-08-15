@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..db_core import SessionLocal
 from ..models_kiffs import Kiff, KiffChatSession, ConversationMessage
+from ..services.launcher_agent import LauncherAgent
 
 # Optional imports for AGNO
 try:
@@ -33,6 +34,7 @@ class GenerateRequest(BaseModel):
     selected_packs: Optional[List[str]] = None
     user_id: Optional[str] = None
     kiff_id: Optional[str] = None
+    model_id: Optional[str] = None
 
 
 class FileSpec(BaseModel):
@@ -70,32 +72,19 @@ def _tenant_id_from_request(request: Request) -> str:
 
 # --- Helpers ---
 
-async def _generate_project_files(idea: str, packs: List[str], tenant_id: str) -> tuple[List[Dict[str, str]], str]:
-    """Generate project files using AGNO agent based on user's idea and selected packs."""
+async def _generate_project_files(idea: str, packs: List[str], tenant_id: str, model_id: Optional[str], session_id: str, kiff_id: str, user_id: Optional[str]) -> tuple[List[Dict[str, str]], str]:
+    """Generate project files using the shared LauncherAgent based on user's idea and selected packs."""
     if not _HAS_AGNO:
         raise HTTPException(status_code=503, detail="Project generation requires AGNO framework")
-    
-    # Create agent for project generation
-    model = Groq(id="llama-3.3-70b-versatile")
-    agent = Agent(
-        model=model,
-        instructions=[
-            "You are an expert project generator that creates complete, production-ready projects.",
-            "Analyze the user's idea and generate appropriate files based on the technology they request.",
-            "Generate complete, working code with proper error handling and best practices.",
-            "Always include a README.md explaining how to run the project.",
-            "Format your response as a JSON object with 'files' array containing objects with 'path', 'content', and 'language' fields."
-        ],
-        show_tool_calls=True,
-        markdown=True,
-        debug_mode=True
-    )
-    
+
+    # Use the unified LauncherAgent to ensure the same model/tools/knowledge as chat
+    launcher = LauncherAgent(session_id=session_id, model_id=model_id)
+
     # Prepare context about selected packs
     pack_context = ""
     if packs:
         pack_context = f"\n\nSelected Kiff Packs: {', '.join(packs)}\nIntegrate these APIs/services if relevant to the project."
-    
+
     prompt = f"""Create a complete project for this idea: "{idea}"{pack_context}
 
 Generate all necessary files with complete, working code. Respond with a JSON object in this exact format:
@@ -109,8 +98,15 @@ Generate all necessary files with complete, working code. Respond with a JSON ob
 
 Make sure the project is complete and runnable. Include proper dependencies, configuration files, and documentation."""
 
-    response = await agent.arun(prompt)
-    response_text = response.content if hasattr(response, 'content') else str(response)
+    result = await launcher.run(
+        message=prompt,
+        chat_history=[],
+        tenant_id=tenant_id,
+        kiff_id=kiff_id,
+        selected_packs=packs,
+        user_id=user_id,
+    )
+    response_text = result.content
     
     # Parse JSON response
     try:
@@ -324,7 +320,15 @@ async def generate_project(req: GenerateRequest, request: Request, db: Session =
     packs = (req.selected_packs or [])[:5]
 
     # Generate project files using the agent instead of hardcoded scaffolding  
-    files, agent_response = await _generate_project_files(idea=req.idea, packs=packs, tenant_id=tenant_id)
+    files, agent_response = await _generate_project_files(
+        idea=req.idea,
+        packs=packs,
+        tenant_id=tenant_id,
+        model_id=req.model_id,
+        session_id=session_id,
+        kiff_id=kiff_id,
+        user_id=req.user_id,
+    )
 
     # Store the initial conversation in the database
     from ..models_kiffs import ConversationMessage, KiffChatSession
@@ -339,7 +343,10 @@ async def generate_project(req: GenerateRequest, request: Request, db: Session =
     )
     # Persist selected packs in the chat session state for agentic RAG scoping
     try:
-        chat_session.agent_state = {"selected_packs": packs}
+        state: Dict[str, Any] = {"selected_packs": packs}
+        if req.model_id:
+            state["model_id"] = req.model_id
+        chat_session.agent_state = state
     except Exception:
         # If model lacks agent_state, ignore silently (backward compatibility)
         pass

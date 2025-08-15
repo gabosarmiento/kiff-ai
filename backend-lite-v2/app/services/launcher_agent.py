@@ -77,6 +77,40 @@ try:
 except Exception:
     _HAS_OBS = False
 
+# Modular prompts and web search tool
+try:
+    from .launcher_prompts import get_launcher_instructions  # type: ignore
+except Exception:
+    def get_launcher_instructions(include_web: bool = True) -> List[str]:  # type: ignore
+        # Fallback to a minimal default if prompts module is unavailable
+        base = [
+            "You are the Kiff Launcher agent. Be concise and action-oriented.",
+            "Use the 'tool_name' to do X style. Prefer tools over prose.",
+            "Use 'search_pack_knowledge' or 'search_pack_vectors' FIRST for API/framework questions. Cite sources as [pack/section or URL].",
+            "For complex tasks: use 'todo_plan' then execute steps. For simple tasks: act directly.",
+            "Start with 'list_files' to see structure, then 'read_file' before editing.",
+            "When modifying code, MUST use 'write_file' and provide the COMPLETE updated file content (even for small edits).",
+            "Briefly explain what and why for each change. Follow project conventions and keep diffs minimal.",
+            "Ask 1–2 clarifying questions only if requirements are ambiguous. Otherwise proceed.",
+            "Available tools (core): list_files, read_file, write_file, todo_plan, todo_* task tools, search_pack_knowledge, search_pack_vectors.",
+            "Respect tenant and selected packs (scoped automatically). Do not leak unrelated knowledge.",
+            "Keep responses short. End with a brief summary and next step(s).",
+        ]
+        if include_web:
+            base.insert(3, "If knowledge is weak or missing, optionally use 'web_search' to augment.")
+            base = [
+                ("Available tools (core + web): list_files, read_file, write_file, todo_plan, "
+                 "todo_* task tools, search_pack_knowledge, search_pack_vectors, web_search.")
+                if s.startswith("Available tools (core):") else s for s in base
+            ]
+        return base
+
+try:
+    from .web_search import get_web_search_tool  # type: ignore
+except Exception:
+    def get_web_search_tool(_decorator):  # type: ignore
+        return None
+
 
 @dataclass
 class AgentRunResult:
@@ -146,7 +180,11 @@ def create_project_tools(session_id: str):
             proposal_id = str(_uuid.uuid4())
             change = {
                 "path": file_path,
-                "content": content,  # Include complete content for localStorage
+                # IMPORTANT: The approve endpoint expects 'new_content'. See
+                # app/routes/launcher_chat.py -> approve_proposal where it reads
+                # c.get("new_content", "") when applying to the sandbox and store.
+                # Using 'new_content' ensures the applied file contains the intended content.
+                "new_content": content,
                 "diff": "".join(diff_lines),
                 "language": _detect_language_from_extension(file_path)
             }
@@ -342,6 +380,13 @@ class LauncherAgent:
         self.agent_sessions_table = os.getenv("LAUNCHER_AGENT_SESSIONS_TABLE", "agent_sessions")
         self.search_knowledge = True
         self.session_id = session_id
+        # Diagnostics and retrieval behavior flags
+        self.diag_enabled = (os.getenv("LAUNCHER_RAG_DIAGNOSTICS", "true").lower() in ("1", "true", "yes"))
+        try:
+            self.lowconf_threshold = float(os.getenv("LAUNCHER_LOWCONF_THRESHOLD", "0.25"))
+        except Exception:
+            self.lowconf_threshold = 0.25
+        self.web_on_lowconf = (os.getenv("LAUNCHER_WEBSEARCH_ON_LOWCONF", "true").lower() in ("1", "true", "yes"))
 
         self.agent = None
         if _HAS_AGNO:
@@ -407,6 +452,27 @@ class LauncherAgent:
                                 # Non-fatal if attributes cannot be set
                                 pass
                             print(f"[LAUNCHER_AGENT] ✅ LanceDB vector database configured with cached embedder")
+                            # Ensure indexed / non-empty check for visibility
+                            try:
+                                import lancedb as _ldb  # type: ignore
+                                _db = _ldb.connect(self.lancedb_dir)
+                                _tbl = _db.open_table(self.kb_table)
+                                try:
+                                    _n = _tbl.count_rows()
+                                except Exception:
+                                    try:
+                                        _n = len(list(_tbl.head(1))) * 0  # force iterable
+                                        _n = 0
+                                    except Exception:
+                                        _n = -1
+                                if _n == 0:
+                                    print(f"[LAUNCHER_AGENT] ⚠️ LanceDB table '{self.kb_table}' is empty. Packs may not be indexed yet.")
+                                elif _n > 0:
+                                    print(f"[LAUNCHER_AGENT] ℹ️ LanceDB table '{self.kb_table}' has ~{_n} rows (reported).")
+                                else:
+                                    print(f"[LAUNCHER_AGENT] ℹ️ Unable to determine row count for '{self.kb_table}'.")
+                            except Exception as _e_idx:
+                                print(f"[LAUNCHER_AGENT] ⚠️ Ensure-indexed check failed: {_e_idx}")
                         else:
                             print(f"[LAUNCHER_AGENT] ⚠️ Cached embedder not available, skipping vector setup")
                         
@@ -494,10 +560,16 @@ class LauncherAgent:
                                         # Truncate content for readability
                                         content_snippet = content[:250].replace('\n', ' ').strip()
                                         out_lines.append(f"• [{pack_name}] {doc_type}: {content_snippet}...")
-                                    
+
+                                    # Diagnostics
+                                    try:
+                                        print(f"[LAUNCHER_AGENT][ML-RAG] tenant={t_id} packs={pack_ids} query='{query}' hits={len(results)}")
+                                    except Exception:
+                                        pass
+
                                     if not out_lines:
                                         return f"No knowledge found in selected packs ({', '.join(pack_ids)}) for query: {query}"
-                                    
+
                                     return f"Knowledge from selected packs:\n" + "\n".join(out_lines)
                                     
                                 except Exception as ml_error:
@@ -510,6 +582,166 @@ class LauncherAgent:
                         print(f"[LAUNCHER_AGENT] ✅ Added knowledge search tool")
                     except Exception as e:
                         print(f"[LAUNCHER_AGENT] ⚠️ Failed to add knowledge search tool: {e}")
+
+                # Add direct LanceDB vector search over Packs (tenant + pack scoped)
+                if _HAS_AGNO and tool is not None and _HAS_LANCEDB:
+                    try:
+                        @tool
+                        def search_pack_vectors(query: str, k: int = 4) -> str:  # type: ignore
+                            """Direct vector search in LanceDB over selected Packs.
+                            Applies tenant and pack filters. Returns concise citations.
+                            """
+                            import json as _json
+                            import re as _re
+                            import os as _os
+                            import httpx as _httpx
+                            try:
+                                t_id = getattr(self, "_current_tenant_id", None)
+                                pack_ids = getattr(self, "_current_pack_ids", None)
+                                if not t_id:
+                                    return "No tenant context available."
+                                if not pack_ids:
+                                    return "No packs selected for knowledge search."
+
+                                # Open LanceDB table and perform filtered search
+                                import lancedb as _ldb  # type: ignore
+                                db = _ldb.connect(self.lancedb_dir)
+                                tbl = db.open_table(self.kb_table)
+                                # Build filter expression: tenant AND pack_id IN (...)
+                                # Note: simple SQL-like 'IN' filter is supported by LanceDB
+                                ids = ",".join([f"'{p}'" for p in pack_ids])
+                                where = f"tenant_id == '{t_id}' and pack_id in [{ids}]"
+                                # Vector query; if the table supports hybrid search, this will do ANN
+                                res = tbl.search(query).where(where).limit(int(k or 4)).to_list()
+
+                                if not res:
+                                    try:
+                                        print(f"[LAUNCHER_AGENT][RAG] tenant={t_id} packs={pack_ids} query='{query}' hits=0")
+                                    except Exception:
+                                        pass
+                                    return f"No knowledge found in selected packs ({', '.join(pack_ids)}) for query: {query}"
+
+                                # Lightweight reranker: combine LanceDB score with token overlap
+                                def _tokenize(s: str) -> set:
+                                    return set(t for t in _re.findall(r"[A-Za-z0-9_]+", (s or "").lower()) if len(t) > 2)
+
+                                q_tokens = _tokenize(query)
+                                scored = []
+                                for r in res:
+                                    content = (r.get("content", "") or "").strip()
+                                    tokens = _tokenize(content[:1000])
+                                    overlap = len(q_tokens & tokens)
+                                    base = r.get("score", 0.0) or 0.0
+                                    # small metadata boosts
+                                    boost = 0.0
+                                    section = (r.get("section") or "").lower()
+                                    title = (r.get("title") or r.get("heading") or "").lower()
+                                    url = (r.get("url") or "").lower()
+                                    if section and any(t in section for t in q_tokens):
+                                        boost += 0.02
+                                    if title and any(t in title for t in q_tokens):
+                                        boost += 0.03
+                                    if any(s in url for s in ("/api/", "reference", "docs")):
+                                        boost += 0.01
+                                    final = float(base) + 0.01 * float(overlap) + boost
+                                    r["_rerank_score"] = final
+                                    scored.append(r)
+
+                                scored.sort(key=lambda x: x.get("_rerank_score", 0.0), reverse=True)
+
+                                # Diagnostics
+                                try:
+                                    if getattr(self, "diag_enabled", True):
+                                        dbg = [
+                                            {
+                                                "pack": rr.get("pack_id") or rr.get("pack_name"),
+                                                "score": rr.get("score"),
+                                                "rerank": rr.get("_rerank_score"),
+                                                "section": rr.get("section"),
+                                                "url": rr.get("url"),
+                                            }
+                                            for rr in scored[: min(len(scored), int(k or 4))]
+                                        ]
+                                        print(f"[LAUNCHER_AGENT][RAG] tenant={t_id} packs={pack_ids} query='{query}' hits={len(scored)} top={dbg}")
+                                except Exception:
+                                    pass
+
+                                # Confidence gating: if low confidence and enabled, augment with Serper web results
+                                try:
+                                    top_score = float(scored[0].get("_rerank_score", 0.0)) if scored else 0.0
+                                except Exception:
+                                    top_score = 0.0
+                                lowconf = top_score < getattr(self, "lowconf_threshold", 0.25)
+
+                                lines = []
+                                for r in scored[: int(k or 4)]:
+                                    content = r.get("content", "").strip()
+                                    pack_name = r.get("pack_name", r.get("pack_id", ""))
+                                    section = r.get("section", "")
+                                    url = r.get("url", "")
+                                    snippet = (content[:250] + "...") if len(content) > 250 else content
+                                    cite = f" • [{pack_name}] {section} — {url}\n   {snippet}"
+                                    lines.append(cite)
+
+                                if lowconf and getattr(self, "web_on_lowconf", True):
+                                    try:
+                                        serper_key = _os.getenv("SERPER_API_KEY")
+                                        if serper_key:
+                                            headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
+                                            payload = {"q": query, "num": 5}
+                                            resp = _httpx.post("https://google.serper.dev/search", headers=headers, json=payload, timeout=15.0)
+                                            if resp.status_code == 200:
+                                                data = resp.json()
+                                                web_items = []
+                                                for r in (data.get("organic") or [])[:5]:
+                                                    title = r.get("title") or "(no title)"
+                                                    link = r.get("link") or r.get("url") or ""
+                                                    snippet = (r.get("snippet") or r.get("description") or "").strip()
+                                                    snippet = (snippet[:200] + "...") if len(snippet) > 200 else snippet
+                                                    web_items.append(f"   - {title} — {link}\n     {snippet}")
+                                                if web_items:
+                                                    lines.append("\nLow confidence on Packs; augmenting with web (Serper):")
+                                                    lines.extend(web_items)
+                                                if getattr(self, "diag_enabled", True):
+                                                    print(f"[LAUNCHER_AGENT][RAG] lowconf={top_score:.3f} < {self.lowconf_threshold:.3f}; appended Serper results")
+                                            else:
+                                                if getattr(self, "diag_enabled", True):
+                                                    print(f"[LAUNCHER_AGENT][RAG] Serper HTTP {resp.status_code}: {resp.text[:120]}")
+                                        else:
+                                            if getattr(self, "diag_enabled", True):
+                                                print("[LAUNCHER_AGENT][RAG] SERPER_API_KEY not set; skipping web augmentation")
+                                    except Exception as _e_web:
+                                        if getattr(self, "diag_enabled", True):
+                                            print(f"[LAUNCHER_AGENT][RAG] Serper augmentation failed: {_e_web}")
+                                return "Knowledge from selected packs (LanceDB):\n" + "\n".join(lines)
+                            except Exception as e:
+                                return f"Vector search error: {e}"
+
+                        tools.append(search_pack_vectors)
+                        print(f"[LAUNCHER_AGENT] ✅ Added LanceDB pack vector search tool")
+                    except Exception as e:
+                        print(f"[LAUNCHER_AGENT] ⚠️ Failed to add LanceDB vector search tool: {e}")
+
+                # Add unified web search tool (Tavily -> Serper fallback) if enabled
+                web_tool_added = False
+                try:
+                    enable_web = (os.getenv("LAUNCHER_ENABLE_WEB_SEARCH", "true").lower() in ("1", "true", "yes"))
+                except Exception:
+                    enable_web = True
+                if _HAS_AGNO and tool is not None and enable_web:
+                    try:
+                        web_tool = get_web_search_tool(tool)
+                        if web_tool is not None:
+                            tools.append(web_tool)
+                            web_tool_added = True
+                            print("[LAUNCHER_AGENT] ✅ Added unified web search tool")
+                        else:
+                            print("[LAUNCHER_AGENT] ℹ️ No web search provider configured; skipping")
+                    except Exception as e:
+                        print(f"[LAUNCHER_AGENT] ⚠️ Failed to add web search tool: {e}")
+                else:
+                    if not enable_web:
+                        print("[LAUNCHER_AGENT] ℹ️ Web search disabled via LAUNCHER_ENABLE_WEB_SEARCH")
 
                 # Add AGNO KnowledgeTools to enable Think -> Search -> Analyze over our knowledge base
                 try:
@@ -538,28 +770,7 @@ class LauncherAgent:
                     # Attach knowledge for KnowledgeTools context (search handled by KnowledgeTools)
                     **({"knowledge": getattr(self, "knowledge", None)} if hasattr(self, "knowledge") else {}),
                     search_knowledge=False,
-                    instructions=[
-                        # Launcher workflow: plan, read, modify files using provided tools
-                        "You are an AI agent specialized in understanding and modifying existing code projects through conversational interaction.",
-                        "If the idea is complex: first use todo_plan to create a short step-by-step plan, then execute the steps. If the idea is simple: skip todo_plan and implement directly.",
-                        "You have full access to read, understand, and modify files in the current project using the provided tools.",
-                        "When users request changes, always start by using list_files to see the project structure, then read relevant files to understand the current state.",
-                        "Use read_file to examine existing code before making changes.",
-                        "CRITICAL: When users ask you to modify files or make changes, you MUST use the write_file tool to create file proposals.",
-                        "The write_file tool creates proposals that the frontend can apply instantly - always use it instead of just describing changes.",
-                        "Always provide the complete updated file content when using write_file, not just partial changes.",
-                        "When making small changes like changing a single word, still use write_file with the complete file content.",
-                        "Always explain what you're doing and why when modifying files.",
-                        "Generate production-ready code that follows the existing project's patterns and conventions.",
-                        "Ask clarifying questions when requirements are ambiguous.",
-                        # Pack-aware knowledge policy unique to Kiff
-                        "Knowledge usage policy:",
-                        "- ALWAYS use search_pack_knowledge(query) when users ask questions that could be answered from API documentation or pack content.",
-                        "- The search will automatically filter by the current tenant and user's selected pack(s).",
-                        "- Provide citations from the knowledge search results in your answers.",
-                        "- If no relevant knowledge is found, explain this and work with general programming knowledge.",
-                        "- For API-related questions, code examples, integration patterns, always search knowledge first.",
-                    ],
+                    instructions=get_launcher_instructions(include_web=locals().get("web_tool_added", False)),
                     show_tool_calls=True,
                     markdown=True,
                     add_datetime_to_instructions=True,
@@ -575,9 +786,11 @@ class LauncherAgent:
         else:
             print(f"[LAUNCHER_AGENT] ❌ AGNO not available")
 
-    async def run(self, message: str, chat_history: List[Dict[str, Any]], tenant_id: str, kiff_id: str, selected_packs: Optional[List[str]] = None) -> AgentRunResult:
+    async def run(self, message: str, chat_history: List[Dict[str, Any]], tenant_id: str, kiff_id: str, selected_packs: Optional[List[str]] = None, user_id: Optional[str] = None) -> AgentRunResult:
         # If AGNO available, use it; otherwise return a simple stub
         if self.agent is not None:
+            import time
+            _t0 = time.perf_counter()
             # Format a minimal prompt that embeds prior chat context
             context_lines = []
             for m in chat_history[-10:]:  # last 10
@@ -589,10 +802,12 @@ class LauncherAgent:
             prompt = (
                 f"Tenant: {tenant_id}\nKiff: {kiff_id}\n"
                 f"Selected Packs: {', '.join(selected_packs or [])}\n"
-                "You are assisting the user to define and iteratively build a 'kiff' (project).\n"
-                "Ask clarifying questions when needed and propose concrete file additions or changes.\n"
-                "When knowledge is present, cite patterns; otherwise proceed with best practices.\n\n"
-                f"Chat so far:\n{context_text}\n\nUser: {message}"
+                "Goal: Help the user iteratively build or modify their Kiff using tools.\n"
+                "Policy: Search packs first; cite sources. Use minimal tool commands. Write full files for changes.\n\n"
+                f"Chat so far:\n{context_text}\n\nUser: {message}\n\n"
+                "Next actions (concise):\n"
+                "- If API/docs context needed: use 'search_pack_knowledge' (or 'search_pack_vectors').\n"
+                "- If complex task: use 'todo_plan'. Otherwise: 'list_files' -> 'read_file' -> 'write_file'.\n"
             )
 
             # Expose current scoping context for tools (e.g., search_pack_knowledge and file tools)
@@ -629,7 +844,7 @@ class LauncherAgent:
                 step_id = f"step_{_uuid.uuid4().hex[:12]}"
                 session_ctx = SessionContext(
                     tenant_id=tenant_id,
-                    user_id=None,
+                    user_id=user_id,
                     workspace_id=None,
                     session_id=self.session_id or f"sess_{_uuid.uuid4().hex[:10]}",
                     run_id=run_id,
@@ -687,6 +902,11 @@ class LauncherAgent:
                 pass
             text = getattr(resp, "content", "") or str(resp)
             tool_calls = getattr(resp, "tool_calls", None)
+            try:
+                _dur = (time.perf_counter() - _t0)
+                print(f"[LAUNCHER_AGENT] run completed model={self.model_id} user={user_id} tenant={tenant_id} duration_sec={_dur:.2f} tool_calls={len(tool_calls) if tool_calls else 0}")
+            except Exception:
+                pass
             return AgentRunResult(content=text, tool_calls=tool_calls)
 
         # Fallback minimal response (no AGNO)
