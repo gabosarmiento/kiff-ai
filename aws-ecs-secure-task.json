@@ -1,0 +1,88 @@
+{
+  "family": "kiff-secure-vm-orchestrator",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::929018226542:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::929018226542:role/kiff-vm-orchestrator-role",
+  "containerDefinitions": [
+    {
+      "name": "vm-orchestrator",
+      "image": "929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff/vm-orchestrator:prod",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8002,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "value": "eu-west-3"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "SECURITY_MODE",
+          "value": "strict"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "VM_ENCRYPTION_KEY",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:kiff/vm-encryption-key"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/kiff-vm-orchestrator",
+          "awslogs-region": "eu-west-3",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "linuxParameters": {
+        "capabilities": {
+          "drop": ["ALL"]
+        }
+      },
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 65536,
+          "hardLimit": 65536
+        }
+      ]
+    },
+    {
+      "name": "security-sidecar",
+      "image": "929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff/security-monitor:prod",
+      "essential": false,
+      "environment": [
+        {
+          "name": "MONITOR_TARGET",
+          "value": "vm-orchestrator"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/kiff-security-monitor",
+          "awslogs-region": "eu-west-3",
+          "awslogs-stream-prefix": "security"
+        }
+      }
+    }
+  ]
+}

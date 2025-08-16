@@ -1,0 +1,326 @@
+# 🔒 Secure AWS Networking for Kiff VM Infrastructure
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Secure VPC and networking for Kiff VM infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [development, staging, production]
+
+Resources:
+  # VPC with private subnets only
+  KiffVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-vpc-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Private subnets for VM execution (no internet gateway)
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KiffVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-private-subnet-1-${Environment}'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KiffVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-private-subnet-2-${Environment}'
+
+  # Public subnets for ALB only
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KiffVPC
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-public-subnet-1-${Environment}'
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KiffVPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-public-subnet-2-${Environment}'
+
+  # Internet Gateway for public subnets only
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-igw-${Environment}'
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref KiffVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Route table for public subnets
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref KiffVPC
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-public-rt-${Environment}'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Private route table (no internet access)
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref KiffVPC
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-private-rt-${Environment}'
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Security Group for VM Orchestrator
+  VMOrchestratorSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VM Orchestrator
+      VpcId: !Ref KiffVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8002
+          ToPort: 8002
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: "Allow ALB access to VM orchestrator"
+      SecurityGroupEgress:
+        # Only allow specific package registry access
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: "HTTPS to package registries only"
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-vm-orchestrator-sg-${Environment}'
+
+  # Security Group for User VMs (most restrictive)
+  UserVMSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for user code execution VMs
+      VpcId: !Ref KiffVPC
+      SecurityGroupIngress: []  # No inbound access
+      SecurityGroupEgress:
+        # ONLY package registries
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 104.16.0.0/12  # Cloudflare (npm registry)
+          Description: "NPM registry access"
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 151.101.0.0/16  # Fastly (PyPI)
+          Description: "PyPI registry access"
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-user-vm-sg-${Environment}'
+
+  # Security Group for ALB
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Application Load Balancer
+      VpcId: !Ref KiffVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: "HTTPS from internet"
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: "HTTP redirect to HTTPS"
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-alb-sg-${Environment}'
+
+  # VPC Endpoints for AWS services (no internet needed)
+  ECREndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref KiffVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.dkr'
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref KiffVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref KiffVPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+
+  # Security Group for VPC Endpoints
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC endpoints
+      VpcId: !Ref KiffVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref VMOrchestratorSecurityGroup
+          Description: "HTTPS from VM orchestrator"
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-vpc-endpoint-sg-${Environment}'
+
+  # Network ACLs for additional security
+  PrivateNetworkACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref KiffVPC
+      Tags:
+        - Key: Name
+          Value: !Sub 'kiff-private-nacl-${Environment}'
+
+  # Block all inbound traffic
+  PrivateNetworkACLInboundRule:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkACL
+      RuleNumber: 120
+      Protocol: -1
+      RuleAction: deny
+      CidrBlock: 0.0.0.0/0
+
+  # Allow only specific outbound traffic
+  PrivateNetworkACLOutboundHTTPS:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkACL
+      RuleNumber: 110
+      Protocol: 6
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 443
+        To: 443
+
+  # Associate NACLs with private subnets
+  PrivateSubnet1NetworkACLAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      NetworkAclId: !Ref PrivateNetworkACL
+
+  PrivateSubnet2NetworkACLAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      NetworkAclId: !Ref PrivateNetworkACL
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref KiffVPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPC-ID'
+
+  PrivateSubnets:
+    Description: Private subnets for VM execution
+    Value: !Join [',', [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+    Export:
+      Name: !Sub '${AWS::StackName}-Private-Subnets'
+
+  PublicSubnets:
+    Description: Public subnets for ALB
+    Value: !Join [',', [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+    Export:
+      Name: !Sub '${AWS::StackName}-Public-Subnets'
+
+  VMOrchestratorSecurityGroup:
+    Description: Security group for VM orchestrator
+    Value: !Ref VMOrchestratorSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-VM-Orchestrator-SG'
+
+  UserVMSecurityGroup:
+    Description: Security group for user VMs
+    Value: !Ref UserVMSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-User-VM-SG'

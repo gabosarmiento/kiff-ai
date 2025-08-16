@@ -1,0 +1,51 @@
+{
+  "serviceName": "kiff-vm-orchestrator-service",
+  "cluster": "kiff-production-cluster",
+  "taskDefinition": "kiff-secure-vm-orchestrator:1",
+  "desiredCount": 2,
+  "enableExecuteCommand": false,
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": [
+        "subnet-021630128b5da3042",
+        "subnet-051d8b282fe6e45d6"
+      ],
+      "securityGroups": [
+        "sg-0a7b76d3ec3ca6fb5"
+      ],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [],
+  "serviceRegistries": [],
+  "platformVersion": "1.4.0",
+  "capacityProviderStrategy": [
+    {
+      "capacityProvider": "FARGATE",
+      "weight": 1,
+      "base": 1
+    }
+  ],
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 50
+  },
+  "tags": [
+    {
+      "key": "Environment",
+      "value": "production"
+    },
+    {
+      "key": "Project",
+      "value": "kiff-ai"
+    },
+    {
+      "key": "Security",
+      "value": "high"
+    }
+  ]
+}

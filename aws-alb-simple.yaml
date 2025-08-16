@@ -1,0 +1,99 @@
+# 🔒 Simple ALB for Kiff VM Infrastructure
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Simple ALB for Kiff VM infrastructure marketing launch'
+
+Parameters:
+  VPCStackName:
+    Type: String
+    Default: kiff-secure-networking
+    Description: Name of the VPC CloudFormation stack
+
+Resources:
+  # Application Load Balancer
+  KiffALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: kiff-vm-orchestrator-alb
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      Subnets:
+        - Fn::Select: [0, Fn::Split: [',', Fn::ImportValue: !Sub '${VPCStackName}-Public-Subnets']]
+        - Fn::Select: [1, Fn::Split: [',', Fn::ImportValue: !Sub '${VPCStackName}-Public-Subnets']]
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: kiff-vm-orchestrator-alb
+        - Key: Environment
+          Value: production
+
+  # Target Group for VM Orchestrator
+  VMOrchestratorTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: kiff-vm-orchestrator-tg
+      Port: 8002
+      Protocol: HTTP
+      VpcId:
+        Fn::ImportValue: !Sub '${VPCStackName}-VPC-ID'
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      Tags:
+        - Key: Name
+          Value: kiff-vm-orchestrator-tg
+
+  # HTTP Listener
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref VMOrchestratorTargetGroup
+      LoadBalancerArn: !Ref KiffALB
+      Port: 80
+      Protocol: HTTP
+
+  # Security Group for ALB
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Kiff VM orchestrator ALB
+      VpcId:
+        Fn::ImportValue: !Sub '${VPCStackName}-VPC-ID'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: "HTTP from internet"
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8002
+          ToPort: 8002
+          DestinationSecurityGroupId:
+            Fn::ImportValue: !Sub '${VPCStackName}-VM-Orchestrator-SG'
+          Description: "Forward to VM orchestrator"
+      Tags:
+        - Key: Name
+          Value: kiff-alb-sg
+
+Outputs:
+  LoadBalancerDNS:
+    Description: DNS name of the load balancer for marketing launch
+    Value: !GetAtt KiffALB.DNSName
+    Export:
+      Name: !Sub '${AWS::StackName}-ALB-DNS'
+
+  TargetGroupArn:
+    Description: ARN of the target group
+    Value: !Ref VMOrchestratorTargetGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-Target-Group-ARN'
