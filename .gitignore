@@ -137,6 +137,12 @@ playwright/.cache/
 *password*
 config/secrets/
 
+# AWS configuration files with sensitive data
+**/apprunner-*.json
+aws-ecs-service.json
+**/current_config.json
+**/updated_config.json
+
 # Exceptions
 # Allow Docker ignore file for backend-lite-v2 service
 !backend-lite-v2/.dockerignore
