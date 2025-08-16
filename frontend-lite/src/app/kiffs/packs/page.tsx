@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/navigation/Sidebar';
@@ -12,19 +12,17 @@ import PageContainer from '@/components/ui/PageContainer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Star, 
-  Users, 
-  TrendingUp, 
+// Removed tabs
+import {
+  Plus,
+  Search,
   Package,
   Shield,
   Eye,
   Loader2,
- 
+  TrendingUp,
+  LayoutGrid,
+  List as ListIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -86,8 +84,8 @@ export default function KiffPacksPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('most_used');
-  const [activeTab, setActiveTab] = useState('gallery');
+  // Removed tabs state
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const hasProcessing = packs.some((p) => p.processing_status === 'processing');
   // Track when we first noticed any pack in processing to avoid stale banners
   const [processingSince, setProcessingSince] = useState<number | null>(null);
@@ -98,13 +96,12 @@ export default function KiffPacksPage() {
   const fetchTenantPacks = useCallback(async () => {
     try {
       if (!isAuthenticated) return;
+      setLoading(true);
       const params = new URLSearchParams({
         search: searchQuery,
         category: categoryFilter,
-        sort: sortBy,
         limit: '50'
       });
-      
       // Use trailing slash to avoid backend 307 redirect when route is defined as /api/packs/
       // Add timestamp param and disable cache to avoid stale processing_status
       params.set('_ts', String(Date.now()));
@@ -115,7 +112,7 @@ export default function KiffPacksPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, searchQuery, categoryFilter, sortBy]);
+  }, [isAuthenticated, searchQuery, categoryFilter]);
 
   // Fetch stats only on client to avoid Next.js export errors.
   // Stabilize this callback so it doesn't depend on `packs` to prevent effect loops.
@@ -170,23 +167,8 @@ export default function KiffPacksPage() {
 
   // Conditional polling: while any pack is processing, refetch packs periodically
   useEffect(() => {
-    if (!isAuthenticated) return;
-    // Maintain the first-seen timestamp for processing
-    if (hasProcessing && processingSince == null) {
-      setProcessingSince(Date.now());
-    }
-    if (!hasProcessing && processingSince != null) {
-      setProcessingSince(null);
-    }
-
-    // Only poll while within the timeout window
-    const withinDeadline = hasProcessing && (processingSince == null || (Date.now() - processingSince) < PROCESSING_TIMEOUT_MS);
-    if (!withinDeadline) return;
-
-    const id = setInterval(() => {
-      fetchTenantPacks();
-    }, 3000);
-    return () => clearInterval(id);
+    // Disabled polling per request to avoid periodic refreshes
+    return;
   }, [isAuthenticated, hasProcessing, processingSince, fetchTenantPacks]);
 
   // Derived flag to control the banner visibility
@@ -195,23 +177,30 @@ export default function KiffPacksPage() {
   const showProcessingBanner = !suppressProcessingBanner && hasProcessing && (processingSince == null || isWithinTimeout);
   const showStuckBanner = !suppressProcessingBanner && hasProcessing && processingSince != null && !isWithinTimeout;
 
-  const handlePackRate = async (packId: string, rating: number) => {
+  // Stop indexing utility: delete all packs currently in processing
+  const stopIndexingAndRemove = async () => {
     if (!isAuthenticated) return;
-    // Optimistic UI update for user's rating
-    setPacks((prev) => prev.map((p) => p.id === packId ? { ...p, user_rating: rating } : p));
+    const processingPacks = packs.filter(p => p.processing_status === 'processing');
+    if (processingPacks.length === 0) {
+      toast('No indexing in progress');
+      return;
+    }
+    const confirmMsg = `This will stop indexing and remove ${processingPacks.length} pack(s). Continue?`;
+    if (!window.confirm(confirmMsg)) return;
     try {
-      await apiJson(`/api/packs/${packId}/rate`, {
-        method: 'POST',
-        body: { rating }
-      });
-      toast.success('Rating saved');
-      // Refresh packs to reflect updated averages from server
+      await Promise.all(
+        processingPacks.map(p => apiJson(`/api/packs/${p.id}`, { method: 'DELETE' }))
+      );
+      toast.success('Stopped indexing and removed pack(s)');
+      // Refresh list
       fetchTenantPacks();
-    } catch (error) {
-      console.error('Error rating pack:', error);
-      toast.error('Failed to save rating');
+    } catch (e) {
+      console.error('Stop indexing failed', e);
+      toast.error('Failed to stop indexing for some packs');
     }
   };
+
+  // Removed archiveSelected feature by request
 
   const getStatusBadge = (pack: KiffPack) => {
     if (pack.processing_status === 'processing') {
@@ -232,8 +221,8 @@ export default function KiffPacksPage() {
     return <Badge variant="outline">Ready</Badge>;
   };
 
-  const PackCard = ({ pack }: { pack: KiffPack }) => {
-    const { selectedPacks, addPack, removePack } = usePacks();
+  type PackCardProps = { pack: KiffPack; isSelected: boolean; onToggle: (id: string) => void };
+  const PackCard = memo(({ pack, isSelected, onToggle }: PackCardProps) => {
     const [logoError, setLogoError] = useState(false);
     return (
     <Card className="hover:shadow-lg transition-shadow duration-200 fx-card">
@@ -272,9 +261,7 @@ export default function KiffPacksPage() {
                     </span>
                   ) : null}
                 </CardTitle>
-                <CardDescription className="text-sm text-gray-600 mt-1">
-                  {pack.category} • by {pack.created_by_name}
-                </CardDescription>
+                {/* Byline removed per request */}
               </div>
             </div>
           </div>
@@ -287,20 +274,7 @@ export default function KiffPacksPage() {
           {pack.description}
         </p>
         
-        <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
-          <div className="flex items-center gap-1">
-            <Users className="w-3 h-3" />
-            {pack.total_users_used} users
-          </div>
-          <div className="flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" />
-            {pack.usage_count} uses
-          </div>
-          <div className="flex items-center gap-1">
-            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-            {pack.avg_rating.toFixed(1)}
-          </div>
-        </div>
+        {/* Usage and rating row removed per request */}
 
         <div className="flex gap-2">
           <Link href={`/kiffs/packs/scramble?pack=${pack.id}`} className="flex-1">
@@ -311,40 +285,13 @@ export default function KiffPacksPage() {
           </Link>
           <Button
   size="sm"
-  className={`rounded-lg px-4 py-2 text-base font-medium flex items-center gap-1 fx-button ${selectedPacks.includes(pack.id)
+  className={`rounded-lg px-4 py-2 text-base font-medium flex items-center gap-1 fx-button ${isSelected
     ? 'bg-black text-white hover:bg-zinc-800 shadow-lg border-0'
     : 'text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'}`}
   disabled={pack.processing_status === 'processing'}
-  onClick={() => {
-    if (selectedPacks.includes(pack.id)) {
-      const removedId = pack.id;
-      removePack(removedId);
-      toast.custom((t) => (
-        <div className="bg-gray-900 text-white shadow-lg px-4 py-3 rounded-xl text-sm flex items-center gap-4 border border-gray-800">
-          <span className="select-none">🗑️</span>
-          <span>Pack removed from your session packs</span>
-          <button
-            className="ml-2 text-gray-300 hover:text-gray-100"
-            onClick={() => {
-              addPack(removedId);
-              toast.dismiss(t.id);
-              toast.success('Restored');
-            }}
-            aria-label="Undo removal"
-          >
-            Undo
-          </button>
-        </div>
-      ), { duration: 5000 });
-    } else {
-      addPack(pack.id);
-      toast.success(`Pack "${pack.display_name}" added to your available packs - find them ready in your model!`, {
-        duration: 5000,
-      });
-    }
-  }}
+  onClick={() => onToggle(pack.id)}
 >
-  {selectedPacks.includes(pack.id) ? (
+  {isSelected ? (
     <>
       <span className="font-bold text-lg">-</span> Unpack
     </>
@@ -356,42 +303,16 @@ export default function KiffPacksPage() {
 </Button>
         </div>
 
-        {/* Rating stars */}
-        <div className="flex items-center gap-1 mt-3 pt-3 border-t">
-          <span className="text-xs text-gray-500 mr-2">Rate:</span>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button
-              key={star}
-              onClick={() => handlePackRate(pack.id, star)}
-              className={`text-sm ${
-                pack.user_rating && pack.user_rating >= star
-                  ? 'text-yellow-400'
-                  : 'text-gray-300 hover:text-yellow-400'
-              } fx-button`}
-            >
-              <Star className="w-3 h-3 fill-current" />
-            </button>
-          ))}
-        </div>
+        {/* Rating stars removed per request */}
       </CardContent>
     </Card>
   );
-  }
+  });
+  // eslint react/display-name
+  PackCard.displayName = 'PackCard';
 
   const StatsOverview = () => (
-    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 fx-stagger">
-      <Card className="fx-card">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats?.total_packs || 0}</p>
-              <p className="text-sm text-gray-600">Total Packs</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      
+    <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mb-6">
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-2">
@@ -403,47 +324,10 @@ export default function KiffPacksPage() {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2">
-            <Star className="w-5 h-5 text-yellow-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats?.avg_rating?.toFixed(1) || '0.0'}</p>
-              <p className="text-sm text-gray-600">Avg Rating</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-purple-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats?.verified_packs || 0}</p>
-              <p className="text-sm text-gray-600">Verified</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {stats?.top_pack && (
-        <Card className="fx-card">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <div>
-                <p className="text-sm text-gray-600">Top Pack</p>
-                <p className="text-base font-semibold leading-tight">{stats.top_pack.name}</p>
-                <p className="text-xs text-gray-500">{stats.top_pack.usage_count} uses</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
+  // eslint react-display-name
+  StatsOverview.displayName = 'StatsOverview';
 
   if (isLoading) {
     return (
@@ -478,52 +362,28 @@ export default function KiffPacksPage() {
       <Navbar />
       <Sidebar />
       <main className="pane pane-with-sidebar fx-section" style={{ padding: 16, paddingLeft: leftWidth + 24, margin: "0 auto", maxWidth: 1200 }}>
-        <PageContainer padded>
+        <PageContainer padded className="pt-2 sm:pt-3 md:pt-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="m-0 text-lg font-semibold">Kiff Packs</h2>
-              <p className="mt-1 text-sm text-slate-600">API knowledge packs created by your team</p>
+              <h2 className="m-0 text-lg font-semibold">Your Packs</h2>
+              <p className="mt-1 text-sm text-slate-600">API knowledge indexed</p>
             </div>
-            <Link href="/kiffs/packs/create">
-              <Button
-  className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 fx-button"
->
-  <Plus className="w-4 h-4" />
-  Create Pack
-</Button>
+            <div className="flex items-center gap-2">
+              <Link href="/kiffs/packs/create">
+                <Button
+                  className="rounded-lg px-4 py-2 text-base font-medium text-white shadow-lg hover:shadow-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 fx-button"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Pack
+                </Button>
               </Link>
+            </div>
           </div>
 
           <div className="mt-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="gallery">Indexed Pack Gallery</TabsTrigger>
-            <TabsTrigger value="stats">Statistics</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="stats">
+            {/* StatsUsage placed where the tabs used to be */}
             <StatsOverview />
-            
-            {stats?.categories && Object.keys(stats.categories).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Packs by Category</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {Object.entries(stats.categories).map(([category, count]) => (
-                      <div key={category} className="text-center p-3 bg-gray-50 rounded-lg">
-                        <p className="font-semibold text-lg">{count}</p>
-                        <p className="text-sm text-gray-600">{category}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
 
-          <TabsContent value="gallery">
             {/* Filters */}
             <Card className="mb-6 fx-card">
               <CardContent className="p-4">
@@ -558,17 +418,29 @@ export default function KiffPacksPage() {
                     </SelectContent>
                   </Select>
 
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-full sm:w-48">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="most_used">Most Used</SelectItem>
-                      <SelectItem value="newest">Newest</SelectItem>
-                      <SelectItem value="highest_rated">Highest Rated</SelectItem>
-                      <SelectItem value="alphabetical">A-Z</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {/* View mode toggle replaces the sort control */}
+                  <div className="inline-flex rounded-md border bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      className={`px-3 py-2 text-sm flex items-center gap-2 ${viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}
+                      onClick={() => setViewMode('grid')}
+                      aria-pressed={viewMode === 'grid'}
+                      aria-label="Grid view"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                      <span className="hidden sm:inline">Grid</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 text-sm flex items-center gap-2 border-l ${viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}
+                      onClick={() => setViewMode('list')}
+                      aria-pressed={viewMode === 'list'}
+                      aria-label="List view"
+                    >
+                      <ListIcon className="w-4 h-4" />
+                      <span className="hidden sm:inline">List</span>
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -576,9 +448,16 @@ export default function KiffPacksPage() {
             {/* Pack Gallery */}
             {showProcessingBanner ? (
               <Card className="mb-4 border-dashed fx-card">
-                <CardContent className="p-4 text-sm text-gray-700 flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Indexing in progress for one or more packs. This can take a couple of minutes.
+                <CardContent className="p-4 text-sm text-gray-700 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Indexing in progress for one or more packs.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="destructive" size="sm" onClick={stopIndexingAndRemove}>Stop indexing</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setSuppressProcessingBanner(false); fetchTenantPacks(); }}>Refresh</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setSuppressProcessingBanner(true)}>Dismiss</Button>
+                  </div>
                 </CardContent>
               </Card>
             ) : showStuckBanner ? (
@@ -589,6 +468,7 @@ export default function KiffPacksPage() {
                     Indexing status seems stuck. We’ll stop auto-refreshing. You can refresh manually or dismiss this notice.
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="destructive" size="sm" onClick={stopIndexingAndRemove}>Stop indexing</Button>
                     <Button variant="outline" size="sm" onClick={() => { setSuppressProcessingBanner(false); fetchTenantPacks(); }}>Refresh</Button>
                     <Button variant="ghost" size="sm" onClick={() => setSuppressProcessingBanner(true)}>Dismiss</Button>
                   </div>
@@ -596,7 +476,7 @@ export default function KiffPacksPage() {
               </Card>
             ) : null}
             {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-4'}>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="border rounded-xl p-4 fx-card">
                     <div className="flex items-start gap-3">
@@ -631,14 +511,38 @@ export default function KiffPacksPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 fx-stagger">
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-4'}>
                 {packs.map((pack) => (
-                  <PackCard key={pack.id} pack={pack} />
+                  <PackCard
+                    key={pack.id}
+                    pack={pack}
+                    isSelected={selectedPacks.includes(pack.id)}
+                    onToggle={(id) => {
+                      if (selectedPacks.includes(id)) {
+                        removePack(id);
+                        toast.custom((t) => (
+                          <div className="bg-gray-900 text-white shadow-lg px-4 py-3 rounded-xl text-sm flex items-center gap-4 border border-gray-800">
+                            <span className="select-none">🗑️</span>
+                            <span>Pack removed from your session packs</span>
+                            <button
+                              className="ml-2 text-gray-300 hover:text-gray-100"
+                              onClick={() => { addPack(id); toast.dismiss(t.id); toast.success('Restored'); }}
+                              aria-label="Undo removal"
+                            >
+                              Undo
+                            </button>
+                          </div>
+                        ), { duration: 5000 });
+                      } else {
+                        addPack(id);
+                        const p = packs.find(x => x.id === id);
+                        if (p) toast.success(`Pack \"${p.display_name}\" added to your available packs - find them ready in your model!`, { duration: 5000 });
+                      }
+                    }}
+                  />
                 ))}
               </div>
             )}
-          </TabsContent>
-        </Tabs>
           </div>
         </PageContainer>
       </main>

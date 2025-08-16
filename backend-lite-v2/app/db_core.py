@@ -7,8 +7,11 @@ from sqlalchemy.pool import NullPool
 # Prefer POSTGRES_URL, fallback to DATABASE_URL
 DATABASE_URL = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL") or "sqlite:///./kiff_dev.db"
 
-# Debug: print the database URL being used (remove in production)
-print(f"[DEBUG] Using DATABASE_URL: {DATABASE_URL[:20]}..." if DATABASE_URL.startswith("postgresql") else f"[DEBUG] Using DATABASE_URL: {DATABASE_URL}")
+# Debug: print the database URL being used and environment variable status
+print(f"[DEBUG] POSTGRES_URL env var: {'SET' if os.getenv('POSTGRES_URL') else 'NOT SET'}")
+print(f"[DEBUG] DATABASE_URL env var: {'SET' if os.getenv('DATABASE_URL') else 'NOT SET'}")
+print(f"[DEBUG] Using DATABASE_URL: {DATABASE_URL[:30]}..." if DATABASE_URL.startswith("postgresql") else f"[DEBUG] Using DATABASE_URL: {DATABASE_URL}")
+print(f"[DEBUG] Database engine type: {'PostgreSQL' if DATABASE_URL.startswith('postgresql') else 'SQLite'}")
 
 # Engine
 if DATABASE_URL.startswith("sqlite"):

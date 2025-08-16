@@ -75,7 +75,14 @@ def _tenant_id_from_request(request: Request) -> str:
 async def _generate_project_files(idea: str, packs: List[str], tenant_id: str, model_id: Optional[str], session_id: str, kiff_id: str, user_id: Optional[str]) -> tuple[List[Dict[str, str]], str]:
     """Generate project files using the shared LauncherAgent based on user's idea and selected packs."""
     if not _HAS_AGNO:
-        raise HTTPException(status_code=503, detail="Project generation requires AGNO framework")
+        # Fallback to minimal scaffold when AGNO is unavailable (local/dev)
+        files = _basic_vite_app_files(app_name="launcher-app", idea=idea, packs=packs)
+        agent_response = (
+            f"Generated a minimal Vite+React app as a fallback because AGNO is unavailable.\n"
+            f"Idea: {idea}\nFiles: {len(files)}\n"
+            "You can now approve/apply these files and start the preview."
+        )
+        return files, agent_response
 
     # Use the unified LauncherAgent to ensure the same model/tools/knowledge as chat
     launcher = LauncherAgent(session_id=session_id, model_id=model_id)
@@ -98,43 +105,71 @@ Generate all necessary files with complete, working code. Respond with a JSON ob
 
 Make sure the project is complete and runnable. Include proper dependencies, configuration files, and documentation."""
 
-    result = await launcher.run(
-        message=prompt,
-        chat_history=[],
-        tenant_id=tenant_id,
-        kiff_id=kiff_id,
-        selected_packs=packs,
-        user_id=user_id,
-    )
-    response_text = result.content
-    
-    # Parse JSON response
     try:
-        # Extract JSON from the response
-        start_idx = response_text.find('{')
-        end_idx = response_text.rfind('}') + 1
-        if start_idx != -1 and end_idx > start_idx:
-            json_str = response_text[start_idx:end_idx]
-            parsed = json.loads(json_str)
-            if 'files' in parsed and isinstance(parsed['files'], list):
-                # Create a user-friendly response showing what was generated
-                files = parsed['files']
-                file_list = [f"- {f['path']}" for f in files[:10]]  # Show first 10 files
-                agent_response = f"""I've generated a complete project for your idea: "{idea}"
+        result = await launcher.run(
+            message=prompt,
+            chat_history=[],
+            tenant_id=tenant_id,
+            kiff_id=kiff_id,
+            selected_packs=packs,
+            user_id=user_id,
+        )
+        response_text = (result.content if hasattr(result, "content") else str(result) or "").strip()
 
-Created {len(files)} files:
-{chr(10).join(file_list)}
-{f'... and {len(files) - 10} more files' if len(files) > 10 else ''}
+        # Parse JSON response robustly
+        def _extract_json_block(text: str) -> Optional[dict]:
+            # Try to find the largest {...} block that parses
+            if not text:
+                return None
+            # Fast path: direct JSON
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
+            # Heuristic: take from first '{' to last '}'
+            try:
+                si = text.find('{')
+                ej = text.rfind('}')
+                if si != -1 and ej != -1 and ej > si:
+                    candidate = text[si:ej+1]
+                    parsed = json.loads(candidate)
+                    if isinstance(parsed, dict):
+                        return parsed
+            except Exception:
+                pass
+            return None
 
-The project is ready to run! You can see the files in the Files panel and the live preview on the right. Feel free to ask me to modify anything or add new features."""
-                
-                return files, agent_response
-    except (json.JSONDecodeError, ValueError) as e:
-        print(f"Failed to parse agent response as JSON: {e}")
-        print(f"Response was: {response_text[:500]}...")
-        raise HTTPException(status_code=500, detail="Failed to parse agent response")
-    
-    raise HTTPException(status_code=500, detail="Agent failed to generate valid project files")
+        parsed = _extract_json_block(response_text)
+        if parsed and isinstance(parsed.get('files'), list):
+            files = parsed['files']
+            file_list = [f"- {f['path']}" for f in files[:10]]
+            agent_response = (
+                f"I've generated a complete project for your idea: \"{idea}\"\n\n"
+                f"Created {len(files)} files:\n{chr(10).join(file_list)}\n"
+                f"{('... and ' + str(len(files) - 10) + ' more files') if len(files) > 10 else ''}\n\n"
+                "The project is ready to run! You can see the files in the Files panel and the live preview on the right. "
+                "Feel free to ask me to modify anything or add new features."
+            )
+            return files, agent_response
+
+        # If agent response isn't valid JSON with files, fall back
+        print("[launcher_project] Agent did not return valid files JSON; falling back to minimal scaffold.")
+        if response_text:
+            print(f"[launcher_project] Agent raw (first 500 chars): {response_text[:500]}")
+    except Exception as e:
+        # Any agent error -> fallback scaffold
+        print(f"[launcher_project] Agent invocation error: {e}")
+
+    # Fallback minimal scaffold to unblock UI hydration
+    files = _basic_vite_app_files(app_name="launcher-app", idea=idea, packs=packs)
+    agent_response = (
+        "Generated a minimal Vite+React app as a fallback because the agent response could not be parsed.\n"
+        f"Idea: {idea}\nFiles: {len(files)}\n"
+        "You can now approve/apply these files and start the preview."
+    )
+    return files, agent_response
 
 
 def _basic_vite_app_files(app_name: str, idea: str, packs: List[str]) -> List[Dict[str, str]]:

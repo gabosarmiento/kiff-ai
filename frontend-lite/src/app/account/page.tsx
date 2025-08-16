@@ -1,15 +1,19 @@
 "use client";
-import { Navbar } from "../../components/layout/Navbar";
-import { Sidebar } from "../../components/navigation/Sidebar";
-import { BottomNav } from "../../components/navigation/BottomNav";
-import { useLayoutState } from "../../components/layout/LayoutState";
-import { getTenantId } from "../../lib/tenant";
 import { useEffect, useState } from "react";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { deleteAccount } from "../../lib/apiClient";
+import { Navbar } from "@/components/layout/Navbar";
+import { Sidebar } from "@/components/navigation/Sidebar";
+import { BottomNav } from "@/components/navigation/BottomNav";
+import { useLayoutState } from "@/components/layout/LayoutState";
+import PageContainer from "@/components/ui/PageContainer";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/hooks/useAuth";
+import { getTenantId } from "@/lib/tenant";
+import { deleteAccount } from "@/lib/apiClient";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 
 export default function AccountPage() {
   const { user } = useAuth();
@@ -31,11 +35,7 @@ export default function AccountPage() {
     }
   }, [user?.email]);
 
-  const copy = async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {}
-  };
+  // removed copy helper (no longer needed)
 
   // Password change removed for now per UX request
 
@@ -56,54 +56,54 @@ export default function AccountPage() {
     <div className="app-shell">
       <Navbar />
       <Sidebar />
-      <main className="pane pane-with-sidebar" style={{ padding: 16, paddingLeft: leftWidth + 32, marginTop: 80 }}>
-          <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-            <h1 style={{ margin: 0, fontSize: 22 }}>Account</h1>
-            <p className="label" style={{ marginTop: 8 }}>Manage your profile and account.</p>
+      <main
+        className="pane pane-with-sidebar"
+        style={{ paddingLeft: leftWidth + 32, marginTop: 40 }}
+      >
+        <PageContainer>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+              <p className="text-sm text-gray-600 mt-1">Manage your profile and account.</p>
+            </div>
+          </div>
 
-            <section style={{ marginTop: 16 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24 }}>
-                {/* Profile (email is identifier, read-only) */}
-                <div className="card" style={{ minWidth: 0 }}>
-                  <div className="card-header">Profile</div>
-                  <div className="card-body">
-                    <div className="field">
-                      <label className="label">Email</label>
-                      <input className="input" type="email" placeholder="you@example.com" value={email} disabled readOnly />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Session Management */}
-                <div className="card" style={{ minWidth: 0 }}>
-                  <div className="card-header">Session</div>
-                  <div className="card-body">
-                    <p className="muted">Sign out of your account on this device.</p>
-                    <div className="row" style={{ marginTop: 12 }}>
-                      <button 
-                        className="button" 
-                        onClick={handleLogout} 
-                        disabled={loggingOut}
-                      >
-                        {loggingOut ? "Signing out..." : "Sign out"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Danger Zone */}
-                <div className="card" style={{ gridColumn: "1 / -1" }}>
-                  <div className="card-header" style={{ color: "#dc2626" }}>Danger Zone</div>
-                  <div className="card-body">
-                    <p className="muted">Be careful—actions here can’t be undone.</p>
-                    <div className="row" style={{ marginTop: 12 }}>
-                      <button className="button danger" onClick={() => setConfirmOpen(true)} disabled={busy}>Delete Account</button>
-                    </div>
-                  </div>
-                </div>
+          {/* Content with dividers */}
+          <div className="mt-6">
+            {/* Profile */}
+            <section className="pb-6 mb-6 border-b border-gray-200">
+              <h2 className="text-base font-semibold">Profile</h2>
+              <p className="text-sm text-gray-600 mb-4">Your account identity</p>
+              <div className="grid gap-3 max-w-md">
+                <label className="text-sm text-gray-600">Email</label>
+                <Input type="email" value={email} readOnly disabled />
               </div>
             </section>
+
+            {/* Session */}
+            <section className="pb-6 mb-6 border-b border-gray-200">
+              <h2 className="text-base font-semibold">Session</h2>
+              <p className="text-sm text-gray-600 mb-4">Signed-in session controls</p>
+              <div className="max-w-md">
+                <Button onClick={handleLogout} disabled={loggingOut} className="bg-black text-white hover:bg-black/90">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  {loggingOut ? "Signing out..." : "Sign out"}
+                </Button>
+              </div>
+            </section>
+
+            {/* Danger Zone */}
+            <section>
+              <h2 className="text-base font-semibold text-red-600">Danger Zone</h2>
+              <p className="text-sm text-gray-600 mb-4">Be careful—actions here can’t be undone.</p>
+              <Button variant="outline" className="border-red-600 text-red-600 hover:bg-red-50" onClick={() => setConfirmOpen(true)} disabled={busy}>
+                Delete Account
+              </Button>
+            </section>
           </div>
+
+          {/* Confirm Modal */}
           <ConfirmModal
             open={confirmOpen}
             title="Delete account?"
@@ -129,6 +129,7 @@ export default function AccountPage() {
             confirmMatch="DELETE MY ACCOUNT"
             confirmPlaceholder="Type DELETE MY ACCOUNT"
           />
+        </PageContainer>
       </main>
       <BottomNav />
     </div>

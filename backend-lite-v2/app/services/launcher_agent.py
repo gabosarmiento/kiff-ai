@@ -36,6 +36,7 @@ except Exception:
 # We set this before each run() and reset after to ensure correct partitioning in PreviewStore.
 _CURRENT_TENANT_ID: str = "default"
 _REQUIRE_APPROVAL: bool = False
+_ENABLE_SANDBOX: bool = (os.getenv("LAUNCHER_ENABLE_SANDBOX", "false").lower() in ("1", "true", "yes"))
 
 def _get_current_tenant_id() -> str:
     tid = _CURRENT_TENANT_ID or "default"
@@ -110,6 +111,14 @@ try:
 except Exception:
     def get_web_search_tool(_decorator):  # type: ignore
         return None
+
+# Optional sandbox manager for agent-driven execution
+try:
+    from .sandbox import sandbox_manager  # type: ignore
+    _HAS_SANDBOX = True
+except Exception:
+    sandbox_manager = None  # type: ignore
+    _HAS_SANDBOX = False
 
 
 @dataclass
@@ -502,6 +511,131 @@ class LauncherAgent:
                         print(f"[LAUNCHER_AGENT] ✅ Added {len(todo_tools)} todo tools for session {self.session_id}")
                     except Exception as e:
                         print(f"[LAUNCHER_AGENT] ⚠️ Failed to add todo tools: {e}")
+
+                    # Add sandbox tools (local provider) if enabled
+                    try:
+                        enable_sbx = (os.getenv("LAUNCHER_ENABLE_SANDBOX", "true").lower() in ("1", "true", "yes"))
+                    except Exception:
+                        _ENABLE_SANDBOX = True
+                    if _ENABLE_SANDBOX and _HAS_AGNO and tool is not None and _HAS_SANDBOX and sandbox_manager is not None:
+                        try:
+                            @tool
+                            def sandbox_start(env: str = "default") -> str:  # type: ignore
+                                """Start a sandbox for this session and return sandbox_id."""
+                                try:
+                                    if not _ENABLE_SANDBOX or not _HAS_SANDBOX:
+                                        return "Sandbox disabled. Set LAUNCHER_ENABLE_SANDBOX=true to enable."
+                                    tid = _get_current_tenant_id()
+                                    sid = self.session_id or "default"
+                                    out = sandbox_manager.start(tid, sid, env)
+                                    return f"Sandbox started: {out.get('sandbox_id')}"
+                                except Exception as e:
+                                    return f"Sandbox start error: {e}"
+
+                            @tool
+                            def sandbox_exec(cmd: str, args: str = "", timeout_s: int = 0) -> str:  # type: ignore
+                                """Execute a whitelisted command in the current sandbox. Args is space-separated."""
+                                try:
+                                    if not _ENABLE_SANDBOX or not _HAS_SANDBOX:
+                                        return "Sandbox disabled. Set LAUNCHER_ENABLE_SANDBOX=true to enable."
+                                    sid = self.session_id or "default"
+                                    # Discover latest sandbox for this session from PreviewStore via sandbox_manager internal state is fine for now
+                                    sbx_id = None
+                                    # Best-effort: rely on last started sandbox kept in manager state for this process
+                                    # In future, persist/retrieve from PreviewStore
+                                    if hasattr(sandbox_manager, "_sandboxes"):
+                                        # pick last sandbox whose session_id matches
+                                        for _k, _v in getattr(sandbox_manager, "_sandboxes").items():
+                                            if _v.get("session_id") == sid:
+                                                sbx_id = _k
+                                    if not sbx_id:
+                                        return "No active sandbox. Use sandbox_start first."
+                                    import shlex
+                                    arg_list = [a for a in shlex.split(args or "") if a]
+                                    tout = int(timeout_s) if timeout_s else None
+                                    out = sandbox_manager.exec(sbx_id, cmd, arg_list, tout)
+                                    if out.get("error"):
+                                        return f"Sandbox exec error: {out.get('error')}"
+                                    # Persist a concise summary of last exec for UI visibility
+                                    try:
+                                        from ..util.preview_store import PreviewStore  # type: ignore
+                                        table = os.getenv("DYNAMO_TABLE_PREVIEW_SESSIONS") or "preview_sessions"
+                                        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
+                                        store = PreviewStore(table_name=table, region_name=region)
+                                        tid = _get_current_tenant_id()
+                                        summary = {
+                                            "cmd": cmd,
+                                            "args": arg_list,
+                                            "exit_code": out.get("exit_code"),
+                                            "duration_ms": out.get("duration_ms"),
+                                            "truncated": out.get("truncated"),
+                                            "stdout_snip": (out.get("stdout") or "")[:1024],
+                                            "stderr_snip": (out.get("stderr") or "")[:512],
+                                            "ts": __import__("time").time(),
+                                        }
+                                        store.update_session_fields(tid, sid, {"sandbox_last_exec": summary})
+                                    except Exception:
+                                        pass
+                                    return (
+                                        f"exit={out.get('exit_code')} dur_ms={out.get('duration_ms')} truncated={out.get('truncated')}\n"
+                                        f"stdout:\n{out.get('stdout','')[:8000]}\n\nstderr:\n{out.get('stderr','')[:4000]}"
+                                    )
+                                except Exception as e:
+                                    return f"Sandbox exec error: {e}"
+
+                            @tool
+                            def sandbox_apply() -> str:  # type: ignore
+                                """Collect sandbox artifacts and return a ProposedFileChanges payload."""
+                                try:
+                                    if not _ENABLE_SANDBOX or not _HAS_SANDBOX:
+                                        return "Sandbox disabled. Set LAUNCHER_ENABLE_SANDBOX=true to enable."
+                                    sid = self.session_id or "default"
+                                    sbx_id = None
+                                    if hasattr(sandbox_manager, "_sandboxes"):
+                                        for _k, _v in getattr(sandbox_manager, "_sandboxes").items():
+                                            if _v.get("session_id") == sid:
+                                                sbx_id = _k
+                                    if not sbx_id:
+                                        return "No active sandbox. Use sandbox_start first."
+                                    out = sandbox_manager.apply(sbx_id)
+                                    # Persist proposal for approval flow
+                                    try:
+                                        from ..util.preview_store import PreviewStore  # type: ignore
+                                        table = os.getenv("DYNAMO_TABLE_PREVIEW_SESSIONS") or "preview_sessions"
+                                        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "eu-west-3"
+                                        store = PreviewStore(table_name=table, region_name=region)
+                                        tid = _get_current_tenant_id()
+                                        store.update_session_fields(tid, sid, {"last_proposal": out.get("proposal")})
+                                    except Exception:
+                                        pass
+                                    return out.get("proposal", "No proposal")
+                                except Exception as e:
+                                    return f"Sandbox apply error: {e}"
+
+                            @tool
+                            def sandbox_stop() -> str:  # type: ignore
+                                """Stop and clean up the sandbox for this session."""
+                                try:
+                                    if not _ENABLE_SANDBOX or not _HAS_SANDBOX:
+                                        return "Sandbox disabled. Set LAUNCHER_ENABLE_SANDBOX=true to enable."
+                                    sid = self.session_id or "default"
+                                    sbx_id = None
+                                    if hasattr(sandbox_manager, "_sandboxes"):
+                                        for _k, _v in getattr(sandbox_manager, "_sandboxes").items():
+                                            if _v.get("session_id") == sid:
+                                                sbx_id = _k
+                                    if not sbx_id:
+                                        return "No active sandbox."
+                                    out = sandbox_manager.stop(sbx_id)
+                                    return out.get("status", "stopped")
+                                except Exception as e:
+                                    return f"Sandbox stop error: {e}"
+
+                            tools.extend([sandbox_start, sandbox_exec, sandbox_apply, sandbox_stop])
+                            print(f"[LAUNCHER_AGENT] Added sandbox tools")
+                            print(f"[LAUNCHER_AGENT] ✅ Added sandbox tools")
+                        except Exception as e:
+                            print(f"[LAUNCHER_AGENT] ⚠️ Failed to add sandbox tools: {e}")
 
                 # Add a knowledge search tool that honors tenant and selected packs
                 if _HAS_AGNO and tool is not None:
