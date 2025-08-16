@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # VM Orchestrator - Manages micro VMs for code execution
+  vm-orchestrator:
+    build: ./micro-vm-service/vm-orchestrator
+    ports:
+      - "8002:8002"
+    environment:
+      - ML_SERVICE_URL=http://ml-service:8001
+      - VECTOR_SERVICE_URL=http://vector-service:8003
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - vm_workspace:/workspace
+    depends_on:
+      - redis
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=vm-orchestrator"
+
+  # Redis for task coordination
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    labels:
+      - "kiff.service=redis"
+
+  # Optional: Vector Store for testing (can connect to external one)
+  vector-service:
+    image: qdrant/qdrant:latest
+    ports:
+      - "8003:6333"
+      - "6334:6334"
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    volumes:
+      - vector_storage:/qdrant/storage
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=vector-store"
+
+  # Backend service with VM integration
+  backend-lite-v2:
+    build: ./backend-lite-v2
+    ports:
+      - "8000:8000"
+    environment:
+      - SANDBOX_PROVIDER=infra
+      - INFRA_API_URL=http://vm-orchestrator:8002
+      - INFRA_ENABLE_MOCK=false
+      - ML_SERVICE_URL=http://ml-service:8001
+      - DATABASE_URL=sqlite:///./kiff_dev.db
+    env_file:
+      - .env
+    volumes:
+      - ./backend-lite-v2:/app
+      - backend_data:/app/data
+    depends_on:
+      - vm-orchestrator
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=backend"
+
+  # Your existing ML service (optional for testing)
+  ml-service:
+    build: ./backend-lite-v2/ml-service
+    ports:
+      - "8001:8001"
+    environment:
+      - TRANSFORMERS_CACHE=/models/hf
+      - TORCH_HOME=/models/torch
+      - HF_HOME=/models/hf
+    volumes:
+      - ml_models:/models
+      - ml_cache:/cache
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    labels:
+      - "kiff.service=ml-service"
+
+networks:
+  kiff-vm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  # VM workspace storage
+  vm_workspace:
+    driver: local
+  
+  # Redis data
+  redis_data:
+    driver: local
+  
+  # Vector database storage
+  vector_storage:
+    driver: local
+  
+  # Backend data
+  backend_data:
+    driver: local
+  
+  # ML models (if using local ML service)
+  ml_models:
+    driver: local
+  
+  # ML cache
+  ml_cache:
+    driver: local

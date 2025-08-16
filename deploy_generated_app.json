@@ -1,0 +1,22 @@
+{
+  "session_id": "e2b-like-test",
+  "files": [
+    {
+      "path": "package.json",
+      "content": "{\n  \"name\": \"launcher-app\",\n  \"private\": true,\n  \"version\": \"0.1.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"dev\": \"vite --host 0.0.0.0 --port 5173\",\n    \"build\": \"tsc -b && vite build\",\n    \"preview\": \"vite preview --host 0.0.0.0 --port 5173\"\n  },\n  \"dependencies\": {\n    \"react\": \"18.3.1\",\n    \"react-dom\": \"18.3.1\"\n  },\n  \"devDependencies\": {\n    \"vite\": \"5.2.0\",\n    \"@vitejs/plugin-react\": \"4.2.1\",\n    \"typescript\": \"5.5.2\",\n    \"@types/react\": \"18.3.3\",\n    \"@types/react-dom\": \"18.3.0\"\n  }\n}",
+      "language": "json"
+    },
+    {
+      "path": "index.html",
+      "content": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>launcher-app</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>",
+      "language": "html"
+    },
+    {
+      "path": "src/main.tsx",
+      "content": "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App'\n\nReactDOM.createRoot(document.getElementById('root')!).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n)",
+      "language": "typescript"
+    }
+  ],
+  "auto_install": true,
+  "auto_start": true
+}

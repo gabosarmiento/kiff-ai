@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:CreateCluster",
+        "ecs:CreateService",
+        "ecs:DescribeClusters",
+        "ecs:DescribeServices",
+        "ecs:DescribeTasks",
+        "ecs:ListTasks",
+        "ecs:RunTask",
+        "ecs:StopTask",
+        "ecs:UpdateService"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "ecs:cluster": "arn:aws:ecs:eu-west-3:YOUR_ACCOUNT_ID:cluster/kiff-production-cluster"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:eu-west-3:YOUR_ACCOUNT_ID:secret:kiff/vm-encryption-key*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:eu-west-3:YOUR_ACCOUNT_ID:log-group:/ecs/kiff-*"
+    }
+  ]
+}

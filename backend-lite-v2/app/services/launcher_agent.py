@@ -514,7 +514,7 @@ class LauncherAgent:
 
                     # Add sandbox tools (local provider) if enabled
                     try:
-                        enable_sbx = (os.getenv("LAUNCHER_ENABLE_SANDBOX", "true").lower() in ("1", "true", "yes"))
+                        _ENABLE_SANDBOX = (os.getenv("LAUNCHER_ENABLE_SANDBOX", "true").lower() in ("1", "true", "yes"))
                     except Exception:
                         _ENABLE_SANDBOX = True
                     if _ENABLE_SANDBOX and _HAS_AGNO and tool is not None and _HAS_SANDBOX and sandbox_manager is not None:

@@ -1,0 +1,17 @@
+{
+  "session_id": "prod-vm-test",
+  "files": [
+    {
+      "path": "package.json",
+      "content": "{\"name\": \"react-app\", \"scripts\": {\"dev\": \"vite --host 0.0.0.0 --port 5173\"}, \"dependencies\": {\"react\": \"18.3.1\", \"react-dom\": \"18.3.1\"}, \"devDependencies\": {\"vite\": \"5.2.0\"}}",
+      "language": "json"
+    },
+    {
+      "path": "index.html",
+      "content": "<!DOCTYPE html><html><head><title>Kiff VM Test</title></head><body><div id=\"root\"></div></body></html>",
+      "language": "html"
+    }
+  ],
+  "auto_install": true,
+  "auto_start": true
+}

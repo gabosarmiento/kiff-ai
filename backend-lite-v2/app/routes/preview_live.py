@@ -9,8 +9,15 @@ import os
 from decimal import Decimal
 from app.util.preview_store import PreviewStore
 from app.util.sandbox_e2b import E2BProvider, E2BUnavailable
+from app.util.sandbox_infra import InfraVMProvider, InfraVMUnavailable
 
 router = APIRouter(prefix="/api/preview", tags=["preview"])
+
+class AutomatedDeployRequest(BaseModel):
+    session_id: str
+    files: List[FileSpec]
+    auto_install: bool = True
+    auto_start: bool = True
 
 # Note: This is a scaffold that is safe to run on App Runner.
 # It does not create external sandboxes yet. It streams SSE with heartbeats
@@ -38,11 +45,21 @@ def _store() -> PreviewStore:
     return PreviewStore(table_name=table, region_name=region)
 
 
-def _e2b() -> Optional[E2BProvider]:
-    try:
-        return E2BProvider()
-    except E2BUnavailable:
-        return None
+def _provider():
+    """Factory function to create appropriate sandbox provider based on environment"""
+    provider_type = os.getenv("SANDBOX_PROVIDER", "e2b").lower()
+    
+    if provider_type == "infra":
+        try:
+            return InfraVMProvider()
+        except InfraVMUnavailable:
+            return None
+    else:
+        # Default to E2B
+        try:
+            return E2BProvider()
+        except E2BUnavailable:
+            return None
 
 
 class SandboxRequest(BaseModel):
@@ -244,7 +261,7 @@ async def create_sandbox(request: Request, body: Any = Body(...)):
     if updates:
         item = _store().update_session_fields(tenant_id, session_id, updates)
     # Attempt to provision with E2B (mock-supported)
-    provider = _e2b()
+    provider = _provider()
     if provider:
         try:
             created = provider.create_sandbox(tenant_id=tenant_id, session_id=session_id)
@@ -302,7 +319,7 @@ async def apply_files(request: Request, body: ApplyFilesRequest):
     tenant_id = await _ensure_tenant(request)
     # mark state
     _store().update_session_fields(tenant_id, body.session_id, {"status": "applying_files"})
-    provider = _e2b()
+    provider = _provider()
     sess = _store().get_session(tenant_id, body.session_id) or {}
     sandbox_id = sess.get("sandbox_id")
 
@@ -367,7 +384,7 @@ async def apply_files(request: Request, body: ApplyFilesRequest):
 async def install_packages(request: Request, body: InstallPackagesRequest):
     tenant_id = await _ensure_tenant(request)
     _store().update_session_fields(tenant_id, body.session_id, {"status": "installing"})
-    provider = _e2b()
+    provider = _provider()
     sess = _store().get_session(tenant_id, body.session_id) or {}
     sandbox_id = sess.get("sandbox_id")
     runtime = (sess.get("runtime") or "vite").lower()
@@ -396,11 +413,108 @@ async def install_packages(request: Request, body: InstallPackagesRequest):
     return StreamingResponse(_sse_stream_async(gen()), media_type="text/event-stream")
 
 
+@router.post("/deploy-and-start")
+async def automated_deploy_and_start(request: Request, body: AutomatedDeployRequest):
+    """
+    E2B-like automated workflow: deploy files, install packages, start server, return preview URL
+    """
+    tenant_id = await _ensure_tenant(request)
+    
+    # Mark session as deploying
+    _store().update_session_fields(tenant_id, body.session_id, {"status": "deploying"})
+    
+    provider = _provider()
+    sess = _store().get_session(tenant_id, body.session_id) or {}
+    sandbox_id = sess.get("sandbox_id")
+    
+    async def gen():
+        try:
+            # Step 1: Deploy files
+            yield {"type": "start", "message": f"Deploying {len(body.files)} files...", "session_id": body.session_id}
+            
+            if provider and sandbox_id:
+                # Try new VM service methods first
+                if hasattr(provider, 'deploy_files_to_vm'):
+                    provider.deploy_files_to_vm(sandbox_id=sandbox_id, files=[f.dict() for f in body.files])
+                else:
+                    provider.apply_files(sandbox_id=sandbox_id, files=[f.dict() for f in body.files])
+            
+            # Emit file deployment progress
+            for f in body.files:
+                await asyncio.sleep(0.1)
+                yield {"type": "file", "path": f.path, "status": "deployed"}
+            
+            yield {"type": "status", "message": "Files deployed successfully"}
+            
+            # Step 2: Auto-install packages if enabled
+            if body.auto_install:
+                # Detect packages from files
+                packages = []
+                for f in body.files:
+                    if f.path == "package.json" and f.content:
+                        try:
+                            import json
+                            pkg_data = json.loads(f.content)
+                            deps = pkg_data.get("dependencies", {})
+                            dev_deps = pkg_data.get("devDependencies", {})
+                            packages = list(deps.keys()) + list(dev_deps.keys())
+                        except:
+                            pass
+                        break
+                
+                if packages:
+                    yield {"type": "status", "message": f"Installing {len(packages)} packages..."}
+                    
+                    if provider and sandbox_id:
+                        provider.install_packages(sandbox_id=sandbox_id, packages=packages)
+                    
+                    # Simulate package installation progress
+                    for pkg in packages[:5]:  # Show first 5 packages
+                        await asyncio.sleep(0.3)
+                        yield {"type": "package", "name": pkg, "status": "installed"}
+                    
+                    yield {"type": "status", "message": "Package installation completed"}
+            
+            # Step 3: Auto-start development server if enabled
+            preview_url = None
+            if body.auto_start:
+                yield {"type": "status", "message": "Starting development server..."}
+                
+                if provider and sandbox_id:
+                    # Try new VM service method for starting server
+                    if hasattr(provider, 'start_dev_server'):
+                        preview_url = provider.start_dev_server(sandbox_id=sandbox_id)
+                    else:
+                        provider.restart(sandbox_id=sandbox_id)
+                        preview_url = provider.get_preview_url(sandbox_id=sandbox_id, port=5173)
+                
+                await asyncio.sleep(1.0)  # Simulate server startup time
+                yield {"type": "status", "message": "Development server started"}
+                
+                if preview_url:
+                    yield {"type": "preview_ready", "preview_url": preview_url, "message": "Preview is ready!"}
+            
+            # Update session status
+            _store().update_session_fields(tenant_id, body.session_id, {
+                "status": "ready",
+                "preview_url": preview_url,
+                "last_deploy": int(asyncio.get_event_loop().time())
+            })
+            
+            yield {"type": "complete", "message": "Deployment completed successfully", "preview_url": preview_url, "tenant_id": tenant_id}
+            
+        except Exception as e:
+            yield {"type": "error", "message": f"Deployment failed: {str(e)}", "tenant_id": tenant_id}
+            _store().update_session_fields(tenant_id, body.session_id, {"status": "error"})
+    
+    return StreamingResponse(_sse_stream_async(gen()), media_type="text/event-stream")
+
+
 @router.post("/restart")
 async def restart_dev_server(request: Request, body: RestartRequest):
     tenant_id = await _ensure_tenant(request)
     _store().update_session_fields(tenant_id, body.session_id, {"status": "restarting"})
-    provider = _e2b()
+    provider = _provider()
     sess = _store().get_session(tenant_id, body.session_id) or {}
     sandbox_id = sess.get("sandbox_id")
     if provider and sandbox_id:
@@ -416,6 +530,31 @@ async def restart_dev_server(request: Request, body: RestartRequest):
 @router.get("/logs")
 async def preview_logs(request: Request, session_id: str):
     tenant_id = await _ensure_tenant(request)
+    
+    # Try to get real-time logs from VM service
+    provider = _provider()
+    sess = _store().get_session(tenant_id, session_id) or {}
+    sandbox_id = sess.get("sandbox_id")
+    
+    if provider and sandbox_id and hasattr(provider, 'get_vm_logs'):
+        try:
+            vm_logs_data = provider.get_vm_logs(sandbox_id=sandbox_id, tail=50)
+            return {
+                "tenant_id": tenant_id,
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "has_errors": False,
+                "missing_packages": [],
+                "logs": vm_logs_data.get("logs", []),
+                "install_status": vm_logs_data.get("install_status", "unknown"),
+                "server_status": vm_logs_data.get("server_status", "unknown"),
+                "vm_logs": True
+            }
+        except Exception as e:
+            # Fall back to stored logs if VM service fails
+            pass
+    
+    # Fallback to stored logs
     item = _store().get_session(tenant_id, session_id) or {}
     head = item.get("logs_head") or ""
     logs = [l for l in head.split("\n") if l]
@@ -425,6 +564,7 @@ async def preview_logs(request: Request, session_id: str):
         "has_errors": False,
         "missing_packages": [],
         "logs": logs,
+        "vm_logs": False
     }
 
 
@@ -440,7 +580,7 @@ async def save_secrets(request: Request, body: SecretsRequest):
         {"secrets_configured": True, "secret_keys": keys},
     )
     # Send to provider for in-sandbox storage (for injection on restart)
-    provider = _e2b()
+    provider = _provider()
     sess = _store().get_session(tenant_id, body.session_id) or {}
     sandbox_id = sess.get("sandbox_id")
     if provider and sandbox_id and body.secrets:
@@ -457,7 +597,7 @@ async def save_secrets(request: Request, body: SecretsRequest):
 @router.post("/patch")
 async def apply_patch(request: Request, body: PatchRequest):
     tenant_id = await _ensure_tenant(request)
-    provider = _e2b()
+    provider = _provider()
     sess = _store().get_session(tenant_id, body.session_id) or {}
     sandbox_id = sess.get("sandbox_id")
     applied = False

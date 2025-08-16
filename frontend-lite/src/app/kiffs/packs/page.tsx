@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { Sidebar } from '@/components/navigation/Sidebar';
@@ -82,8 +82,24 @@ export default function KiffPacksPage() {
   const [packs, setPacks] = useState<KiffPack[]>([]);
   const [stats, setStats] = useState<PackStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preferAPIStats, setPreferAPIStats] = useState(false); // avoid fallback overwrite if API succeeds
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  // Derive available categories from currently loaded packs
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of packs) {
+      if (p.category && typeof p.category === 'string') set.add(p.category);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [packs]);
+
+  // Ensure selected category is valid; if not, reset to 'all'
+  useEffect(() => {
+    if (categoryFilter !== 'all' && !categories.includes(categoryFilter)) {
+      setCategoryFilter('all');
+    }
+  }, [categories, categoryFilter]);
   // Removed tabs state
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const hasProcessing = packs.some((p) => p.processing_status === 'processing');
@@ -122,10 +138,11 @@ export default function KiffPacksPage() {
       if (!isAuthenticated) return;
       const data = await apiJson<PackStats>('/api/packs/stats');
       setStats(data);
+      setPreferAPIStats(true);
     } catch (error) {
       console.warn('Pack stats API unavailable, will compute fallback from packs');
       // Defer to the packs-based fallback effect below
-      setStats((prev) => prev ?? null);
+      setPreferAPIStats(false);
     }
   }, [isAuthenticated]);
 
@@ -144,6 +161,8 @@ export default function KiffPacksPage() {
   useEffect(() => {
     if (!isAuthenticated) return;
     if (!packs || packs.length === 0) return;
+    // If API stats succeeded, do not overwrite with fallback
+    if (preferAPIStats) return;
     // If stats is null or missing fields, compute a local fallback
     if (!stats || typeof (stats as any).total_packs !== 'number') {
       const total_packs = packs.length;
@@ -163,7 +182,7 @@ export default function KiffPacksPage() {
         usage_count: 0,
       } as unknown as PackStats);
     }
-  }, [isAuthenticated, packs, stats]);
+  }, [isAuthenticated, packs, stats, preferAPIStats]);
 
   // Conditional polling: while any pack is processing, refetch packs periodically
   useEffect(() => {
@@ -273,7 +292,14 @@ export default function KiffPacksPage() {
         <p className="text-sm text-gray-700 mb-4 line-clamp-2">
           {pack.description}
         </p>
-        
+
+        {/* Category badge */}
+        {pack.category ? (
+          <div className="mb-4">
+            <Badge variant="secondary">{pack.category}</Badge>
+          </div>
+        ) : null}
+
         {/* Usage and rating row removed per request */}
 
         <div className="flex gap-2">
@@ -326,7 +352,7 @@ export default function KiffPacksPage() {
       </Card>
     </div>
   );
-  // eslint react-display-name
+  // eslint react/display-name
   StatsOverview.displayName = 'StatsOverview';
 
   if (isLoading) {
@@ -381,8 +407,8 @@ export default function KiffPacksPage() {
           </div>
 
           <div className="mt-6">
-            {/* StatsUsage placed where the tabs used to be */}
-            <StatsOverview />
+            {/* Stats hidden temporarily to avoid flashing while we stabilize logic */}
+          {/* <StatsOverview /> */}
 
             {/* Filters */}
             <Card className="mb-6 fx-card">
@@ -406,15 +432,9 @@ export default function KiffPacksPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="AI/ML">AI/ML</SelectItem>
-                      <SelectItem value="Audio/Video">Audio/Video</SelectItem>
-                      <SelectItem value="Payment">Payment</SelectItem>
-                      <SelectItem value="Communication">Communication</SelectItem>
-                      <SelectItem value="Database">Database</SelectItem>
-                      <SelectItem value="Authentication">Authentication</SelectItem>
-                      <SelectItem value="Analytics">Analytics</SelectItem>
-                      <SelectItem value="Social">Social</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 

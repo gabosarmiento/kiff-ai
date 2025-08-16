@@ -5,16 +5,17 @@ import requests
 import json
 
 # Test the deployed backend
-backend_url = "https://z5cmpsm2zw.eu-west-3.awsapprunner.com"
+# backend_url = "https://z5cmpsm2zw.eu-west-3.awsapprunner.com"
+backend_url = "http://localhost:8000"
 
 def test_agno_endpoint():
     """Test the AGNO generation endpoint with model selector"""
     
     # Test data with model selector
     test_data = {
-        "user_request": "Create a simple hello world React component", 
+        "user_request": "Create a simple flask server that says hello world", 
         "stream": False, 
-        "model": "kimi-k2"
+        "model": "moonshotai/Kimi-K2-Instruct"
     }
     
     headers = {
@@ -32,7 +33,7 @@ def test_agno_endpoint():
             f"{backend_url}/api/agno-generation/generate",
             json=test_data,
             headers=headers,
-            timeout=30
+            timeout=300
         )
         
         print(f"\nResponse Status: {response.status_code}")

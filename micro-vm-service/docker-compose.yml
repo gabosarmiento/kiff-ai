@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # VM Orchestrator - Main service that manages micro VMs
+  vm-orchestrator:
+    build: ./vm-orchestrator
+    ports:
+      - "8002:8002"
+    environment:
+      - ML_SERVICE_URL=http://ml-service:8001
+      - VECTOR_SERVICE_URL=http://vector-service:8003
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - vm_workspace:/workspace
+    depends_on:
+      - redis
+      - ml-service
+      - vector-service
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=vm-orchestrator"
+
+  # Your existing ML Service (reused)
+  ml-service:
+    build: ../backend-lite-v2/ml-service
+    ports:
+      - "8001:8001"
+    environment:
+      - TRANSFORMERS_CACHE=/models/hf
+      - TORCH_HOME=/models/torch
+      - HF_HOME=/models/hf
+    volumes:
+      - ml_models:/models
+      - ml_cache:/cache
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    labels:
+      - "kiff.service=ml-service"
+
+  # External Vector Store Service
+  vector-service:
+    image: qdrant/qdrant:latest
+    ports:
+      - "8003:6333"
+      - "6334:6334"
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    volumes:
+      - vector_storage:/qdrant/storage
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=vector-store"
+
+  # Redis for task queue and caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    labels:
+      - "kiff.service=redis"
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=monitoring"
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    networks:
+      - kiff-vm-network
+    restart: unless-stopped
+    labels:
+      - "kiff.service=monitoring"
+
+networks:
+  kiff-vm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  # Persistent storage for ML models (reused from your existing setup)
+  ml_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./ml-models
+  
+  # Model cache
+  ml_cache:
+    driver: local
+  
+  # Vector database storage
+  vector_storage:
+    driver: local
+  
+  # Redis data
+  redis_data:
+    driver: local
+  
+  # VM workspace (shared among VMs)
+  vm_workspace:
+    driver: local
+  
+  # Monitoring data
+  prometheus_data:
+    driver: local
+  
+  grafana_data:
+    driver: local

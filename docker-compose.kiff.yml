@@ -12,6 +12,7 @@ services:
       - ML_SERVICE_URL=https://7p5dqvvip5.eu-west-3.awsapprunner.com
       - DATABASE_URL=sqlite:///./kiff_dev.db
       - AWS_REGION=eu-west-3
+      - INFRA_API_URL=http://vm-service:8002
     # depends_on:
       # - ml-service  # Using deployed ML service instead
     volumes:
@@ -38,6 +39,19 @@ services:
       - ml-vectors:/data
     networks:
       - kiff-network
+
+  # VM Service - Code execution micro VMs
+  vm-service:
+    build:
+      context: .
+      dockerfile: vm-service.Dockerfile
+    ports:
+      - "8002:8002"
+    networks:
+      - kiff-network
+    # For production, would need Docker socket access
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock
 
   # Frontend (commented out - no Dockerfile yet)
   # frontend:

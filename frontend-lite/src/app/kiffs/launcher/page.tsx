@@ -147,9 +147,13 @@ function LauncherPageContent() {
         });
         if (!res.ok) throw new Error(`models ${res.status}`);
         const data = await res.json();
-        const list: string[] = Array.isArray(data?.models)
-          ? data.models.map((m: any) => (typeof m === 'string' ? m : (m?.id || m?.name))).filter(Boolean)
-          : Array.isArray(data) ? data : [];
+        // Normalize any API shape to a list of string IDs
+        const arr: any[] = Array.isArray(data)
+          ? data
+          : (Array.isArray((data as any)?.models) ? (data as any).models : []);
+        const list: string[] = arr
+          .map((m: any) => (typeof m === 'string' ? m : (m && (m.id || m.name)) || null))
+          .filter(Boolean);
         if (!cancelled) {
           const unique = Array.from(new Set(list.concat(model)));
           setModelOptions(unique);
@@ -320,6 +324,13 @@ function LauncherPageContent() {
           if (k && k.startsWith('kiff_packs_')) keysToRemove.push(k);
         }
         for (const k of keysToRemove) localStorage.removeItem(k);
+        // Also remove any previously persisted file snapshots to prevent stale hydration
+        const fileKeysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('files_')) fileKeysToRemove.push(k);
+        }
+        for (const k of fileKeysToRemove) localStorage.removeItem(k);
       } catch {}
       // Reset local state to show idle/new view
       setHasProject(false);
@@ -400,8 +411,7 @@ function LauncherPageContent() {
             }));
             setChatMessages(chatMsgs);
           }
-          // Consider we now have a project to show
-          setHasProject(true);
+          // Do not mark project as ready yet; wait until preview URL + file tree are restored
           // 2) Restore agent_state (model, selected_packs) from backend if present
           try {
             const stRaw = data?.agent_state;
@@ -447,6 +457,10 @@ function LauncherPageContent() {
               if (firstTsx) {
                 const f = await getFile(data.session_id, firstTsx);
                 setFileContent(f.content || "");
+              }
+              // Mark project available only after we have at least preview or files
+              if ((url || (tree.files || []).length > 0)) {
+                setHasProject(true);
               }
             } catch (e) {
               console.warn("Failed to restore preview/files for kiff", e);
@@ -529,6 +543,14 @@ function LauncherPageContent() {
       // Clear localStorage
       try {
         localStorage.removeItem("kiff_launcher_state");
+        // Clean per-kiff packs and any file snapshots
+        const toDelete: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (k.startsWith('kiff_packs_') || k.startsWith('files_')) toDelete.push(k);
+        }
+        for (const k of toDelete) localStorage.removeItem(k);
       } catch {}
       
       // Clear the URL parameter to avoid repeated resets
@@ -629,18 +651,8 @@ function LauncherPageContent() {
       if (abortRef.current) abortRef.current.abort();
       abortRef.current = new AbortController();
 
-      // Get current project files from localStorage for agent context
+      // Do not load full project files into memory/storage; the agent can ask for specific files.
       let projectFiles: any[] = [];
-      if (sessionId && hasProject) {
-        try {
-          const storedFiles = localStorage.getItem(`files_${sessionId}`);
-          if (storedFiles) {
-            projectFiles = JSON.parse(storedFiles);
-          }
-        } catch (e) {
-          console.warn('Failed to load project files from localStorage', e);
-        }
-      }
 
       await apiClient.sendMessageStream(
         {
@@ -670,14 +682,21 @@ function LauncherPageContent() {
               return next;
             });
           },
-          onEvent: (evt: any) => {
-            // Attach proposal metadata to the current assistant message
+          onEvent: (evt) => {
             try {
-              if (!evt) return;
-              // 1) Capture early session id if backend emits it
-              if (evt.type === 'SessionStarted' && typeof evt.session_id === 'string') {
+              // 1) Early session assignment and cleanup
+              if (evt && evt.type === 'SessionStarted' && typeof evt.session_id === 'string') {
                 setSessionId(evt.session_id);
-                // Prefer kiff_id for URL so reload can restore by kiff
+                // Clear stale file snapshots on new session
+                try {
+                  const stale: string[] = [];
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('files_')) stale.push(k);
+                  }
+                  for (const k of stale) localStorage.removeItem(k);
+                } catch {}
+                // Prefer kiff_id in URL if present
                 try {
                   if (typeof window !== 'undefined') {
                     const sp = new URLSearchParams(window.location.search);
@@ -690,8 +709,9 @@ function LauncherPageContent() {
                 } catch {}
                 return;
               }
-              // 1b) Reasoning events: persist progressively on the active assistant message
-              if (evt.type === 'ReasoningStarted' || evt.type === 'ReasoningStep' || evt.type === 'ReasoningCompleted') {
+
+              // 2) Reasoning traces
+              if (evt && (evt.type === 'ReasoningStarted' || evt.type === 'ReasoningStep' || evt.type === 'ReasoningCompleted')) {
                 setChatMessages((prev) => {
                   const next = [...prev];
                   const idx = assistantIndex >= 0 ? assistantIndex : next.findIndex((m, i) => i > 0 && next[i - 1].role === 'user' && m.role === 'assistant');
@@ -700,8 +720,8 @@ function LauncherPageContent() {
                   const meta: any = { ...(m as any).metadata };
                   const reasoning = meta.reasoning || { started: false, steps: [] as string[], completed: false };
                   if (evt.type === 'ReasoningStarted') reasoning.started = true;
-                  if (evt.type === 'ReasoningStep' && typeof evt.content !== 'undefined') {
-                    const text = typeof evt.content === 'string' ? evt.content : JSON.stringify(evt.content);
+                  if (evt.type === 'ReasoningStep' && typeof (evt as any).content !== 'undefined') {
+                    const text = typeof (evt as any).content === 'string' ? (evt as any).content : JSON.stringify((evt as any).content);
                     reasoning.steps = [...(reasoning.steps || []), text];
                   }
                   if (evt.type === 'ReasoningCompleted') reasoning.completed = true;
@@ -711,33 +731,32 @@ function LauncherPageContent() {
                 });
                 return;
               }
-              // 2) Normalize: detect proposal-like payloads
-              const looksProposal = evt.type === 'ProposedFileChanges' || evt.proposal_id || evt.changes;
+
+              // 3) Proposed file changes
+              const looksProposal = evt && (evt.type === 'ProposedFileChanges' || (evt as any).proposal_id || (evt as any).changes);
               if (!looksProposal) return;
               setChatMessages((prev) => {
                 const next = [...prev];
-                // Find the assistant message we are streaming into
                 const idx = assistantIndex >= 0 ? assistantIndex : next.findIndex((m, i) => i > 0 && next[i - 1].role === 'user' && m.role === 'assistant');
                 const target = idx >= 0 ? idx : next.length - 1;
                 const m = next[target] || { role: 'assistant', content: '' };
                 const meta = { ...(m as any).metadata };
-                const proposals = Array.isArray(meta.proposals) ? [...meta.proposals] : [];
+                const proposals = Array.isArray((meta as any).proposals) ? [...(meta as any).proposals] : [];
                 const proposal = {
-                  id: evt.proposal_id || evt.id || undefined,
-                  title: evt.title || 'Proposed file changes',
-                  changes: Array.isArray(evt.changes) ? evt.changes : (Array.isArray(evt.files) ? evt.files : []),
-                  status: evt.status,
+                  id: (evt as any).proposal_id || (evt as any).id || undefined,
+                  title: (evt as any).title || 'Proposed file changes',
+                  changes: Array.isArray((evt as any).changes) ? (evt as any).changes : (Array.isArray((evt as any).files) ? (evt as any).files : []),
+                  status: (evt as any).status,
                 };
-                // Avoid duplicates by id if present
                 const existingIdx = proposal.id ? proposals.findIndex((p: any) => p?.id === proposal.id) : -1;
                 if (existingIdx >= 0) proposals[existingIdx] = { ...proposals[existingIdx], ...proposal };
                 else proposals.push(proposal);
-                meta.proposals = proposals;
+                (meta as any).proposals = proposals;
                 next[target] = { ...(m as any), metadata: meta } as ChatMessage;
                 return next;
               });
             } catch (e) {
-              console.warn('onEvent proposal handling failed', e);
+              console.warn('onEvent handling failed', e);
             }
           },
           onDone: (final) => {
@@ -790,78 +809,32 @@ function LauncherPageContent() {
     try {
       await apiClient.approveProposal({ session_id: sessionId, proposal_id: proposalId });
       
-      // Find the proposal changes and apply them to localStorage files
-      let proposalChanges: any[] = [];
+      // Update proposals status and refresh from sandbox instead of localStorage
       setChatMessages((prev) => prev.map((m) => {
         const meta: any = (m as any).metadata;
         if (!meta?.proposals) return m;
-        const proposals = meta.proposals.map((p: any) => {
-          if (p?.id === proposalId) {
-            proposalChanges = p.changes || [];
-            return { ...p, status: 'approved' };
-          }
-          return p;
-        });
+        const proposals = meta.proposals.map((p: any) => p?.id === proposalId ? { ...p, status: 'approved' } : p);
         return { ...m, metadata: { ...meta, proposals } } as ChatMessage;
       }));
 
-      // Apply changes to localStorage files
+      // Refresh from sandbox to reflect applied changes
       try {
-        const storedFiles = localStorage.getItem(`files_${sessionId}`);
-        if (storedFiles && proposalChanges.length > 0) {
-          let parsedFiles = JSON.parse(storedFiles);
-          
-          // Apply each change from the proposal
-          for (const change of proposalChanges) {
-            const existingFileIndex = parsedFiles.findIndex((f: any) => f.path === change.path);
-            
-            if (existingFileIndex >= 0) {
-              // Update existing file
-              parsedFiles[existingFileIndex] = {
-                ...parsedFiles[existingFileIndex],
-                content: change.content,
-                language: change.language || parsedFiles[existingFileIndex].language
-              };
-            } else {
-              // Add new file
-              parsedFiles.push({
-                path: change.path,
-                content: change.content,
-                language: change.language || 'text'
-              });
-            }
-          }
-          
-          // Update localStorage with modified files
-          localStorage.setItem(`files_${sessionId}`, JSON.stringify(parsedFiles));
-          
-          // Update UI: refresh file list and current file content
-          const newFilePaths = parsedFiles.map((f: any) => f.path);
-          setFilePaths(newFilePaths);
-          
-          // If currently selected file was changed, update its content
-          if (selectedPath) {
-            const updatedFile = parsedFiles.find((f: any) => f.path === selectedPath);
-            if (updatedFile) {
-              setFileContent(updatedFile.content || '');
-            }
-          }
-        }
-      } catch (localError) {
-        console.warn('Failed to apply changes to localStorage, falling back to sandbox refresh', localError);
-        
-        // Fallback to sandbox refresh if localStorage approach fails
-        try {
-          const { getFileTree, getFile } = await import('./utils/preview');
-          const tree = await getFileTree(sessionId);
-          setFilePaths(tree.files || []);
-          if (selectedPath) {
-            const f = await getFile(sessionId, selectedPath);
+        const { getFileTree, getFile } = await import('./utils/preview');
+        const tree = await getFileTree(sessionId);
+        setFilePaths(tree.files || []);
+        if (selectedPath) {
+          const f = await getFile(sessionId, selectedPath);
+          setFileContent(f.content || '');
+        } else {
+          const first = (tree.files || [])[0] || null;
+          setSelectedPath(first);
+          if (first) {
+            const f = await getFile(sessionId, first);
             setFileContent(f.content || '');
           }
-        } catch (sandboxError) {
-          console.warn('Sandbox refresh also failed', sandboxError);
         }
+      } catch (sandboxError) {
+        console.warn('Sandbox refresh failed', sandboxError);
       }
       
       toast.success('Proposal approved');
@@ -985,11 +958,7 @@ function LauncherPageContent() {
         } else {
           setFileContent("");
         }
-        
-        // Store generated files for later access without sandbox dependency
-        if (typeof window !== 'undefined' && gen.session_id) {
-          localStorage.setItem(`files_${gen.session_id}`, JSON.stringify(generatedFiles));
-        }
+        // Do not persist generated files in localStorage; rely on sandbox fetch on demand
         
       } catch (e) {
         console.warn("Failed to process generated files", e);

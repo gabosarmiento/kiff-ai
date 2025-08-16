@@ -148,4 +148,15 @@ Internet → ALB → ECS Service → VM Orchestrator → Secure Code Execution V
 **Scalability:** Auto-scaling capable  
 **Cost Model:** Pay-as-you-scale
 
+## Environment Configuration
+
+To deploy this infrastructure:
+
+1. Replace `YOUR_ACCOUNT_ID` in all AWS ARN references with your AWS account ID
+2. Update region references (`eu-west-3`) to your preferred AWS region  
+3. Configure environment variables:
+   - `VM_ORCHESTRATOR_URL`: Point to your deployed ALB endpoint
+   - AWS credentials and region settings
+4. Deploy using the provided CloudFormation templates and Docker configurations
+
 *This infrastructure provides the foundation for secure, scalable AI code execution services with enterprise-grade security controls.*

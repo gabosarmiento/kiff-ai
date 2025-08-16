@@ -4,12 +4,12 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
   "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::929018226542:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::929018226542:role/kiff-vm-orchestrator-role",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/kiff-vm-orchestrator-role",
   "containerDefinitions": [
     {
       "name": "vm-orchestrator",
-      "image": "929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff/vm-orchestrator:prod",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.eu-west-3.amazonaws.com/kiff/vm-orchestrator:prod",
       "essential": true,
       "portMappings": [
         {
@@ -34,7 +34,7 @@
       "secrets": [
         {
           "name": "VM_ENCRYPTION_KEY",
-          "valueFrom": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:kiff/vm-encryption-key"
+          "valueFrom": "arn:aws:secretsmanager:eu-west-3:YOUR_ACCOUNT_ID:secret:kiff/vm-encryption-key"
         }
       ],
       "logConfiguration": {
@@ -67,7 +67,7 @@
     },
     {
       "name": "security-sidecar",
-      "image": "929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff/security-monitor:prod",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.eu-west-3.amazonaws.com/kiff/security-monitor:prod",
       "essential": false,
       "environment": [
         {

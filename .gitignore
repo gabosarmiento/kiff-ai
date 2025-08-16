@@ -122,6 +122,9 @@ dump.rdb
 embedding_cache/
 knowledge_cache/
 *.knowledge_cache*
+*chroma*/
+.chroma/
+chroma_db/
 
 # Playwright
 test-results/
