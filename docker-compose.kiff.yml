@@ -13,6 +13,8 @@ services:
       - DATABASE_URL=sqlite:///./kiff_dev.db
       - AWS_REGION=eu-west-3
       - INFRA_API_URL=http://vm-service:8002
+      - VM_ORCHESTRATOR_URL=http://kiff-vm-orchestrator-alb-282704344.eu-west-3.elb.amazonaws.com
+      - SANDBOX_PROVIDER=vm
     # depends_on:
       # - ml-service  # Using deployed ML service instead
     volumes:

@@ -14,7 +14,7 @@ export default async function SignupRoute() {
     const tenantId = process.env.NEXT_PUBLIC_TENANT_ID || DEFAULT_TENANT_ID;
     const cookieHeader = headers().get("cookie") || "";
     try {
-      const base = process.env.NEXT_PUBLIC_API_BASE_URL || "https://rfn5agrmiw.eu-west-3.awsapprunner.com";
+      const base = process.env.NEXT_PUBLIC_API_BASE_URL || "https://nkbdpyszym.eu-west-3.awsapprunner.com";
       const res = await fetch(`${base}/api/auth/me`, {
         method: "GET",
         headers: {

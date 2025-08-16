@@ -1,0 +1,50 @@
+{
+  "ServiceName": "kiff-backend-lite-v2-fresh",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "929018226542.dkr.ecr.eu-west-3.amazonaws.com/kiff/backend-lite-v2:latest",
+      "ImageConfiguration": {
+        "RuntimeEnvironmentVariables": {
+          "ALLOWED_ORIGINS": "https://frontend-lite-two.vercel.app,http://localhost:3000",
+          "ALLOWED_ORIGIN_REGEX": "^https://.*\\.vercel\\.app$",
+          "ALLOW_TENANT_FALLBACK": "true",
+          "AWS_REGION": "eu-west-3",
+          "DEFAULT_TENANT_ID": "4485db48-71b7-47b0-8128-c6dca5be352d",
+          "DYNAMO_TABLE_PREVIEW_SESSIONS": "preview_sessions",
+          "E2B_ENABLE_MOCK": "false",
+          "PREVIEW_SSE_HEARTBEAT_SECONDS": "25",
+          "SECURE_COOKIES": "false",
+          "SESSION_SECRET": "dev-secret-123",
+          "VM_ORCHESTRATOR_URL": "http://kiff-vm-orchestrator-alb-282704344.eu-west-3.elb.amazonaws.com",
+          "SANDBOX_PROVIDER": "vm",
+          "LANCEDB_DIR": "/tmp/lancedb"
+        },
+        "Port": "8000",
+        "RuntimeEnvironmentSecrets": {
+          "COHERE_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:COHERE_API_KEY-xYiwji",
+          "DATABASE_URL": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:DATABASE_URL-r1NSZM",
+          "E2B_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:E2B_API_KEY-yCVxJn",
+          "EXA_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:EXA_API_KEY-UH4XM2",
+          "GROQ_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:GROQ_API_KEY-xTK8Tn",
+          "LANGTRACE_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:LANGTRACE_API_KEY-7Sz4r8",
+          "MISTRAL_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:MISTRAL_API_KEY-2aWakt",
+          "OPENAI_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:OPENAI_API_KEY-CH6yCu",
+          "RESEND_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:RESEND_API_KEY-a8imav",
+          "SERPER_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:SERPER_API_KEY-VRrPwx",
+          "TAVILY_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:TAVILY_API_KEY-oQe8Yi",
+          "VOYAGE_API_KEY": "arn:aws:secretsmanager:eu-west-3:929018226542:secret:VOYAGE_API_KEY-F0lFc4"
+        }
+      },
+      "ImageRepositoryType": "ECR"
+    },
+    "AutoDeploymentsEnabled": true,
+    "AuthenticationConfiguration": {
+      "AccessRoleArn": "arn:aws:iam::929018226542:role/AppRunnerECRAccessRole"
+    }
+  },
+  "InstanceConfiguration": {
+    "Cpu": "1024",
+    "Memory": "2048",
+    "InstanceRoleArn": "arn:aws:iam::929018226542:role/apprunner-instance-role"
+  }
+}
