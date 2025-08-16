@@ -16,8 +16,8 @@ function getDefaultApiUrl(): string {
       return "http://localhost:8000";
     }
   }
-  // Server-side or production: use AWS App Runner (fresh service with VM integration)
-  return "https://nkbdpyszym.eu-west-3.awsapprunner.com";
+  // Server-side or production: use AWS App Runner (VM integration with full ML service)
+  return "https://afhnhvjrgg.eu-west-3.awsapprunner.com";
 }
 
 export const API_BASE_URL = readEnv("NEXT_PUBLIC_API_BASE_URL", getDefaultApiUrl())!;

@@ -150,3 +150,6 @@ aws-ecs-service.json
 # Private local env files (prevent committing secrets)
 private/*.env
 private/aws.envbackend-lite-v2/.env.bak
+
+# Deployment documentation with sensitive info
+DEPLOYMENT_NOTES.md
